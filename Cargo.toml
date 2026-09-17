@@ -10,7 +10,7 @@ resolver = "2"
 [workspace.dependencies]
 serde     = { version = "1", features = ["derive"] }
 postcard  = { version = "1", features = ["alloc"] }
-thiserror = "1"
+thiserror = "2"
 ts-rs     = "12"
 rand      = "0.8"
 tauri     = { version = "2" }

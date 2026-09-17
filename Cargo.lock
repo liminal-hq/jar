@@ -1660,7 +1660,7 @@ dependencies = [
  "postcard",
  "rand 0.8.8",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -3743,7 +3743,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
- "thiserror 1.0.69",
+ "thiserror 2.0.20",
  "tokio",
 ]
 
