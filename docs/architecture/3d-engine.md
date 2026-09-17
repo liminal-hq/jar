@@ -1,86 +1,33 @@
 # Jar — 3D engine & model spec (companion to `SPEC.md`)
 
-This document augments `SPEC.md` and `SCREENS.md`. It does not replace
-anything in them — the positioning (§1), platforms (§2), theme system (§4),
-persistence (§6) and out-of-scope list (§7) of `SPEC.md`, and the full
-window/screen inventory in `SCREENS.md`, all stand as written. This doc
-replaces **only** the _rendering_ half of `SCREENS.md`'s W1 (Tank) and the
-_movement/render_ half of `SPEC.md` §5 (Simulation) — i.e. everything
-downstream of "here is a critter's state," not the state itself.
+This document augments `SPEC.md` and `SCREENS.md`. It does not replace anything in them — the positioning (§1), platforms (§2), theme system (§4), persistence (§6) and out-of-scope list (§7) of `SPEC.md`, and the full window/screen inventory in `SCREENS.md`, all stand as written. This doc replaces **only** the _rendering_ half of `SCREENS.md`'s W1 (Tank) and the _movement/render_ half of `SPEC.md` §5 (Simulation) — i.e. everything downstream of "here is a critter's state," not the state itself.
 
-Hand this file, `SPEC.md` and `SCREENS.md` together to the implementing
-agent. Where they disagree, this file wins for anything 3D/render/physics;
-`SPEC.md`/`SCREENS.md` win for everything else (windows, themes,
-persistence, sim rules for aging/breeding/mood). The Rust simulation core
-(`docs/architecture/rust-core.md`) owns the discrete sim-tick logic this
-file's §3 bridges to; see that document for the process/language boundary.
+Hand this file, `SPEC.md` and `SCREENS.md` together to the implementing agent. Where they disagree, this file wins for anything 3D/render/physics; `SPEC.md`/`SCREENS.md` win for everything else (windows, themes, persistence, sim rules for aging/breeding/mood). The Rust simulation core (`docs/architecture/rust-core.md`) owns the discrete sim-tick logic this file's §3 bridges to; see that document for the process/language boundary.
 
-Audience: an AI coding agent (or a human) implementing this cold in a Tauri
-v2 + React app. Nothing here is conservative by design — this is the
-"build it properly" version, not the minimum viable slice. Sequencing that
-into a hobby-pace roadmap is a separate exercise; this doc just specifies
-the target.
+Audience: an AI coding agent (or a human) implementing this cold in a Tauri v2 + React app. Nothing here is conservative by design — this is the "build it properly" version, not the minimum viable slice. Sequencing that into a hobby-pace roadmap is a separate exercise; this doc just specifies the target.
 
 ---
 
 ## 0. What's changing and why
 
-`Jar.dc.html` is a Claude Design authoring-tool artifact, not application
-code — it's built on that tool's own preview runtime (`<x-dc>`, `<sc-if>`,
-`<sc-for>`, `{{ }}` template bindings, a `DCLogic`-derived `Component`
-class) so a design doc can render as a live mock. None of that scaffolding
-exists in a real Tauri/React app and nothing in the file should be ported,
-adapted, or structurally mirrored — an implementor should not be reaching
-into it for code to reuse, and shouldn't feel bound by how it happens to be
-organized.
+`Jar.dc.html` is a Claude Design authoring-tool artifact, not application code — it's built on that tool's own preview runtime (`<x-dc>`, `<sc-if>`, `<sc-for>`, `{{ }}` template bindings, a `DCLogic`-derived `Component` class) so a design doc can render as a live mock. None of that scaffolding exists in a real Tauri/React app and nothing in the file should be ported, adapted, or structurally mirrored — an implementor should not be reaching into it for code to reuse, and shouldn't feel bound by how it happens to be organized.
 
-What _is_ worth pulling from it is the **behavior it specifies**: the
-sim's rules and constants (aging/mood/energy/breeding/passing, the
-genetics formulas in `make()`, jar-day timing), the theme/frame color and
-layout values, and the window/dialog content — in other words, everything
-`SPEC.md` describes in prose, which `Jar.dc.html` happens to also render as
-a working mock. Treat the file the same way you'd treat a screenshot with
-annotations: authoritative about what the thing should look like and do,
-silent on how the real implementation should be built. The one part of its
-actual rendering approach worth naming explicitly as _not_ carrying
-forward is the movement/render loop — `requestAnimationFrame` +
-`forceUpdate()` driving a `svg()` function that draws flat SVG at
-CSS `left/top` percentages. Section 3 below specifies its replacement from
-scratch.
+What _is_ worth pulling from it is the **behavior it specifies**: the sim's rules and constants (aging/mood/energy/breeding/passing, the genetics formulas in `make()`, jar-day timing), the theme/frame color and layout values, and the window/dialog content — in other words, everything `SPEC.md` describes in prose, which `Jar.dc.html` happens to also render as a working mock. Treat the file the same way you'd treat a screenshot with annotations: authoritative about what the thing should look like and do, silent on how the real implementation should be built. The one part of its actual rendering approach worth naming explicitly as _not_ carrying forward is the movement/render loop — `requestAnimationFrame` + `forceUpdate()` driving a `svg()` function that draws flat SVG at CSS `left/top` percentages. Section 3 below specifies its replacement from scratch.
 
-Net effect: W1's tank interior becomes a `@react-three/fiber` `<Canvas>`
-sitting inside the existing bezel chrome. W2/W3/W4 (critter card, family
-tree, setup) and the drawer stay exactly as designed — flat HTML/CSS,
-built fresh in idiomatic React rather than adapted from the prototype's
-template markup, themed per §4 of `SPEC.md`. Only the tank viewport goes
-3D.
+Net effect: W1's tank interior becomes a `@react-three/fiber` `<Canvas>` sitting inside the existing bezel chrome. W2/W3/W4 (critter card, family tree, setup) and the drawer stay exactly as designed — flat HTML/CSS, built fresh in idiomatic React rather than adapted from the prototype's template markup, themed per §4 of `SPEC.md`. Only the tank viewport goes 3D.
 
 ---
 
 ## 1. Rendering stack
 
-- **Renderer:** `@react-three/fiber` (R3F) over `three.js`. Not Babylon, not
-  a full game engine — R3F drops a scene graph into the existing React tree
-  the same way the drawer and dialog windows already live there. No second
-  UI paradigm, no imperative bridge to maintain.
-- **Backend:** WebGL2 as the baseline, unconditionally. three's
-  `WebGPURenderer` with automatic WebGL2 fallback may be adopted later as a
-  progressive enhancement once WebGPU support is verified stable across
-  both WebView2 (Windows) and WebKitGTK (Linux) targets — do not gate v1 on
-  it.
-- **Helpers:** `@react-three/drei` (loaders, `useGLTF`, `Sparkles` as a
-  fallback particle primitive), `@react-three/rapier` (physics, §5),
-  `@react-three/postprocessing` (CRT/neon frame effect only, §10.3).
-- **Steering/AI:** `yuka` (engine-agnostic, MIT). Not a peer of R3F — it's a
-  plain TS library that computes desired velocities; nothing about it
-  touches the renderer.
+- **Renderer:** `@react-three/fiber` (R3F) over `three.js`. Not Babylon, not a full game engine — R3F drops a scene graph into the existing React tree the same way the drawer and dialog windows already live there. No second UI paradigm, no imperative bridge to maintain.
+- **Backend:** WebGL2 as the baseline, unconditionally. three's `WebGPURenderer` with automatic WebGL2 fallback may be adopted later as a progressive enhancement once WebGPU support is verified stable across both WebView2 (Windows) and WebKitGTK (Linux) targets — do not gate v1 on it.
+- **Helpers:** `@react-three/drei` (loaders, `useGLTF`, `Sparkles` as a fallback particle primitive), `@react-three/rapier` (physics, §5), `@react-three/postprocessing` (CRT/neon frame effect only, §10.3).
+- **Steering/AI:** `yuka` (engine-agnostic, MIT). Not a peer of R3F — it's a plain TS library that computes desired velocities; nothing about it touches the renderer.
 
 ### 1.1 Transparency (the tank window is see-through by design)
 
-`SPEC.md` §2 already requires `transparent: true`, `decorations: false` on
-the W1 `WebviewWindow`. The 3D canvas must be transparent _inside_ that
-window too, or the "glass"/"cardboard"/etc. bezel will show a black box
-instead of the tank contents. Required, in this order:
+`SPEC.md` §2 already requires `transparent: true`, `decorations: false` on the W1 `WebviewWindow`. The 3D canvas must be transparent _inside_ that window too, or the "glass"/"cardboard"/etc. bezel will show a black box instead of the tank contents. Required, in this order:
 
 ```jsx
 <Canvas
@@ -98,124 +45,50 @@ instead of the tank contents. Required, in this order:
 />
 ```
 
-`THREE.ColorManagement.enabled = false` before the `Canvas` mounts, and
-avoid R3F's `legacy` prop unless a specific color-management symptom
-(washed-out or oversaturated hues) forces it — try without first, since
-newer R3F/three versions have largely fixed the transparency-vs-color-space
-conflict that made `legacy={true}` necessary in older stacks. Verify
-visually on both target platforms before assuming either setting is right.
+`THREE.ColorManagement.enabled = false` before the `Canvas` mounts, and avoid R3F's `legacy` prop unless a specific color-management symptom (washed-out or oversaturated hues) forces it — try without first, since newer R3F/three versions have largely fixed the transparency-vs-color-space conflict that made `legacy={true}` necessary in older stacks. Verify visually on both target platforms before assuming either setting is right.
 
 ### 1.2 Linux (WebKitGTK) note
 
-Transparency on Linux is already known-good here from prior Tauri builds,
-so this isn't tracked as an open risk. Worth keeping on hand regardless:
-WebKitGTK has a documented history of WebGL/compositing issues on some
-GPU/driver combinations (blank windows, resize crashes, NVIDIA DMABUF
-errors), and if one ever turns up, the standard fixes are env vars set
-before the webview is created — `WEBKIT_DISABLE_DMABUF_RENDERER=1`, or
-`WEBKIT_DISABLE_COMPOSITING_MODE=1` as a last resort (disables acceleration
-entirely). Windows (WebView2) has no equivalent history.
+Transparency on Linux is already known-good here from prior Tauri builds, so this isn't tracked as an open risk. Worth keeping on hand regardless: WebKitGTK has a documented history of WebGL/compositing issues on some GPU/driver combinations (blank windows, resize crashes, NVIDIA DMABUF errors), and if one ever turns up, the standard fixes are env vars set before the webview is created — `WEBKIT_DISABLE_DMABUF_RENDERER=1`, or `WEBKIT_DISABLE_COMPOSITING_MODE=1` as a last resort (disables acceleration entirely). Windows (WebView2) has no equivalent history.
 
 ### 1.3 Render-loop policy
 
-- `frameloop="always"` while the tank is visible and any critter is moving
-  or a particle system is active (bubbles/mist run continuously, so in
-  practice this means "always" whenever the window is on-screen).
-- Pause the render loop entirely when the Tauri window is hidden/minimized
-  or occluded — listen for Tauri's window visibility/focus events and drive
-  R3F's `frameloop` between `"always"` and `"never"` accordingly. This is
-  the one non-negotiable perf guard even at "worry about cost later" — an
-  invisible window rendering 3D forever is pure waste, not a design choice.
-- **This pause is render/physics-only — the sim tick keeps running
-  regardless of window visibility.** `frameloop="never"` stops R3F's draw
-  calls (and, in turn, there's no reason to keep stepping Rapier or
-  updating Yuka just to feed a renderer that isn't drawing), but the 1 Hz
-  sim tick from §3 (aging, mood/energy drift, breeding, passing) is a
-  separate timer with no rendering dependency and must not be touched by
-  this — a jar minimized for an hour should age and breed exactly as much
-  as one left visible for an hour, per `SPEC.md` §5's "real time" model.
-  Only a fully closed app stops simulated time, per `SPEC.md` §6
-  ("elapsed real time while closed is **not** simulated"); hidden/minimized
-  is not closed. When the window becomes visible again, physics/steering
-  simply resume from wherever the sim state currently is — no need to
-  "catch up" any visual animation, since position/pose were never part of
-  persisted state to begin with (§3's table — only stats are).
+- `frameloop="always"` while the tank is visible and any critter is moving or a particle system is active (bubbles/mist run continuously, so in practice this means "always" whenever the window is on-screen).
+- Pause the render loop entirely when the Tauri window is hidden/minimized or occluded — listen for Tauri's window visibility/focus events and drive R3F's `frameloop` between `"always"` and `"never"` accordingly. This is the one non-negotiable perf guard even at "worry about cost later" — an invisible window rendering 3D forever is pure waste, not a design choice.
+- **This pause is render/physics-only — the sim tick keeps running regardless of window visibility.** `frameloop="never"` stops R3F's draw calls (and, in turn, there's no reason to keep stepping Rapier or updating Yuka just to feed a renderer that isn't drawing), but the 1 Hz sim tick from §3 (aging, mood/energy drift, breeding, passing) is a separate timer with no rendering dependency and must not be touched by this — a jar minimized for an hour should age and breed exactly as much as one left visible for an hour, per `SPEC.md` §5's "real time" model. Only a fully closed app stops simulated time, per `SPEC.md` §6 ("elapsed real time while closed is **not** simulated"); hidden/minimized is not closed. When the window becomes visible again, physics/steering simply resume from wherever the sim state currently is — no need to "catch up" any visual animation, since position/pose were never part of persisted state to begin with (§3's table — only stats are).
 - Physics tick rate is independent of render frame rate (§5.1).
 
 ---
 
 ## 2. Coordinate system — mapping the existing 2D sim onto a 3D volume
 
-The sim already produces `c.x`, `c.y` (both 0–100, percent of tank), `c.dir`
-(±1, facing left/right), and `c.wob` (a phase accumulator originally used
-to bob/tilt the flat sprite). None of that is thrown away — it's the input
-to a 3D presentation layer, not a competing system.
+The sim already produces `c.x`, `c.y` (both 0–100, percent of tank), `c.dir` (±1, facing left/right), and `c.wob` (a phase accumulator originally used to bob/tilt the flat sprite). None of that is thrown away — it's the input to a 3D presentation layer, not a competing system.
 
 ### 2.1 New axis: depth
 
-`SCREENS.md` (W2, critter card) already lists **"Favourite spot
-(left/middle/right + depth)"** — depth was part of the design's vocabulary
-even though the 2D prototype never implemented it (fish only had x/y).
-This spec formalizes it as a real third axis rather than inventing a new
-concept:
+`SCREENS.md` (W2, critter card) already lists **"Favourite spot (left/middle/right + depth)"** — depth was part of the design's vocabulary even though the 2D prototype never implemented it (fish only had x/y). This spec formalizes it as a real third axis rather than inventing a new concept:
 
-- Add `c.z` (0–100, percent of tank depth) alongside `c.x`/`c.y` in the sim
-  state, generated and wandered exactly like `c.x`/`c.y` are today.
+- Add `c.z` (0–100, percent of tank depth) alongside `c.x`/`c.y` in the sim state, generated and wandered exactly like `c.x`/`c.y` are today.
 - `fav.z` joins `fav.x`/`fav.y` on the favourite-spot object.
-- Fish roam all three axes. Geckos are still primarily floor/branch bound
-  (§4.2), so their `z` stays close to a fixed "on the glass wall / on the
-  branch" band rather than roaming freely — this matches the original
-  design intent (2D gecko art was explicitly "top-down, as if on the
-  glass") while letting them read as sitting _in_ a real terrarium instead
-  of painted on its front pane.
+- Fish roam all three axes. Geckos are still primarily floor/branch bound (§4.2), so their `z` stays close to a fixed "on the glass wall / on the branch" band rather than roaming freely — this matches the original design intent (2D gecko art was explicitly "top-down, as if on the glass") while letting them read as sitting _in_ a real terrarium instead of painted on its front pane.
 
 ### 2.2 World space
 
-- Define a **tank volume** in world units: width `W` (maps from `x`),
-  height `H` (maps from `y`, inverted — `y=0` is the surface/top in the sim,
-  which is `+H` in a Y-up scene), depth `D` (maps from `z`).
-- Scale convention: **1 world unit ≈ 10 cm**, so a modest desktop tank is
-  roughly 6×4×3 units. This isn't cosmetic — Rapier's gravity, damping and
-  impulse magnitudes (§5) are tuned assuming roughly real-world scale, and
-  picking an arbitrary unit size now means re-tuning every force constant
-  later.
-- Conversion is a pure function, `simPercentToWorld(x, y, z) → Vector3`,
-  called once per critter per physics step to feed the target the steering
-  layer chases. Physics/render positions are the source of truth once a
-  critter exists (§3); the sim's `x/y/z` fields become the _intent_ signal
-  (favourite spot, spawn point), not a per-frame authority.
+- Define a **tank volume** in world units: width `W` (maps from `x`), height `H` (maps from `y`, inverted — `y=0` is the surface/top in the sim, which is `+H` in a Y-up scene), depth `D` (maps from `z`).
+- Scale convention: **1 world unit ≈ 10 cm**, so a modest desktop tank is roughly 6×4×3 units. This isn't cosmetic — Rapier's gravity, damping and impulse magnitudes (§5) are tuned assuming roughly real-world scale, and picking an arbitrary unit size now means re-tuning every force constant later.
+- Conversion is a pure function, `simPercentToWorld(x, y, z) → Vector3`, called once per critter per physics step to feed the target the steering layer chases. Physics/render positions are the source of truth once a critter exists (§3); the sim's `x/y/z` fields become the _intent_ signal (favourite spot, spawn point), not a per-frame authority.
 
 ### 2.3 Camera
 
-- **Fixed, perspective, frontal** — no orbit controls, no user camera
-  interaction. This is a toy you glance at, not a scene you explore
-  (`SPEC.md` §1: "no goal, no win state"); an explorable camera fights that
-  tone and re-opens the whole "what if they scroll behind the backdrop"
-  problem the flat 2D version never had.
-- Narrow-ish FOV (~35–40°) with camera distance chosen so the near/far
-  clipping planes comfortably contain the tank depth without visible
-  perspective distortion at the edges — the original art direction is a
-  flat aquarium-glass view, and a wide FOV would undercut that on a
-  wide/short window.
-- On window resize, scale the tank volume (not the camera) to fit the new
-  aspect ratio within the frame bezel's interior — this preserves
-  `SPEC.md`'s "percentage-based" resizing intent (§2) directly: a critter
-  at `x=50` is always centered regardless of window size, exactly as it is
-  in the 2D prototype's `left: c.x + '%'`.
+- **Fixed, perspective, frontal** — no orbit controls, no user camera interaction. This is a toy you glance at, not a scene you explore (`SPEC.md` §1: "no goal, no win state"); an explorable camera fights that tone and re-opens the whole "what if they scroll behind the backdrop" problem the flat 2D version never had.
+- Narrow-ish FOV (~35–40°) with camera distance chosen so the near/far clipping planes comfortably contain the tank depth without visible perspective distortion at the edges — the original art direction is a flat aquarium-glass view, and a wide FOV would undercut that on a wide/short window.
+- On window resize, scale the tank volume (not the camera) to fit the new aspect ratio within the frame bezel's interior — this preserves `SPEC.md`'s "percentage-based" resizing intent (§2) directly: a critter at `x=50` is always centered regardless of window size, exactly as it is in the 2D prototype's `left: c.x + '%'`.
 
 ---
 
 ## 3. Simulation ↔ render bridge — the exact seam
 
-Write the sim tick (1 Hz: aging, mood/energy drift, breeding, passing,
-naming, genetics roll) as a fresh, framework-agnostic TS module
-(`/src/sim/`) implementing the rules and constants `SPEC.md` §5 specifies
-— `Jar.dc.html`'s `simTick()`/`make()` are a working reference for what
-those rules produce, not code to adapt. This module has no rendering
-knowledge and shouldn't gain any. What's being newly built, with no
-prototype code to draw from at all, is everything downstream of "a critter
-object exists with these fields" — the replacement for the prototype's
-`frame()` loop and `svg()` function, specified from here on.
+Write the sim tick (1 Hz: aging, mood/energy drift, breeding, passing, naming, genetics roll) as a fresh, framework-agnostic TS module (`/src/sim/`) implementing the rules and constants `SPEC.md` §5 specifies — `Jar.dc.html`'s `simTick()`/`make()` are a working reference for what those rules produce, not code to adapt. This module has no rendering knowledge and shouldn't gain any. What's being newly built, with no prototype code to draw from at all, is everything downstream of "a critter object exists with these fields" — the replacement for the prototype's `frame()` loop and `svg()` function, specified from here on.
 
 **Per-critter runtime split, once a critter is spawned:**
 
@@ -227,20 +100,9 @@ object exists with these fields" — the replacement for the prototype's
 | Physical truth (where is it _actually_)        | `RigidBody` translation/rotation                                                             | Rapier world, `@react-three/rapier` |
 | Presentation (how does it look doing that)     | GLTF pose, spine-wave phase, material uniforms                                               | R3F component                       |
 
-Per frame: read the `RigidBody`'s actual position → feed it into the
-`YUKA.Vehicle` so steering always reasons from ground truth → `vehicle.update(delta)`
-produces a desired velocity → apply as a damped impulse to the `RigidBody`
-(§5.2) → the R3F component reads the same `RigidBody` transform to place
-and orient the model, and reads `desired velocity` / `turnRate` to drive
-the procedural animation (§6.6). Sim-tick fields (`mood`, `energy`, `trait`)
-modulate steering parameters (§4.1) but are never touched by the render
-loop — the 1 Hz tick is still the only thing that ages, breeds, or kills a
-critter, exactly as `SPEC.md` §5 specifies.
+Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Vehicle` so steering always reasons from ground truth → `vehicle.update(delta)` produces a desired velocity → apply as a damped impulse to the `RigidBody` (§5.2) → the R3F component reads the same `RigidBody` transform to place and orient the model, and reads `desired velocity` / `turnRate` to drive the procedural animation (§6.6). Sim-tick fields (`mood`, `energy`, `trait`) modulate steering parameters (§4.1) but are never touched by the render loop — the 1 Hz tick is still the only thing that ages, breeds, or kills a critter, exactly as `SPEC.md` §5 specifies.
 
-`c.wob` and `c.dir` from the 2D prototype are superseded: `wob` (a raw sine
-phase used to bob the whole sprite) is replaced by the richer procedural
-spine animation in §6.6, and `dir` (left/right sprite flip) is replaced by
-an actual heading quaternion computed from the steering velocity vector.
+`c.wob` and `c.dir` from the 2D prototype are superseded: `wob` (a raw sine phase used to bob the whole sprite) is replaced by the richer procedural spine animation in §6.6, and `dir` (left/right sprite flip) is replaced by an actual heading quaternion computed from the steering velocity vector.
 
 ---
 
@@ -248,24 +110,10 @@ an actual heading quaternion computed from the steering velocity vector.
 
 ### 4.1 Fish
 
-- **Active behaviors: `WanderBehavior` + `SeparationBehavior`.** That's the
-  full default set — deliberately _not_ `CohesionBehavior` or
-  `AlignmentBehavior`. Jar's critters are named, individual pets, not an
-  anonymous school; boid flocking makes multiple named fish move in
-  lockstep, which reads as less alive, not more. Leave both weights at 0 by
-  default.
-  - _Stretch, explicitly opt-in later:_ a per-relationship "bonded pair"
-    attraction (e.g. parent/child, or two critters flagged as attached) as
-    a small custom steering force scoped to that one relationship — not a
-    global flock behavior. Not required for v1.
-- **Arrival at favourite spot:** ~30% of the time a fish's current
-  wander/target cycle resolves, redirect it to `fav.{x,y,z}` using an
-  `ArriveBehavior` (slowing radius) rather than snapping — reproducing the
-  same 30%-of-the-time rule `Jar.dc.html`'s mock uses, re-expressed as a
-  proper steering behavior instead of a linear-interpolation target.
-- **Trait modulation** (traits are already defined in `SPEC.md` §5 —
-  this table says how each one bends the _steering_ parameters, since the
-  2D version only had ad-hoc movement tweaks):
+- **Active behaviors: `WanderBehavior` + `SeparationBehavior`.** That's the full default set — deliberately _not_ `CohesionBehavior` or `AlignmentBehavior`. Jar's critters are named, individual pets, not an anonymous school; boid flocking makes multiple named fish move in lockstep, which reads as less alive, not more. Leave both weights at 0 by default.
+  - _Stretch, explicitly opt-in later:_ a per-relationship "bonded pair" attraction (e.g. parent/child, or two critters flagged as attached) as a small custom steering force scoped to that one relationship — not a global flock behavior. Not required for v1.
+- **Arrival at favourite spot:** ~30% of the time a fish's current wander/target cycle resolves, redirect it to `fav.{x,y,z}` using an `ArriveBehavior` (slowing radius) rather than snapping — reproducing the same 30%-of-the-time rule `Jar.dc.html`'s mock uses, re-expressed as a proper steering behavior instead of a linear-interpolation target.
+- **Trait modulation** (traits are already defined in `SPEC.md` §5 — this table says how each one bends the _steering_ parameters, since the 2D version only had ad-hoc movement tweaks):
 
   | Trait      | Steering effect                                                                                                                                                                                    |
   | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -276,37 +124,15 @@ an actual heading quaternion computed from the steering velocity vector.
   | `dramatic` | Wander jitter (the circle's angular displacement per step) at ~4× the base rate, matching the existing `4× noise` on its mood stat                                                                 |
   | `greedy`   | No steering effect (its penalty is mood-only per `SPEC.md` §5)                                                                                                                                     |
 
-- **Energy coupling:** `vehicle.maxSpeed` scales with `energy` — low energy
-  slows movement, exactly as `SPEC.md` §5 already specifies ("Low energy
-  slows movement and drops mood"); it's the same existing rule, not a new
-  one, just expressed as a steering parameter instead of an ad-hoc
-  movement tweak.
-- **Night:** steering is fully overridden, not just slowed. On the
-  night transition, cancel active behaviors, set a one-shot `ArriveBehavior`
-  targeting `fav.{x,y,z}`, and once arrived (within a small radius) zero the
-  vehicle's velocity and mark the critter "settled" — no wander, no
-  separation, until day. This matches `SPEC.md` §5's "drifts to their
-  favourite spot and sleeps... indefinite in sim terms."
+- **Energy coupling:** `vehicle.maxSpeed` scales with `energy` — low energy slows movement, exactly as `SPEC.md` §5 already specifies ("Low energy slows movement and drops mood"); it's the same existing rule, not a new one, just expressed as a steering parameter instead of an ad-hoc movement tweak.
+- **Night:** steering is fully overridden, not just slowed. On the night transition, cancel active behaviors, set a one-shot `ArriveBehavior` targeting `fav.{x,y,z}`, and once arrived (within a small radius) zero the vehicle's velocity and mark the critter "settled" — no wander, no separation, until day. This matches `SPEC.md` §5's "drifts to their favourite spot and sleeps... indefinite in sim terms."
 
 ### 4.2 Gecko
 
-- **Navigation:** a `NavMesh` covering two connected surfaces — the floor
-  and the branch — built once from the terrarium's static geometry.
-  Yuka's navmesh + pathfinding classes handle the floor↔branch transition
-  as an ordinary path rather than a special-cased jump, which is the one
-  piece of genuine pathfinding complexity in the whole spec (versus the
-  fish, which just wander a volume).
-- **Climb probability:** ~35% chance of pathing to the branch when a wander
-  cycle resolves, matching `SPEC.md` §5 exactly ("climb to the branch ~35%
-  of the time").
-- **Pause behavior:** 1–4 s pause at each stop, same range `SPEC.md` §5
-  already specifies.
-- **Orientation:** blend the gecko's up-vector to the surface normal at its
-  current navmesh position (floor normal = world up; branch normal = the
-  branch cylinder's local outward normal) so it visibly clings to whatever
-  it's standing on rather than always standing world-upright. This is the
-  same quaternion-lerp-toward-target pattern used for fish turn-banking
-  (§6.6), generalized from "bank into a turn" to "orient to a surface."
+- **Navigation:** a `NavMesh` covering two connected surfaces — the floor and the branch — built once from the terrarium's static geometry. Yuka's navmesh + pathfinding classes handle the floor↔branch transition as an ordinary path rather than a special-cased jump, which is the one piece of genuine pathfinding complexity in the whole spec (versus the fish, which just wander a volume).
+- **Climb probability:** ~35% chance of pathing to the branch when a wander cycle resolves, matching `SPEC.md` §5 exactly ("climb to the branch ~35% of the time").
+- **Pause behavior:** 1–4 s pause at each stop, same range `SPEC.md` §5 already specifies.
+- **Orientation:** blend the gecko's up-vector to the surface normal at its current navmesh position (floor normal = world up; branch normal = the branch cylinder's local outward normal) so it visibly clings to whatever it's standing on rather than always standing world-upright. This is the same quaternion-lerp-toward-target pattern used for fish turn-banking (§6.6), generalized from "bank into a turn" to "orient to a surface."
 
 ---
 
@@ -314,56 +140,21 @@ an actual heading quaternion computed from the steering velocity vector.
 
 ### 5.1 World setup
 
-- Physics steps at a fixed lower rate than the render loop (Rapier's
-  default fixed-timestep behavior is fine — don't tie physics to display
-  refresh rate). Rapier is chosen over `@react-three/cannon`: it's the
-  actively maintained option in the R3F ecosystem (current major version
-  targets R3F v9/React 19), where cannon's wrapper has stalled.
-- `gravityScale: 0` on every critter `RigidBody`. Steering (§4) owns
-  vertical position entirely for locomotion — do not run real gravity
-  against a counteracting buoyancy force; that produces a slow permanent
-  drift bug (fish sinking or rising indefinitely) that's tedious to debug
-  because it's two opposing systems fighting rather than one broken rule.
-- Static/fixed bodies: tank walls (invisible box, inset slightly from the
-  visible glass so no clipping is visible at the boundary), floor, rock,
-  branch, foliage clusters — anything a critter shouldn't pass through.
-  These give free containment/collision without hand-written bounds
-  checks.
+- Physics steps at a fixed lower rate than the render loop (Rapier's default fixed-timestep behavior is fine — don't tie physics to display refresh rate). Rapier is chosen over `@react-three/cannon`: it's the actively maintained option in the R3F ecosystem (current major version targets R3F v9/React 19), where cannon's wrapper has stalled.
+- `gravityScale: 0` on every critter `RigidBody`. Steering (§4) owns vertical position entirely for locomotion — do not run real gravity against a counteracting buoyancy force; that produces a slow permanent drift bug (fish sinking or rising indefinitely) that's tedious to debug because it's two opposing systems fighting rather than one broken rule.
+- Static/fixed bodies: tank walls (invisible box, inset slightly from the visible glass so no clipping is visible at the boundary), floor, rock, branch, foliage clusters — anything a critter shouldn't pass through. These give free containment/collision without hand-written bounds checks.
 
 ### 5.2 Per-critter body
 
-- Dynamic `RigidBody`, `colliders="hull"` (or a hand-placed capsule for
-  fish, box/capsule chain for gecko legs if a full articulated gecko body
-  is eventually wanted — a single hull collider is sufficient for v1).
-- `linearDamping` ~2–3, `angularDamping` ~5 as starting points — this is
-  the "how heavy/sluggish does swimming feel" dial; tune by eye once a fish
-  is actually on screen, don't over-fit these numbers in the abstract.
-- Every render frame: apply the steering layer's desired velocity as an
-  impulse (not a position snap), and set rotation from the heading
-  computed off that same velocity vector. See the worked example already
-  established for this project — `gravityScale={0}`, damped impulse,
-  quaternion-from-heading — that pattern is the reference implementation;
-  don't re-derive it differently per critter type.
+- Dynamic `RigidBody`, `colliders="hull"` (or a hand-placed capsule for fish, box/capsule chain for gecko legs if a full articulated gecko body is eventually wanted — a single hull collider is sufficient for v1).
+- `linearDamping` ~2–3, `angularDamping` ~5 as starting points — this is the "how heavy/sluggish does swimming feel" dial; tune by eye once a fish is actually on screen, don't over-fit these numbers in the abstract.
+- Every render frame: apply the steering layer's desired velocity as an impulse (not a position snap), and set rotation from the heading computed off that same velocity vector. See the worked example already established for this project — `gravityScale={0}`, damped impulse, quaternion-from-heading — that pattern is the reference implementation; don't re-derive it differently per critter type.
 
 ### 5.3 Secondary motion (the "not rigid" feel)
 
-- A small, **idle-only** oscillating vertical force (real buoyancy math:
-  `submergedFraction × fluidDensity × displacedVolume × gravity`, opposed
-  by damping) applied only while a fish's steering-driven speed is near
-  zero — a gentle bob, not the primary motion source. Applying this
-  constantly alongside gravity-zero steering is redundant with §4.1's
-  night/idle handling; keep it as flavor on top, not a second locomotion
-  system.
-- **Stretch, optional:** a Rapier sensor volume around the bubble emitter
-  that applies a small upward impulse to any fish `RigidBody` passing
-  through it — this is the literal "a bubble stream physically lifts a
-  fish" moment. Genuinely nice if it happens naturally as fish wander near
-  the airstone; not worth engineering wander behavior specifically to
-  trigger it.
-- Bubbles/mist themselves are **not** physics bodies (§9) — they're
-  cheaper as pure visual particles, and running a physics body per
-  particle for ambient decoration is wasted simulation cost regardless of
-  how "later" the optimization pass is.
+- A small, **idle-only** oscillating vertical force (real buoyancy math: `submergedFraction × fluidDensity × displacedVolume × gravity`, opposed by damping) applied only while a fish's steering-driven speed is near zero — a gentle bob, not the primary motion source. Applying this constantly alongside gravity-zero steering is redundant with §4.1's night/idle handling; keep it as flavor on top, not a second locomotion system.
+- **Stretch, optional:** a Rapier sensor volume around the bubble emitter that applies a small upward impulse to any fish `RigidBody` passing through it — this is the literal "a bubble stream physically lifts a fish" moment. Genuinely nice if it happens naturally as fish wander near the airstone; not worth engineering wander behavior specifically to trigger it.
+- Bubbles/mist themselves are **not** physics bodies (§9) — they're cheaper as pure visual particles, and running a physics body per particle for ambient decoration is wasted simulation cost regardless of how "later" the optimization pass is.
 
 ---
 
@@ -371,63 +162,29 @@ an actual heading quaternion computed from the steering velocity vector.
 
 ### 6.1 Base archetypes
 
-The `fin` gene (`SPEC.md` §5: `fan | forked | veil`) is the one
-structurally-varying trait; everything else (`hue`, `spots`) is a material
-property, not a mesh property. Build **one rigged base body** with **three
-tail blend shapes** (fan/forked/veil), selected once at spawn time by
-setting the corresponding morph-target influence to 1 and the others to 0
-— not runtime-blended, since the gene doesn't change after birth. This
-avoids maintaining three separate rigged meshes for what is, structurally,
-one fish with a swappable tail.
+The `fin` gene (`SPEC.md` §5: `fan | forked | veil`) is the one structurally-varying trait; everything else (`hue`, `spots`) is a material property, not a mesh property. Build **one rigged base body** with **three tail blend shapes** (fan/forked/veil), selected once at spawn time by setting the corresponding morph-target influence to 1 and the others to 0 — not runtime-blended, since the gene doesn't change after birth. This avoids maintaining three separate rigged meshes for what is, structurally, one fish with a swappable tail.
 
 ### 6.2 Rig
 
-Minimal bone chain, authored facing a fixed convention direction (pick one,
-e.g. `+Z`, and document it in the model file itself — this must line up
-exactly with how the heading quaternion in §5.2 is computed, or every fish
-will swim backwards):
+Minimal bone chain, authored facing a fixed convention direction (pick one, e.g. `+Z`, and document it in the model file itself — this must line up exactly with how the heading quaternion in §5.2 is computed, or every fish will swim backwards):
 
 - `root`
-- `spine1 → spine2 → spine3` (3 segments is enough for a visible traveling
-  wave; more adds render cost without reading as more "alive")
+- `spine1 → spine2 → spine3` (3 segments is enough for a visible traveling wave; more adds render cost without reading as more "alive")
 - `tail` (the morph-blended fin geometry hangs off this bone)
-- Optional: 2 pectoral fin bones, 1 dorsal fin bone, for a small amount of
-  independent fin motion — nice-to-have, not required for the "wow" moment
-  to land.
+- Optional: 2 pectoral fin bones, 1 dorsal fin bone, for a small amount of independent fin motion — nice-to-have, not required for the "wow" moment to land.
 
 ### 6.3 Life-stage scaling
 
-Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock
-renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate
-elder scale currently defined — keep parity unless a visual case emerges
-for shrinking/graying elders). Uniform scale on the root bone is
-sufficient for v1; proportion changes (bigger eyes on fry, etc.) are a
-nice stretch, not required.
+Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). Uniform scale on the root bone is sufficient for v1; proportion changes (bigger eyes on fry, etc.) are a nice stretch, not required.
 
 ### 6.4 Materials — flat/toon, not PBR
 
-The 2D art direction is flat vector color, not realism (`SPEC.md` §1:
-"nicer interface and flat vector art"). Carry that into 3D deliberately —
-`MeshToonMaterial` or a flat-shaded `MeshStandardMaterial` with minimal
-roughness variation reads as "the same product," where a fully PBR fish
-would look like a different app wearing Jar's UI:
+The 2D art direction is flat vector color, not realism (`SPEC.md` §1: "nicer interface and flat vector art"). Carry that into 3D deliberately — `MeshToonMaterial` or a flat-shaded `MeshStandardMaterial` with minimal roughness variation reads as "the same product," where a fully PBR fish would look like a different app wearing Jar's UI:
 
-- **Hue (gene):** drive `material.color.setHSL(hue/360, sat, light)`
-  directly at spawn — the model's base material should be a neutral,
-  single-tone surface designed for this, not a painted/textured skin that
-  a hue rotate would fight with.
-- **Belly gradient:** paint two vertex-color zones once at model-authoring
-  time (top tone, lighter belly tone) and blend them via vertex color in
-  the material — cheap, static, matches the `ellipse` belly highlight in
-  the original `svg()` function.
-- **Spots (gene):** 3–4 small dark sphere primitives (or flattened
-  spheroids) parented to the body at fixed authored positions, toggled
-  visible/invisible by the `spots` boolean — this is a deliberately low-
-  tech match for the original SVG's literal `<circle>` spots rather than a
-  shader-based spot mask, and it's cheaper to author and reason about.
-- **Eyes:** white sphere + black pupil sphere for "awake"; swap to a small
-  curved "closed eyelid" mesh (or a morph target on the head) for
-  "asleep" — same visible/invisible toggle mechanism as spots.
+- **Hue (gene):** drive `material.color.setHSL(hue/360, sat, light)` directly at spawn — the model's base material should be a neutral, single-tone surface designed for this, not a painted/textured skin that a hue rotate would fight with.
+- **Belly gradient:** paint two vertex-color zones once at model-authoring time (top tone, lighter belly tone) and blend them via vertex color in the material — cheap, static, matches the `ellipse` belly highlight in the original `svg()` function.
+- **Spots (gene):** 3–4 small dark sphere primitives (or flattened spheroids) parented to the body at fixed authored positions, toggled visible/invisible by the `spots` boolean — this is a deliberately low- tech match for the original SVG's literal `<circle>` spots rather than a shader-based spot mask, and it's cheaper to author and reason about.
+- **Eyes:** white sphere + black pupil sphere for "awake"; swap to a small curved "closed eyelid" mesh (or a morph target on the head) for "asleep" — same visible/invisible toggle mechanism as spots.
 
 ### 6.5 Genetics → visual mapping (reference table)
 
@@ -454,155 +211,73 @@ spineBones.forEach((bone, i) => {
 });
 ```
 
-- `phaseSeed`: one random value per fish, fixed at spawn — without it,
-  every fish beats in perfect unison whenever they happen to share a
-  speed, which reads as robotic rather than alive. Cheap, easy to forget,
-  disproportionately important.
-- Bank into turns: lerp the root bone's roll toward `-turnRate × k` each
-  frame — small addition, large effect on "carving through water" versus
-  "sliding along a rail."
-- Idle state (`speed ≈ 0`, i.e. asleep or paused): drop to a slow,
-  low-amplitude fin/gill flutter rather than freezing solid. A motionless
-  fish is the fastest way to break the illusion — this rule matters more
-  than almost anything else in this section.
-- If fish models are sourced via a generator with auto-rig **and**
-  auto-animate (Tripo3D does both), baked idle/swim/turn clips may be used
-  as a secondary layer via `AnimationMixer` with `timeScale` driven by
-  `speed / baseSpeed` — treat this as a substitute presentation layer, not
-  a replacement for the phase-staggering and amplitude-scaling logic
-  above, which is what actually sells individual, non-synchronized motion.
+- `phaseSeed`: one random value per fish, fixed at spawn — without it, every fish beats in perfect unison whenever they happen to share a speed, which reads as robotic rather than alive. Cheap, easy to forget, disproportionately important.
+- Bank into turns: lerp the root bone's roll toward `-turnRate × k` each frame — small addition, large effect on "carving through water" versus "sliding along a rail."
+- Idle state (`speed ≈ 0`, i.e. asleep or paused): drop to a slow, low-amplitude fin/gill flutter rather than freezing solid. A motionless fish is the fastest way to break the illusion — this rule matters more than almost anything else in this section.
+- If fish models are sourced via a generator with auto-rig **and** auto-animate (Tripo3D does both), baked idle/swim/turn clips may be used as a secondary layer via `AnimationMixer` with `timeScale` driven by `speed / baseSpeed` — treat this as a substitute presentation layer, not a replacement for the phase-staggering and amplitude-scaling logic above, which is what actually sells individual, non-synchronized motion.
 
 ### 6.7 Sex-based visual dimorphism
 
-`sex` (male/female, `SPEC.md` §5) is tracked by the sim and shown on the
-critter card, but the 2D prototype never gave it a visual form at all —
-nothing in `svg()` reads it. Give it a small, tasteful presence rather
-than a second character model:
+`sex` (male/female, `SPEC.md` §5) is tracked by the sim and shown on the critter card, but the 2D prototype never gave it a visual form at all — nothing in `svg()` reads it. Give it a small, tasteful presence rather than a second character model:
 
-- **Fins:** males get a modest scale-up (~1.15–1.25×) on the tail and
-  dorsal fin geometry; females stay at the base scale. This is a uniform
-  multiplier on existing bones/morph targets from §6.2, not new geometry.
-- **Saturation:** males' `setHSL()` call (§6.4) uses a slightly higher
-  saturation value than females' at the same `hue` — a few percentage
-  points, not a strong split. The goal is "a careful look tells them
-  apart," not "obviously two different color schemes."
-- Both multipliers are fixed constants applied once at spawn alongside the
-  `fin`/`spots` visual setup (§6.5) — no runtime cost, no interaction with
-  steering or animation.
-- Explicitly **not** doing: a separate body shape, a separate rig, or any
-  behavioral difference — `sex` affects breeding eligibility (`SPEC.md`
-  §5) and this one visual pass, nothing else.
+- **Fins:** males get a modest scale-up (~1.15–1.25×) on the tail and dorsal fin geometry; females stay at the base scale. This is a uniform multiplier on existing bones/morph targets from §6.2, not new geometry.
+- **Saturation:** males' `setHSL()` call (§6.4) uses a slightly higher saturation value than females' at the same `hue` — a few percentage points, not a strong split. The goal is "a careful look tells them apart," not "obviously two different color schemes."
+- Both multipliers are fixed constants applied once at spawn alongside the `fin`/`spots` visual setup (§6.5) — no runtime cost, no interaction with steering or animation.
+- Explicitly **not** doing: a separate body shape, a separate rig, or any behavioral difference — `sex` affects breeding eligibility (`SPEC.md` §5) and this one visual pass, nothing else.
 
 ---
 
 ## 7. Gecko 3D model
 
-- **Rig:** `root → spine1 → spine2`, 4 legs (`upperLeg → lowerLeg` each),
-  `neck → head`, `tailBase → tailTip`. No fin/tail-type gene applies to
-  geckos (`SPEC.md` §5's `fin` gene is fish-only) — one base mesh, no
-  morph-target tail variants needed.
-- **Genetics:** same hue-via-material-color and spot-via-toggleable-primitive
-  approach as fish (§6.4/6.5). Gecko originals roll hue from the fixed
-  palette already specified in `SPEC.md`/`Jar.dc.html` (`[28, 42, 75, 110,
-150]`) rather than a free 0–360 roll — carry that constraint forward
-  unchanged.
-- **Gait:** procedural alternating-diagonal-pair leg rotation (same sine-
-  wave technique as the fish spine, applied per-leg-pair with a phase
-  offset) — no inverse kinematics needed for a stylized, low-poly creature
-  at this scale; IK would be real added complexity for a difference few
-  users would consciously notice.
-- **Surface orientation:** per §4.2, blend up-vector to the current
-  surface normal (floor vs. branch) so the gecko visibly clings rather
-  than floating world-upright above whatever it's standing on.
+- **Rig:** `root → spine1 → spine2`, 4 legs (`upperLeg → lowerLeg` each), `neck → head`, `tailBase → tailTip`. No fin/tail-type gene applies to geckos (`SPEC.md` §5's `fin` gene is fish-only) — one base mesh, no morph-target tail variants needed.
+- **Genetics:** same hue-via-material-color and spot-via-toggleable-primitive approach as fish (§6.4/6.5). Gecko originals roll hue from the fixed palette already specified in `SPEC.md`/`Jar.dc.html` (`[28, 42, 75, 110, 150]`) rather than a free 0–360 roll — carry that constraint forward unchanged.
+- **Gait:** procedural alternating-diagonal-pair leg rotation (same sine- wave technique as the fish spine, applied per-leg-pair with a phase offset) — no inverse kinematics needed for a stylized, low-poly creature at this scale; IK would be real added complexity for a difference few users would consciously notice.
+- **Surface orientation:** per §4.2, blend up-vector to the current surface normal (floor vs. branch) so the gecko visibly clings rather than floating world-upright above whatever it's standing on.
 - **Sleep:** same closed-eye swap mechanism as fish (§6.4).
-- **Sex dimorphism:** same approach as §6.7 — a modest tail/scale
-  multiplier and saturation nudge for males, nothing structural.
+- **Sex dimorphism:** same approach as §6.7 — a modest tail/scale multiplier and saturation nudge for males, nothing structural.
 
 ---
 
 ## 8. Environment models
 
-The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded
-glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window
-chrome around the 3D canvas — it does not change with this spec. The 3D
-scene is only what's _inside_ the tank viewport.
+The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window chrome around the 3D canvas — it does not change with this spec. The 3D scene is only what's _inside_ the tank viewport.
 
 ### 8.1 Aquarium
 
-- **Water:** not a real fluid simulation — a depth-tinted fog volume
-  (color gradient matching the original CSS gradient's three stops) plus a
-  slow-scrolling caustic light-mottling texture projected onto the floor
-  and rock from above. A screen-space underwater-wobble post-process is a
-  fine stretch goal, not a baseline requirement.
-- **Glass front pane:** a thin transparent box face at the front of the
-  tank volume (subtle refraction/fresnel via a standard glass-like
-  material) — this is the one place a bit of PBR glass shader is
-  appropriate, since real glass genuinely reads as glass and the flat/toon
-  rule in §6.4 is about creatures, not surfaces.
-- **Floor/decor:** sand floor (two-tone, matching the original's two
-  layered ellipses), one rock, three plants. Plant sway: same sine-based
-  technique as fish spine/gecko gait, driven by a bone or vertex-shader
-  bend — same visual effect as the CSS `sway` keyframe it replaces, built
-  with a genuinely different (3D-native) mechanism, not adapted from it.
-- **Airstone position:** fixed point at roughly the same relative location
-  as the original (~66% x, near the rock) — this is the bubble emitter
-  origin (§9.1) and, if the sensor-volume stretch goal (§5.3) is built,
-  the force-field origin too.
-- **Light toggle:** a surface highlight / soft light-shaft effect (a
-  simple additive gradient plane or sprite is enough) toggled by the
-  `light` boolean from the drawer.
+- **Water:** not a real fluid simulation — a depth-tinted fog volume (color gradient matching the original CSS gradient's three stops) plus a slow-scrolling caustic light-mottling texture projected onto the floor and rock from above. A screen-space underwater-wobble post-process is a fine stretch goal, not a baseline requirement.
+- **Glass front pane:** a thin transparent box face at the front of the tank volume (subtle refraction/fresnel via a standard glass-like material) — this is the one place a bit of PBR glass shader is appropriate, since real glass genuinely reads as glass and the flat/toon rule in §6.4 is about creatures, not surfaces.
+- **Floor/decor:** sand floor (two-tone, matching the original's two layered ellipses), one rock, three plants. Plant sway: same sine-based technique as fish spine/gecko gait, driven by a bone or vertex-shader bend — same visual effect as the CSS `sway` keyframe it replaces, built with a genuinely different (3D-native) mechanism, not adapted from it.
+- **Airstone position:** fixed point at roughly the same relative location as the original (~66% x, near the rock) — this is the bubble emitter origin (§9.1) and, if the sensor-volume stretch goal (§5.3) is built, the force-field origin too.
+- **Light toggle:** a surface highlight / soft light-shaft effect (a simple additive gradient plane or sprite is enough) toggled by the `light` boolean from the drawer.
 
 ### 8.2 Terrarium
 
-- **Floor/wall:** substrate floor, mossy back wall — same look as the
-  original's two-gradient backdrop, built fresh as 3D geometry/materials.
-- **Branch:** a physics-relevant static body (§4.2, §5.1) geckos path onto
-  ~35% of the time — this one has to exist as real geometry with a real
-  collider, not just decoration.
-- **Foliage × 2, hide-rock × 1:** decoration, static colliders optional
-  (only needed if they should block critter movement rather than just sit
-  in the background).
-- **Heat-lamp glow:** an additive light-cone or radial glow sprite, toggled
-  by `lightOn` — same visual effect as the original's radial-gradient
-  glow, rebuilt as a 3D light/sprite.
+- **Floor/wall:** substrate floor, mossy back wall — same look as the original's two-gradient backdrop, built fresh as 3D geometry/materials.
+- **Branch:** a physics-relevant static body (§4.2, §5.1) geckos path onto ~35% of the time — this one has to exist as real geometry with a real collider, not just decoration.
+- **Foliage × 2, hide-rock × 1:** decoration, static colliders optional (only needed if they should block critter movement rather than just sit in the background).
+- **Heat-lamp glow:** an additive light-cone or radial glow sprite, toggled by `lightOn` — same visual effect as the original's radial-gradient glow, rebuilt as a 3D light/sprite.
 
 ---
 
 ## 9. Particle systems
 
-Neither bubbles nor mist are physics bodies (§5.3) — cheap, capped-count
-visual particles only.
+Neither bubbles nor mist are physics bodies (§5.3) — cheap, capped-count visual particles only.
 
 ### 9.1 Bubbles (aquarium, `bubbles` toggle)
 
-- Rise velocity (base upward drift) plus **per-axis simplex/Perlin noise**
-  perturbing the horizontal (and slightly the vertical) component every
-  frame, so bubbles wander as they rise rather than traveling a straight
-  line — this is the specific "float up in random directions" effect asked
-  for. (Note for anyone porting from the earlier Babylon research: this is
-  the same idea as Babylon's built-in `NoiseProceduralTexture` +
-  `particleSystem.noiseStrength`, just implemented directly since three
-  has no equivalent shipped in core — a hand-rolled noise-offset in the
-  particle update loop, or a library like `three.quarks`, both work.)
-- Fade in over the first ~15% of lifetime, fade out near the top; slight
-  per-particle size/opacity jitter for visual variety.
+- Rise velocity (base upward drift) plus **per-axis simplex/Perlin noise** perturbing the horizontal (and slightly the vertical) component every frame, so bubbles wander as they rise rather than traveling a straight line — this is the specific "float up in random directions" effect asked for. (Note for anyone porting from the earlier Babylon research: this is the same idea as Babylon's built-in `NoiseProceduralTexture` + `particleSystem.noiseStrength`, just implemented directly since three has no equivalent shipped in core — a hand-rolled noise-offset in the particle update loop, or a library like `three.quarks`, both work.)
+- Fade in over the first ~15% of lifetime, fade out near the top; slight per-particle size/opacity jitter for visual variety.
 - Emitter origin: the airstone position (§8.1).
-- Cap: ~20–40 concurrent bubbles is plenty at this window size — no
-  benefit to more, real cost to more.
+- Cap: ~20–40 concurrent bubbles is plenty at this window size — no benefit to more, real cost to more.
 
 ### 9.2 Mist (terrarium, `mist` toggle — same drawer slot as bubbles per
 
 `SCREENS.md`'s W1 drawer button list)
 
-- Same noise-perturbed-drift technique, but: softer/larger additive
-  sprites, slower rise, lower opacity, wider horizontal spread, emitted
-  from the floor rather than a fixed point.
+- Same noise-perturbed-drift technique, but: softer/larger additive sprites, slower rise, lower opacity, wider horizontal spread, emitted from the floor rather than a fixed point.
 - Cap: ~15–20 concurrent wisps.
 
-Both run continuously whenever their toggle is on — including at night;
-`SPEC.md` doesn't call for them to pause, and there's no behavioral reason
-they should (they're ambient environment, not creature behavior governed
-by the sleep state in §4.1).
+Both run continuously whenever their toggle is on — including at night; `SPEC.md` doesn't call for them to pause, and there's no behavioral reason they should (they're ambient environment, not creature behavior governed by the sleep state in §4.1).
 
 ---
 
@@ -610,79 +285,38 @@ by the sleep state in §4.1).
 
 ### 10.1 Base lighting
 
-Minimal — one ambient light, one directional "surface" light. The point is
-to preserve the flat/toon read from §6.4, not to light the scene
-realistically. Resist the urge to add fill/rim/bounce lights "because it's
-3D now" — that pulls the look toward generic-PBR-game and away from Jar's
-existing visual identity.
+Minimal — one ambient light, one directional "surface" light. The point is to preserve the flat/toon read from §6.4, not to light the scene realistically. Resist the urge to add fill/rim/bounce lights "because it's 3D now" — that pulls the look toward generic-PBR-game and away from Jar's existing visual identity.
 
 ### 10.2 Night dimming
 
-Replace the 2D version's flat CSS tint overlay with an actual light
-transition: animate ambient/key light intensity down and fog density up
-over the day↔night boundary (`SPEC.md` §5: 21:00–07:00). This reads as the
-tank actually going dark rather than a translucent black rectangle being
-placed over it, and it's barely more code than the overlay was.
+Replace the 2D version's flat CSS tint overlay with an actual light transition: animate ambient/key light intensity down and fog density up over the day↔night boundary (`SPEC.md` §5: 21:00–07:00). This reads as the tank actually going dark rather than a translucent black rectangle being placed over it, and it's barely more code than the overlay was.
 
 ### 10.3 Frame-driven effects
 
-Only the **Neon/CRT** frame needs a 3D-side change: a scanline +
-mild chromatic-aberration post-process pass via
-`@react-three/postprocessing`, applied only to the tank canvas, matching
-the original `crt` flag's `repeating-linear-gradient` scanline overlay. All
-other frames (Bevelled 98, Wood, Metal, Glass, Cardboard) require zero
-changes to the 3D scene — their entire look lives in the bezel chrome
-around it, per `SPEC.md` §4.
+Only the **Neon/CRT** frame needs a 3D-side change: a scanline + mild chromatic-aberration post-process pass via `@react-three/postprocessing`, applied only to the tank canvas, matching the original `crt` flag's `repeating-linear-gradient` scanline overlay. All other frames (Bevelled 98, Wood, Metal, Glass, Cardboard) require zero changes to the 3D scene — their entire look lives in the bezel chrome around it, per `SPEC.md` §4.
 
 ---
 
 ## 11. Performance budget & render-loop policy (recap + specifics)
 
-Explicitly **not** trying to be clever about long-run resource cost here —
-per direction, that's a later optimization pass, not a day-one design
-constraint. That said, "don't optimize yet" isn't the same as "no budget at
-all" — a few defaults keep day one from being pathological by accident
-rather than by choice:
+Explicitly **not** trying to be clever about long-run resource cost here — per direction, that's a later optimization pass, not a day-one design constraint. That said, "don't optimize yet" isn't the same as "no budget at all" — a few defaults keep day one from being pathological by accident rather than by choice:
 
-- Triangle budget: aim for roughly <3k triangles per fish, <5k for the
-  gecko. At a handful of critters this is nowhere near a real constraint;
-  it's just what "modest, stylized, low-poly" naturally produces, and
-  worth stating so nobody generates a 500k-triangle sculpt-detail model
-  from Rodin and wonders why the tank stutters.
-- Physics step rate: fixed, independent of display refresh rate — don't
-  tie Rapier's step to `requestAnimationFrame` directly.
+- Triangle budget: aim for roughly <3k triangles per fish, <5k for the gecko. At a handful of critters this is nowhere near a real constraint; it's just what "modest, stylized, low-poly" naturally produces, and worth stating so nobody generates a 500k-triangle sculpt-detail model from Rodin and wonders why the tank stutters.
+- Physics step rate: fixed, independent of display refresh rate — don't tie Rapier's step to `requestAnimationFrame` directly.
 - Particle caps: per §9 (20–40 bubbles, 15–20 mist wisps).
-- Pause the render loop when the window isn't visible (§1.3) — this is the
-  one guard worth treating as non-negotiable rather than deferred, since
-  it costs nothing to add now and directly prevents "why is my idle
-  desktop toy pinning a CPU core" from ever becoming a support question to
-  future-you.
+- Pause the render loop when the window isn't visible (§1.3) — this is the one guard worth treating as non-negotiable rather than deferred, since it costs nothing to add now and directly prevents "why is my idle desktop toy pinning a CPU core" from ever becoming a support question to future-you.
 
 ---
 
 ## 12. Asset pipeline
 
-1. **Generate base meshes.** Text-to-3D or image-to-3D (using the existing
-   flat-vector critter art from `Jar.dc.html`'s `svg()` function as a style
-   reference image) via Meshy or Tripo3D. Tripo3D's built-in stylized
-   presets and auto-rig/auto-animate are the better fit for this project's
-   look and for skipping manual rigging; Meshy's topology/remesh controls
-   are the better fit if hand-rigging in Blender afterward. Either is
-   viable — pick one per model rather than mixing tools mid-pipeline for
-   the same asset.
-2. **Rig.** Use the generator's auto-rig where available; otherwise
-   hand-rig in Blender against the bone specs in §6.2/§7.
-3. **Export** as GLB (includes mesh, rig, morph targets, and any baked
-   clips in one file).
-4. **Convert** each GLB to a typed R3F component via the `gltfjsx` CLI —
-   check the result in, don't regenerate it at build time.
-5. **Naming convention:** the body mesh/material intended for hue-rotation
-   must use a consistent, documented name (e.g. `Body_Hue`) so the genetics
-   wiring in §6.5/§7 can find it by name across regenerated model versions
-   without hand-patching shader code each time a model is re-exported.
+1. **Generate base meshes.** Text-to-3D or image-to-3D (using the existing flat-vector critter art from `Jar.dc.html`'s `svg()` function as a style reference image) via Meshy or Tripo3D. Tripo3D's built-in stylized presets and auto-rig/auto-animate are the better fit for this project's look and for skipping manual rigging; Meshy's topology/remesh controls are the better fit if hand-rigging in Blender afterward. Either is viable — pick one per model rather than mixing tools mid-pipeline for the same asset.
+2. **Rig.** Use the generator's auto-rig where available; otherwise hand-rig in Blender against the bone specs in §6.2/§7.
+3. **Export** as GLB (includes mesh, rig, morph targets, and any baked clips in one file).
+4. **Convert** each GLB to a typed R3F component via the `gltfjsx` CLI — check the result in, don't regenerate it at build time.
+5. **Naming convention:** the body mesh/material intended for hue-rotation must use a consistent, documented name (e.g. `Body_Hue`) so the genetics wiring in §6.5/§7 can find it by name across regenerated model versions without hand-patching shader code each time a model is re-exported.
 
-Directory convention: raw GLBs in `/assets/models/`, generated JSX
-components in `/src/render/models/`.
+Directory convention: raw GLBs in `/assets/models/`, generated JSX components in `/src/render/models/`.
 
 ---
 
@@ -722,14 +356,9 @@ components in `/src/render/models/`.
 Stated plainly so nobody accidentally scope-creeps toward them:
 
 - No real fluid/SPH water simulation.
-- No buoyancy force as the _primary_ locomotion driver (steering is;
-  buoyancy is idle-only flavor, §5.3).
+- No buoyancy force as the _primary_ locomotion driver (steering is; buoyancy is idle-only flavor, §5.3).
 - No user-adjustable/orbit camera — fixed frontal view only (§2.3).
 - No ray-traced or screen-space-heavy water rendering as a v1 requirement.
-- No boid cohesion/alignment flocking by default (§4.1) — individual pets,
-  not an anonymous school.
+- No boid cohesion/alignment flocking by default (§4.1) — individual pets, not an anonymous school.
 - WebGPU is a future progressive enhancement, not a v1 dependency (§1).
-- Long-run idle resource cost is explicitly deferred as an optimization
-  pass, per direction — the only load-bearing exception is pausing the
-  render loop on window-hidden (§1.3, §11), which is cheap enough to do
-  now rather than later.
+- Long-run idle resource cost is explicitly deferred as an optimization pass, per direction — the only load-bearing exception is pausing the render loop on window-hidden (§1.3, §11), which is cheap enough to do now rather than later.
