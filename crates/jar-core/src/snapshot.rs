@@ -7,7 +7,10 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{default_theme_variants, Critter, DialogTheme, JarSettings, Species, TankFrame};
+use jar_protocol::{
+    default_theme_variants, known_theme_variant_names, Critter, DialogTheme, JarSettings, Species,
+    TankFrame,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -106,7 +109,18 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
 /// preserve for them.
 fn migrate_v1(v1: SnapshotV1) -> SnapshotV2 {
     let mut theme_variants = default_theme_variants();
-    theme_variants.insert(v1.settings.dialog_theme, v1.settings.theme_variant);
+    // v1 had one global variant slot, not one per theme — the pre-variants-
+    // map Setup UI could only ever echo that single slot's current value
+    // back on a plain theme switch, so it's often a stale name that never
+    // actually belonged to `dialog_theme` (e.g. "Lagoon" left over from
+    // Modern while `dialog_theme` reads NeonTerminal). Only trust it when
+    // it's actually one of `dialog_theme`'s own named variants; otherwise
+    // the seeded default above stands.
+    if known_theme_variant_names(v1.settings.dialog_theme)
+        .contains(&v1.settings.theme_variant.as_str())
+    {
+        theme_variants.insert(v1.settings.dialog_theme, v1.settings.theme_variant);
+    }
 
     SnapshotV2 {
         critters: v1.critters,
@@ -243,5 +257,49 @@ mod tests {
         assert!(restored.settings.always_on_top);
         assert_eq!(restored.clock.sim_seconds, 12.0);
         assert_eq!(restored.clock.speed, 3);
+    }
+
+    #[test]
+    fn decode_discards_a_v1_variant_that_never_belonged_to_its_theme() {
+        // v1's single global variant slot could only ever echo back its
+        // current value on a plain theme switch (there was no per-theme
+        // chip UI yet) — so a real v1 snapshot commonly has a `dialog_theme`
+        // of, say, NeonTerminal paired with a `theme_variant` of "Lagoon",
+        // left over from whenever Modern's default was last active. That
+        // combination should be treated as stale, not carried forward.
+        let v1 = SnapshotV1 {
+            critters: Vec::new(),
+            sim_seconds: 0.0,
+            speed: 1,
+            settings: SettingsV1 {
+                mode: Species::Fish,
+                frame: TankFrame::Bevelled98,
+                dialog_theme: DialogTheme::NeonTerminal,
+                theme_variant: "Lagoon".to_string(), // not one of NeonTerminal's variants
+                light_on: true,
+                ambient_particles_on: true,
+                sound_on: false,
+                simulation_speed: 1,
+                always_on_top: false,
+            },
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 1,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v1).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        // The stale "Lagoon" is discarded; NeonTerminal keeps its own
+        // documented default instead of an invalid value.
+        assert_eq!(
+            restored
+                .settings
+                .theme_variants
+                .get(&DialogTheme::NeonTerminal),
+            Some(&"Magenta".to_string())
+        );
     }
 }

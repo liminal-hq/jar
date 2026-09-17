@@ -55,19 +55,53 @@ pub struct JarSettings {
     pub always_on_top: bool,
 }
 
-/// Every theme's first-listed variant (SPEC.md §4), used to seed
-/// `JarSettings::default()` and to backfill `theme_variants` for the other
-/// five themes when migrating a pre-variants-map snapshot (see
-/// `jar-core`'s `snapshot::migrate_v1`).
+/// The named-variant vocabulary per theme (SPEC.md §4's "Variants" table),
+/// display order — the first is that theme's documented default. Mirrored
+/// in `apps/jar/src/theme/theme.ts`'s `DIALOG_THEME_VARIANTS` keys (that
+/// file also carries each variant's actual colour tokens, which the core
+/// has no reason to know). Kept here only so `default_theme_variants` has
+/// one place to draw defaults from and so a snapshot migration can tell a
+/// genuinely-picked variant apart from stale data (see
+/// `jar-core::snapshot::migrate_v1`) — nothing in the regular command path
+/// validates `theme_variants` against this list, matching `JarSettings`'
+/// existing "presentation-only, free string" design for that field.
+pub fn known_theme_variant_names(theme: DialogTheme) -> &'static [&'static str] {
+    match theme {
+        DialogTheme::Modern | DialogTheme::ModernDark => {
+            &["Lagoon", "Bubblegum", "Moss", "Clementine"]
+        }
+        DialogTheme::Classic98 => &[
+            "Classic blue",
+            "Teal desktop",
+            "Brick",
+            "Rainy day",
+            "High contrast",
+        ],
+        DialogTheme::PaperNotebook => &["Ruled cream", "Graph paper", "Legal pad", "Kraft"],
+        DialogTheme::HandheldLcd => &["Pea soup", "Pocket grey", "Berry", "Glacier"],
+        DialogTheme::NeonTerminal => &["Magenta", "Amber", "Phosphor green", "Cyan"],
+    }
+}
+
+/// Every theme's documented default variant (`known_theme_variant_names`'
+/// first entry), used to seed `JarSettings::default()` and to backfill
+/// `theme_variants` for themes a migrated pre-variants-map snapshot never
+/// actually visited (see `jar-core`'s `snapshot::migrate_v1`).
 pub fn default_theme_variants() -> BTreeMap<DialogTheme, String> {
-    BTreeMap::from([
-        (DialogTheme::Modern, "Lagoon".to_string()),
-        (DialogTheme::ModernDark, "Lagoon".to_string()),
-        (DialogTheme::Classic98, "Classic blue".to_string()),
-        (DialogTheme::PaperNotebook, "Ruled cream".to_string()),
-        (DialogTheme::HandheldLcd, "Pea soup".to_string()),
-        (DialogTheme::NeonTerminal, "Magenta".to_string()),
-    ])
+    [
+        DialogTheme::Modern,
+        DialogTheme::ModernDark,
+        DialogTheme::Classic98,
+        DialogTheme::PaperNotebook,
+        DialogTheme::HandheldLcd,
+        DialogTheme::NeonTerminal,
+    ]
+    .into_iter()
+    .map(|theme| {
+        let default = known_theme_variant_names(theme)[0].to_string();
+        (theme, default)
+    })
+    .collect()
 }
 
 impl Default for JarSettings {
@@ -106,6 +140,26 @@ mod tests {
         assert!(!settings.sound_on);
         assert_eq!(settings.simulation_speed, 1);
         assert!(!settings.always_on_top);
+    }
+
+    #[test]
+    fn every_theme_has_a_non_empty_variant_list_whose_first_entry_is_its_default() {
+        for theme in [
+            DialogTheme::Modern,
+            DialogTheme::ModernDark,
+            DialogTheme::Classic98,
+            DialogTheme::PaperNotebook,
+            DialogTheme::HandheldLcd,
+            DialogTheme::NeonTerminal,
+        ] {
+            let names = known_theme_variant_names(theme);
+            assert!(!names.is_empty(), "{theme:?} has no named variants");
+            assert_eq!(
+                default_theme_variants().get(&theme),
+                Some(&names[0].to_string()),
+                "{theme:?}'s default should be its first named variant"
+            );
+        }
     }
 
     /// Exports `JarSettings::default()` as a JSON fixture the frontend reads
