@@ -76,3 +76,25 @@ jobs:
         with:
           check_name: Jar Rust tests
           files: target/nextest/ci/junit.xml
+
+  protocol-bindings-drift:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/liminal-hq/tauri-ci-desktop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Trust the GitHub workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Snapshot committed generated files
+        run: cp -r apps/jar/src/domain/protocol/generated /tmp/generated-before
+
+      - name: Regenerate protocol bindings and fixtures
+        run: cargo test -p jar-protocol
+
+      - name: Check for uncommitted drift
+        run: diff -rq /tmp/generated-before apps/jar/src/domain/protocol/generated
