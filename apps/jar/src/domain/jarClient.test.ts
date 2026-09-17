@@ -69,6 +69,27 @@ beforeEach(() => {
   });
 });
 
+describe('DEFAULT_SETTINGS', () => {
+  it("matches the Rust side's JarSettings::default(), pinned independently on both sides", () => {
+    // Paired with `crates/jar-protocol/src/settings.rs`'s
+    // `default_settings_match_the_frontends_hand_duplicated_copy` — the two
+    // have no shared generated source, so each side pins the same literal
+    // values against its own suite; a drift on either side breaks that
+    // side's own test rather than this test reading the other file.
+    expect(DEFAULT_SETTINGS).toEqual({
+      mode: 'Fish',
+      frame: 'Bevelled98',
+      dialog_theme: 'Modern',
+      theme_variant: 'Lagoon',
+      light_on: true,
+      ambient_particles_on: true,
+      sound_on: false,
+      simulation_speed: 1,
+      always_on_top: false,
+    });
+  });
+});
+
 describe('hydrate', () => {
   it('populates critters keyed by id and marks the store hydrated', () => {
     const critter = makeCritter();
