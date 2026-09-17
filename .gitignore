@@ -1,0 +1,19 @@
+# Rust
+/target/
+
+# JS / Bun
+node_modules/
+dist/
+
+# Tauri
+apps/jar/src-tauri/gen/
+apps/jar/src-tauri/target/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# App data (local dev jar snapshots)
+*.jar-snapshot

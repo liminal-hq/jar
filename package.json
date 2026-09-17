@@ -1,0 +1,24 @@
+{
+  "name": "jar",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "plugins/*/guest-js"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/jar dev",
+    "tauri": "bun run --cwd apps/jar tauri",
+    "build": "bun run --cwd apps/jar build",
+    "test:js": "vitest run",
+    "test:rust": "cargo nextest run --workspace",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "validate": "bun run format:check && bun run test:js && bun run build && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && bun run test:rust"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

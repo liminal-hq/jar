@@ -1,0 +1,12 @@
+[package]
+name = "jar-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+jar-protocol = { path = "../jar-protocol" }
+serde = { workspace = true }
+postcard = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }

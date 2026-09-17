@@ -1,0 +1,186 @@
+// Thin command handlers: validate, mutate `JarState`, return. No business
+// logic lives here — that's `jar-core`'s job (`docs/architecture/rust-core.md`
+// §5.5), which is also why every rule in this file can be traced back to a
+// specific `jar-core` module rather than being decided on the spot.
+//
+// (c) Copyright 2026 Scott Morris
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use jar_protocol::{Critter, CritterId, DialogTheme, JarSettings, Species, TankFrame};
+use serde::Deserialize;
+use tauri::ipc::Channel;
+use tauri::{command, AppHandle, Runtime, State};
+
+use crate::error::{Error, Result};
+use crate::JarPlugin;
+
+/// Starts (or resumes) the jar and registers the event channel the
+/// background loop pushes `SimEvent`s to. Idempotent: calling `start` again
+/// with a new channel just re-points where events go, which is exactly
+/// what's needed when the tank window is recreated without the whole
+/// simulation restarting.
+#[command]
+pub async fn start<R: Runtime>(
+    app: AppHandle<R>,
+    plugin: State<'_, JarPlugin>,
+    settings: JarSettings,
+    on_event: Channel<jar_protocol::SimEvent>,
+) -> Result<()> {
+    let mut inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
+    if inner.jar.is_none() {
+        inner.jar = Some(crate::load_or_new(&app, settings)?);
+    }
+    inner.channel = Some(on_event);
+    drop(inner);
+    plugin
+        .running
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+/// Pauses the background tick loop. State is retained in memory — this is
+/// not the same as an autosave flush, and does not by itself write
+/// anything to disk.
+#[command]
+pub fn stop(plugin: State<'_, JarPlugin>) -> Result<()> {
+    plugin
+        .running
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+#[command]
+pub fn set_speed(plugin: State<'_, JarPlugin>, speed: u8) -> Result<()> {
+    with_jar(&plugin, |jar| {
+        jar.clock.speed = speed.clamp(1, 60);
+        Ok(())
+    })
+}
+
+#[command]
+pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
+    with_jar(&plugin, |jar| {
+        jar.settings.mode = mode;
+        Ok(())
+    })
+}
+
+/// Adds an original critter of the given species (SPEC.md §4 W4's
+/// `+ Add a critter`). Returns the new critter so the frontend can spawn
+/// its Yuka vehicle/RigidBody immediately, the same as it would on a
+/// `Born` event.
+#[command]
+pub fn add_critter(plugin: State<'_, JarPlugin>, species: Species) -> Result<Critter> {
+    with_jar_mut(&plugin, |jar, rng| {
+        let id = jar.next_critter_id();
+        let existing_names: Vec<String> = jar.critters.iter().map(|c| c.name.clone()).collect();
+        let critter = jar_core::genetics::roll_original(
+            id,
+            species,
+            1,
+            jar.clock.sim_seconds,
+            rng,
+            &existing_names,
+        );
+        jar.critters.push(critter.clone());
+        Ok(critter)
+    })
+}
+
+#[command]
+pub fn rename_critter(plugin: State<'_, JarPlugin>, id: CritterId, name: String) -> Result<()> {
+    with_jar(&plugin, |jar| {
+        let critter = jar
+            .critters
+            .iter_mut()
+            .find(|c| c.id == id)
+            .ok_or(Error::UnknownCritter)?;
+        critter.name = name;
+        Ok(())
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Toggle {
+    Light,
+    AmbientParticles,
+    Sound,
+    AlwaysOnTop,
+}
+
+#[command]
+pub fn set_toggle(plugin: State<'_, JarPlugin>, toggle: Toggle, on: bool) -> Result<()> {
+    with_jar(&plugin, |jar| {
+        match toggle {
+            Toggle::Light => jar.settings.light_on = on,
+            Toggle::AmbientParticles => jar.settings.ambient_particles_on = on,
+            Toggle::Sound => jar.settings.sound_on = on,
+            Toggle::AlwaysOnTop => jar.settings.always_on_top = on,
+        }
+        Ok(())
+    })
+}
+
+#[command]
+pub fn set_theme(plugin: State<'_, JarPlugin>, theme: DialogTheme, variant: String) -> Result<()> {
+    with_jar(&plugin, |jar| {
+        jar.settings.dialog_theme = theme;
+        jar.settings.theme_variant = variant;
+        Ok(())
+    })
+}
+
+#[command]
+pub fn set_frame(plugin: State<'_, JarPlugin>, frame: TankFrame) -> Result<()> {
+    with_jar(&plugin, |jar| {
+        jar.settings.frame = frame;
+        Ok(())
+    })
+}
+
+/// A point-in-time read of the full jar state — used when a UI window
+/// (re)opens and needs to hydrate before the next `TickUpdate` arrives,
+/// distinct from the periodic on-disk autosave. `SnapshotView` itself lives
+/// in `jar-protocol` (not defined here) so `ts-rs` generates a real type
+/// for it — see `crates/jar-protocol/src/view.rs`.
+#[command]
+pub fn get_snapshot(plugin: State<'_, JarPlugin>) -> Result<jar_protocol::SnapshotView> {
+    with_jar(&plugin, |jar| {
+        Ok(jar_protocol::SnapshotView {
+            critters: jar.critters.clone(),
+            settings: jar.settings.clone(),
+            sim_seconds: jar.clock.sim_seconds,
+        })
+    })
+}
+
+/// Explicitly replaces the running jar with the state encoded in `bytes` —
+/// used by a "reset jar" / import flow, not by ordinary startup (which goes
+/// through `crate::load_or_new` inside `start`).
+#[command]
+pub fn load_snapshot(plugin: State<'_, JarPlugin>, bytes: Vec<u8>) -> Result<()> {
+    let restored = jar_core::snapshot::decode(&bytes)?;
+    let mut inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
+    inner.jar = Some(restored);
+    Ok(())
+}
+
+fn with_jar<T>(
+    plugin: &State<'_, JarPlugin>,
+    f: impl FnOnce(&mut jar_core::JarState) -> Result<T>,
+) -> Result<T> {
+    let mut inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
+    let jar = inner.jar.as_mut().ok_or(Error::NotStarted)?;
+    f(jar)
+}
+
+fn with_jar_mut<T>(
+    plugin: &State<'_, JarPlugin>,
+    f: impl FnOnce(&mut jar_core::JarState, &mut jar_core::rng::JarRng) -> Result<T>,
+) -> Result<T> {
+    let mut inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
+    let inner = &mut *inner;
+    let jar = inner.jar.as_mut().ok_or(Error::NotStarted)?;
+    f(jar, &mut inner.rng)
+}

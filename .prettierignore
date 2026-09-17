@@ -1,0 +1,7 @@
+target/
+node_modules/
+dist/
+apps/jar/src-tauri/gen/
+apps/jar/src/domain/protocol/generated/
+docs/ui-mockups/
+*.lock

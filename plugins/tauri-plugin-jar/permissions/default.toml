@@ -1,0 +1,17 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Default permissions for the jar simulation plugin. Grants every command the app itself needs — this plugin is not exposed to any untrusted webview content, so a broad default is appropriate here (contrast with a plugin embedding third-party web content, which should default to nothing and opt in per command)."
+permissions = [
+    "allow-start",
+    "allow-stop",
+    "allow-set-speed",
+    "allow-set-mode",
+    "allow-add-critter",
+    "allow-rename-critter",
+    "allow-set-toggle",
+    "allow-set-theme",
+    "allow-set-frame",
+    "allow-get-snapshot",
+    "allow-load-snapshot",
+]

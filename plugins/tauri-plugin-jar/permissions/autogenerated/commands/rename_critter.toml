@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-rename-critter"
+description = "Enables the rename_critter command without any pre-configured scope."
+commands.allow = ["rename_critter"]
+
+[[permission]]
+identifier = "deny-rename-critter"
+description = "Denies the rename_critter command without any pre-configured scope."
+commands.deny = ["rename_critter"]

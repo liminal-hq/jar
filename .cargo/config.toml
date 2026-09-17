@@ -1,0 +1,8 @@
+# Points every `#[ts(export)]` type in `jar-protocol` at the frontend's
+# generated-types directory, so `cargo test -p jar-protocol` (or
+# `cargo test --workspace`) regenerates real TypeScript bindings in place
+# rather than a scratch `bindings/` folder next to the crate. See
+# `docs/architecture/rust-core.md` §3 and §9 ("`ts-rs` for generated TS
+# types — one source of truth, no hand-sync").
+[env]
+TS_RS_EXPORT_DIR = { value = "apps/jar/src/domain/protocol/generated", relative = true }

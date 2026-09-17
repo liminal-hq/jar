@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-jar"
+version = "0.1.0"
+edition = "2021"
+publish = false
+links = "tauri-plugin-jar"
+
+[dependencies]
+tauri = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt", "time", "sync"] }
+jar-core = { path = "../../crates/jar-core" }
+jar-protocol = { path = "../../crates/jar-protocol" }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

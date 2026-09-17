@@ -1,0 +1,43 @@
+.bezel {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  /* The chosen frame (SPEC.md §4: Bevelled 98 / Wood stand / Brushed metal /
+     Rounded glass / Neon-CRT / Cardboard cutout) themes this bezel — swap
+     via a data attribute driven by `settings.frame` once wired up. */
+  background: transparent;
+}
+
+.tankInterior {
+  position: absolute;
+  inset: 0;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: -18px;
+  height: 100%;
+  width: 56px;
+  transform: translateX(100%);
+  animation: slide-in 150ms ease-out forwards;
+}
+
+@keyframes slide-in {
+  to {
+    transform: translateX(0);
+  }
+}
+
+.statusChip {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+}

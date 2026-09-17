@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "apps/jar/src-tauri",
+    "crates/jar-core",
+    "crates/jar-protocol",
+    "plugins/tauri-plugin-jar",
+]
+resolver = "2"
+
+[workspace.dependencies]
+serde     = { version = "1", features = ["derive"] }
+postcard  = { version = "1", features = ["alloc"] }
+thiserror = "1"
+ts-rs     = "12"
+rand      = "0.8"
+tauri     = { version = "2" }
+
+[profile.release]
+strip = true

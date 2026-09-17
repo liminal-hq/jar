@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-add-critter"
+description = "Enables the add_critter command without any pre-configured scope."
+commands.allow = ["add_critter"]
+
+[[permission]]
+identifier = "deny-add-critter"
+description = "Denies the add_critter command without any pre-configured scope."
+commands.deny = ["add_critter"]

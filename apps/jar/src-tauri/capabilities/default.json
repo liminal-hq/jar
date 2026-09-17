@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities granted to every Jar window — the tank plus the critter card, family tree and setup windows created at runtime (SPEC.md §2).",
+  "windows": ["tank", "critter-card", "family-tree", "setup"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "jar:default",
+    "window-state:default",
+    "os:default"
+  ]
+}

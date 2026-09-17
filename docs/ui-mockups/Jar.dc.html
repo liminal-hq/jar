@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e4d8;font-family:'Nunito',system-ui,sans-serif;color:#2b2a33}
+a{color:#2d3e8f}a:hover{color:#ff3fd8}
+/* bubbles rise ~320px then fade; each bubble gets its own duration/delay inline */
+@keyframes bub{0%{transform:translateY(0) scale(.6);opacity:0}15%{opacity:.9}100%{transform:translateY(-320px) scale(1.1);opacity:0}}
+/* sleep "z" drifting up-right from a sleeping critter */
+@keyframes zz{0%{transform:translate(0,0);opacity:0}30%{opacity:.9}100%{transform:translate(10px,-22px);opacity:0}}
+/* side drawer slides OUT from behind the tank bezel (starts tucked under, translateX negative) */
+@keyframes drawer{from{transform:translate(-46px,-50%);opacity:0}to{transform:translate(0,-50%);opacity:1}}
+@keyframes popin{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes sway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,8px)}10%,85%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,0)}}
+</style>
+</helmet>
+
+<section style="padding:40px 48px 0">
+  <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px">
+    <div style="font-size:13px;font-family:'Nunito',sans-serif;color:#7a7668">Turn 3</div>
+    <div style="font-size:22px;font-weight:800">Naming exploration</div>
+    <div style="font-size:14px;color:#7a7668;max-width:680px">Looked at Liminal HQ's own catalogue for the pattern: Threshold, Cadence, Spindle, Flow, Undertone — each a plain, concrete noun for the object or mechanism at the product's centre, not a description of it. Applied the same move here: a vessel or dwelling word for "a little world in a container," steering clear of literal in-between-space words (mudroom, vestibule, threshold-adjacent).</div>
+  </div>
+  <div id="3a" style="display:flex;flex-direction:column;gap:14px;width:1560px;margin-bottom:60px">
+    <div style="display:flex;gap:10px;align-items:center"><a href="#3a" style="font-family:'Nunito',sans-serif;font-size:12px;font-weight:600;background:#2b2a33;color:#fff;padding:2px 8px;border-radius:999px;text-decoration:none">3a</a><span style="font-size:14px;color:#55524a">Candidates, incumbent included for scale</span></div>
+    <div data-screen-label="3a Name board" style="background:#f7f4ec;border:1.5px solid #2b2a33;border-radius:14px;box-shadow:6px 6px 0 #2b2a33;padding:26px">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:#ece7db;border-radius:10px;margin-bottom:18px">
+        <span style="width:14px;height:14px;border-radius:50%;background:hsl(160 45% 42%);flex-shrink:0"></span>
+        <span style="font-weight:800;font-size:17px;min-width:110px">Jar</span>
+        <span style="font-family:'Nunito',sans-serif;font-size:11px;font-weight:700;color:#55524a;background:#fff;padding:3px 8px;border-radius:999px;flex-shrink:0">in use</span>
+        <span style="font-size:13px;color:#55524a">The plainest vessel word there is — the baseline everything else is measured against.</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+        <sc-for list="{{ nameCandidates }}" as="n" hint-placeholder-count="10">
+          <div style="display:flex;flex-direction:column;gap:6px;padding:16px 18px;background:#fbfaf6;border-radius:10px;border:1px solid rgba(43,42,51,.1)">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="{{ n.swatch }}"></span>
+              <span style="font-weight:800;font-size:16px">{{ n.name }}</span>
+            </div>
+            <span style="font-size:13px;color:#55524a;line-height:1.4">{{ n.desc }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!--
+  JAR — a tiny simulation in a box.  See spec.md for the full product spec.
+  Layout of this design doc (canvas mode, pan/zoom):
+    1a  Desktop scene: chromeless floating tank + pop-out drawer + themed dialog windows
+    1b  Phone companion (same live sim)
+    1c  Screen map for the Tauri build
+  All live values (positions, mood, theme styles) come from the logic class; everything static is inline.
+-->
+<section style="padding:40px 48px 80px;display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;align-items:baseline;gap:16px">
+    <div style="font-size:13px;font-family:'Nunito',sans-serif;color:#7a7668">Turn 2</div>
+    <div style="font-size:22px;font-weight:800">Jar — chromeless tank, pop-out drawer, themed dialogs</div>
+    <div style="font-size:14px;color:#7a7668">Hover the tank → drawer slides out from behind · click a critter · Setup is its own window</div>
+  </div>
+
+  <div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+
+    <!-- ═══════════ 1a DESKTOP ═══════════ -->
+    <div id="1a" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center"><a href="#1a" style="font-family:'Nunito',sans-serif;font-size:12px;font-weight:600;background:#2b2a33;color:#fff;padding:2px 8px;border-radius:999px;text-decoration:none">1a</a><span style="font-size:14px;color:#55524a">Desktop — the tank IS the window; dialogs are separate OS windows, themed</span></div>
+
+      <!-- Fake desktop wallpaper so the floating windows have something to float over. Not part of the product. -->
+      <div data-screen-label="1a Desktop" style="position:relative;width:1560px;height:780px;border-radius:14px;overflow:hidden;background:radial-gradient(circle at 20% 10%,#f6efe0 0,#d9d3c6 45%,#b8b3a8 100%);box-shadow:0 30px 60px rgba(0,0,0,.25)">
+        <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(43,42,51,.08) 1px,transparent 1px);background-size:22px 22px"></div>
+
+        <!--
+          TANK WINDOW (Tauri: transparent + decorations:false + alwaysOnTop).
+          No OS chrome. The chosen FRAME is the only bezel and runs edge-to-edge; drag anywhere on the bezel to move.
+          The hover wrapper covers tank + drawer so the pointer can travel between them without the drawer closing.
+        -->
+        <div data-screen-label="Tank window" onMouseEnter="{{ onEnter }}" onMouseLeave="{{ onLeave }}" style="position:absolute;left:40px;top:40px;width:560px">
+
+          <!--
+            POP-OUT DRAWER — sits BEHIND the tank (z-index below the bezel) and slides out to the right on hover,
+            like a tray being pulled from behind the aquarium. Overlaps the bezel by ~18px so it reads as attached.
+            Side is fixed to the right in this mock; in the app it flips to whichever screen edge has room.
+          -->
+          <sc-if value="{{ controlsVisible }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ drawerStyle }}">
+              <sc-for list="{{ controls }}" as="c" hint-placeholder-count="6">
+                <button onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- BEZEL: frameStyle = one of six frames (bevel98 / wood / metal / glass / neon / cardboard). Glass has 0 padding = truly edge-to-edge. -->
+          <div style="{{ frameStyle }}">
+            <!-- TANK: the simulation viewport. Everything inside is positioned in % so the window can be resized freely. -->
+            <div style="{{ tankStyle }}">
+
+              <!-- AQUARIUM backdrop: water gradient, two sand layers, rock, three swaying plants, surface highlight -->
+              <sc-if value="{{ isAquarium }}" hint-placeholder-val="{{ true }}">
+                <div style="position:absolute;inset:0;background:linear-gradient(180deg,#8fdcea 0%,#3fa9c7 45%,#1e6f8f 100%)"></div>
+                <div style="position:absolute;left:-10%;right:-10%;bottom:-40px;height:110px;border-radius:50%;background:#d9c391"></div>
+                <div style="position:absolute;left:-10%;right:-10%;bottom:-52px;height:100px;border-radius:50%;background:#c4ad7b;opacity:.7"></div>
+                <div style="position:absolute;left:62%;bottom:34px;width:86px;height:56px;border-radius:50% 50% 40% 40%;background:#6d7583"></div>
+                <div style="position:absolute;left:70%;bottom:44px;width:40px;height:30px;border-radius:50%;background:#8a9199"></div>
+                <div style="position:absolute;left:12%;bottom:40px;width:18px;height:150px;border-radius:50% 50% 0 0;background:#2f8f5b;transform-origin:bottom;animation:sway 5s ease-in-out infinite"></div>
+                <div style="position:absolute;left:16%;bottom:40px;width:14px;height:110px;border-radius:50% 50% 0 0;background:#3aa86a;transform-origin:bottom;animation:sway 6s ease-in-out infinite reverse"></div>
+                <div style="position:absolute;left:8%;bottom:40px;width:12px;height:80px;border-radius:50% 50% 0 0;background:#2a7a4e;transform-origin:bottom;animation:sway 4.5s ease-in-out infinite"></div>
+                <div style="position:absolute;left:0;right:0;top:0;height:12px;background:rgba(255,255,255,.35)"></div>
+              </sc-if>
+
+              <!-- TERRARIUM backdrop: mossy wall, sand floor, branch (geckos climb to it), two leaf blobs, hide-rock, heat-lamp glow when LIGHT is on -->
+              <sc-if value="{{ isGecko }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;background:linear-gradient(180deg,#e9f0d4 0%,#c9dcb0 60%,#a9c48f 100%)"></div>
+                <div style="position:absolute;left:0;right:0;bottom:0;height:22%;background:#e6cf9c"></div>
+                <div style="position:absolute;left:0;right:0;bottom:19%;height:14px;background:#c9ad74;border-radius:50%"></div>
+                <div style="position:absolute;left:24%;top:46%;width:48%;height:16px;border-radius:10px;background:#7a4f2a;transform:rotate(-3deg)"></div>
+                <div style="position:absolute;left:28%;top:36%;width:50px;height:70px;border-radius:50%;background:#5f9f5a;opacity:.85"></div>
+                <div style="position:absolute;left:56%;top:30%;width:60px;height:80px;border-radius:50%;background:#4f8a4b;opacity:.85"></div>
+                <div style="position:absolute;left:76%;bottom:18%;width:90px;height:60px;border-radius:50% 50% 30% 30%;background:#8a8579"></div>
+                <sc-if value="{{ lightOn }}" hint-placeholder-val="{{ true }}">
+                  <div style="position:absolute;left:0;top:0;width:60%;height:70%;background:radial-gradient(ellipse at 20% 0%,rgba(255,190,80,.45),transparent 65%)"></div>
+                </sc-if>
+              </sc-if>
+
+              <!-- BUBBLES (aquarium only; drawer toggle). Five rings from the airstone by the rock, staggered. -->
+              <sc-if value="{{ bubblesOn }}" hint-placeholder-val="{{ true }}">
+                <div style="position:absolute;left:66%;bottom:60px;width:8px;height:8px;border-radius:50%;border:1.5px solid rgba(255,255,255,.8);animation:bub 4s linear infinite"></div>
+                <div style="position:absolute;left:68%;bottom:60px;width:5px;height:5px;border-radius:50%;border:1.5px solid rgba(255,255,255,.8);animation:bub 3.2s linear .8s infinite"></div>
+                <div style="position:absolute;left:64%;bottom:60px;width:6px;height:6px;border-radius:50%;border:1.5px solid rgba(255,255,255,.8);animation:bub 4.6s linear 1.6s infinite"></div>
+                <div style="position:absolute;left:70%;bottom:60px;width:4px;height:4px;border-radius:50%;border:1.5px solid rgba(255,255,255,.8);animation:bub 3.6s linear 2.3s infinite"></div>
+                <div style="position:absolute;left:66%;bottom:60px;width:7px;height:7px;border-radius:50%;border:1.5px solid rgba(255,255,255,.8);animation:bub 5s linear 3s infinite"></div>
+              </sc-if>
+
+              <!-- CRITTERS: rendered by the logic class (positions update ~30fps). Click one → critter card window. -->
+              {{ critterLayer }}
+
+              <!-- NIGHT/LIGHT tint: 21:00–07:00 dims hard; LIGHT on at night only lifts it partly (they still sleep). -->
+              <div style="{{ nightStyle }}"></div>
+              <!-- CRT scanlines, only for the Neon frame -->
+              <sc-if value="{{ crt }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(180deg,rgba(0,0,0,.14) 0 1px,transparent 1px 3px);mix-blend-mode:multiply"></div>
+              </sc-if>
+
+              <!-- STATUS CHIP: residents · jar clock · asleep/lit/dim. Only persistent text on the tank. -->
+              <div style="position:absolute;left:12px;bottom:10px;font-family:'Nunito',sans-serif;font-size:11px;color:#fff;background:rgba(20,30,40,.45);padding:4px 8px;border-radius:6px;pointer-events:none">{{ statusText }}</div>
+
+              <!-- EVENT TOAST: births, passings, move-ins. 4s, then gone. -->
+              <sc-if value="{{ blip }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;left:50%;top:14px;background:#fffdf7;color:#2b2a33;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:0 6px 16px rgba(0,0,0,.25);white-space:nowrap;animation:toast 4s ease forwards;pointer-events:none">{{ blip }}</div>
+              </sc-if>
+
+            </div>
+          </div>
+        </div>
+
+        <!--
+          SETUP WINDOW — its own OS window (was an overlay). Shows every option at once:
+          mode · frame · dialog theme · variant (list swaps with theme) · toggles · simulation speed · jar clock · add critter.
+        -->
+        <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="Setup window" style="{{ setupWinStyle }}">
+            <div style="{{ wtitleStyle }}">
+              <span>Setup</span>
+              <button onClick="{{ closeSettings }}" style="{{ closeStyle }}">×</button>
+            </div>
+            <div style="padding:12px 16px 16px;display:flex;flex-direction:column;gap:14px;overflow:auto">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="{{ lStyle }}">Mode</div>
+                <div style="display:flex;gap:8px">
+                  <sc-for list="{{ modeOptions }}" as="m" hint-placeholder-count="2">
+                    <button onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="{{ lStyle }}">Frame</div>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                  <sc-for list="{{ frameOptions }}" as="f" hint-placeholder-count="6">
+                    <button onClick="{{ f.onClick }}" style="{{ f.style }}"><span style="{{ f.swatch }}"></span><span>{{ f.label }}</span></button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="{{ lStyle }}">Dialog theme</div>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                  <sc-for list="{{ themeOptions }}" as="t" hint-placeholder-count="6">
+                    <button onClick="{{ t.onClick }}" style="{{ t.style }}"><span style="{{ t.swatch }}"></span><span>{{ t.label }}</span></button>
+                  </sc-for>
+                </div>
+              </div>
+              <!-- Variant row: the list depends on the active theme (accents / window types / paper stocks / shells / phosphors) -->
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="{{ lStyle }}">{{ variantKind }}</div>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                  <sc-for list="{{ variantOptions }}" as="v" hint-placeholder-count="4">
+                    <button onClick="{{ v.onClick }}" style="{{ v.style }}"><span style="{{ v.swatch }}"></span><span>{{ v.label }}</span></button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="{{ lStyle }}">Tank</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="3">
+                    <button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <!-- Simulation speed: slider 1–60×, plus a Real time chip that snaps back to 1× -->
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="{{ lStyle }}">Simulation speed</span><span style="{{ bStyle }}">{{ speedText }}</span></div>
+                <div style="display:flex;gap:10px;align-items:center">
+                  <input type="range" min="1" max="60" step="1" value="{{ speed }}" onChange="{{ setSpeed }}" style="{{ sliderStyle }}">
+                  <button onClick="{{ setRealtime }}" style="{{ realtimeStyle }}">Real time</button>
+                </div>
+                <div style="{{ mStyle }}">{{ speedHint }}</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <span style="{{ mStyle }}">{{ clockText }}</span>
+                <button onClick="{{ addCritter }}" style="{{ secondaryStyle }}">+ Add a critter</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!--
+          CRITTER CARD — its own OS window (Tauri: a second WebviewWindow spawned on click, positioned beside the tank).
+          Theme-driven: winStyle / wtitleStyle / closeStyle / panelStyle / text styles all come from the active dialog theme.
+          Modern = soft white card; Classic 98 = bevel + blue title bar; Neon = dark + magenta.
+        -->
+        <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="Critter card" style="{{ cardWinStyle }}">
+            <div style="{{ wtitleStyle }}">
+              <span>{{ sel.winTitle }}</span>
+              <button onClick="{{ closeSel }}" style="{{ closeStyle }}">×</button>
+            </div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+              <!-- portrait on a swatch of the critter's habitat + inline-rename field (dashed underline = editable) -->
+              <div style="display:flex;gap:14px;align-items:center">
+                <div style="{{ sel.portraitBg }}">{{ sel.portrait }}</div>
+                <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1">
+                  <input value="{{ sel.name }}" onChange="{{ rename }}" style="{{ inputStyle }}">
+                  <div style="{{ mStyle }}">{{ sel.sub }}</div>
+                  <div style="{{ mStyle }}">{{ sel.ageText }}</div>
+                </div>
+              </div>
+              <!-- live stats: mood (trait + light + crowding) and energy (drains by day, refills asleep) -->
+              <sc-if value="{{ sel.alive }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:grid;grid-template-columns:64px 1fr 40px;align-items:center;gap:8px">
+                    <span style="{{ lStyle }}">Mood</span>
+                    <div style="{{ trackStyle }}"><div style="{{ sel.moodStyle }}"></div></div>
+                    <span style="{{ numStyle }}">{{ sel.moodText }}</span>
+                    <span style="{{ lStyle }}">Energy</span>
+                    <div style="{{ trackStyle }}"><div style="{{ sel.energyStyle }}"></div></div>
+                    <span style="{{ numStyle }}">{{ sel.energyText }}</span>
+                  </div>
+                  <div style="{{ iStyle }}">{{ sel.doing }}</div>
+                </div>
+              </sc-if>
+              <!-- memorial state: the card stays openable from the tree after a critter passes -->
+              <sc-if value="{{ sel.dead }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ panelStyle }}">{{ sel.memorial }}</div>
+              </sc-if>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="{{ lStyle }}">Trait</span><span style="{{ bStyle }}">{{ sel.trait }}</span><span style="{{ mStyle }}">{{ sel.traitDesc }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="{{ lStyle }}">Genetics</span><span style="display:flex;align-items:center;gap:6px"><span style="{{ sel.hueStyle }}"></span><span style="{{ bStyle }}">{{ sel.geneText }}</span></span><span style="{{ mStyle }}">{{ sel.geneSub }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="{{ lStyle }}">Favourite spot</span><span style="{{ bStyle }}">{{ sel.favText }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="{{ lStyle }}">Lineage</span><span style="{{ bStyle }}">{{ sel.genText }}</span><span style="{{ mStyle }}">{{ sel.parentsText }}</span></div>
+              </div>
+              <button onClick="{{ openTree }}" style="{{ secondaryStyle }}">Open family tree</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!--
+          FAMILY TREE — third OS window. One row per generation; living nodes bright, passed nodes muted with †.
+          Clicking a node focuses the critter card. Same theme as the card.
+        -->
+        <sc-if value="{{ treeOpen }}" hint-placeholder-val="{{ true }}">
+          <div data-screen-label="Family tree" style="{{ treeWinStyle }}">
+            <div style="{{ wtitleStyle }}">
+              <span>{{ treeTitle }}</span>
+              <button onClick="{{ closeTree }}" style="{{ closeStyle }}">×</button>
+            </div>
+            <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;overflow:auto">
+              <sc-for list="{{ treeGens }}" as="g" hint-placeholder-count="1">
+                <div style="display:flex;gap:10px;align-items:flex-start">
+                  <div style="{{ genLabelStyle }}">{{ g.label }}</div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <sc-for list="{{ g.nodes }}" as="n" hint-placeholder-count="4">
+                      <button onClick="{{ n.onClick }}" style="{{ n.style }}">
+                        <span style="display:flex;align-items:center;justify-content:center;width:40px;height:26px">{{ n.el }}</span>
+                        <span style="font-weight:800;font-size:12px">{{ n.name }}</span>
+                        <span style="{{ n.metaStyle }}">{{ n.meta }}</span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- ═══════════ 1b PHONE ═══════════ read-only check-in; shares the same live sim state -->
+    <div id="1b" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center"><a href="#1b" style="font-family:'Nunito',sans-serif;font-size:12px;font-weight:600;background:#2b2a33;color:#fff;padding:2px 8px;border-radius:999px;text-decoration:none">1b</a><span style="font-size:14px;color:#55524a">Phone companion (Android) — same jar, check in</span></div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div data-screen-label="1b Phone" style="height:100%;display:flex;flex-direction:column;background:#141018;color:#fff;font-family:'Nunito',sans-serif">
+          <div style="padding:72px 20px 12px;display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:28px;font-weight:800">{{ titleShort }}</div>
+            <div style="font-family:'Nunito',sans-serif;font-size:12px;color:#bdb6c9">{{ statusText }}</div>
+          </div>
+          <!-- compact tank; critters drawn at 0.7 scale, no name labels -->
+          <div style="margin:0 16px;height:260px;border-radius:22px;overflow:hidden;position:relative;background:linear-gradient(180deg,#8fdcea 0%,#3fa9c7 45%,#1e6f8f 100%);box-shadow:0 0 0 1px rgba(255,255,255,.25)">
+            <sc-if value="{{ isGecko }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;background:linear-gradient(180deg,#e9f0d4 0%,#c9dcb0 60%,#a9c48f 100%)"></div>
+              <div style="position:absolute;left:0;right:0;bottom:0;height:22%;background:#e6cf9c"></div>
+              <div style="position:absolute;left:24%;top:46%;width:48%;height:12px;border-radius:10px;background:#7a4f2a;transform:rotate(-3deg)"></div>
+            </sc-if>
+            <sc-if value="{{ isAquarium }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute;left:-10%;right:-10%;bottom:-40px;height:90px;border-radius:50%;background:#d9c391"></div>
+              <div style="position:absolute;left:12%;bottom:30px;width:14px;height:100px;border-radius:50% 50% 0 0;background:#2f8f5b;transform-origin:bottom;animation:sway 5s ease-in-out infinite"></div>
+            </sc-if>
+            {{ critterLayerSmall }}
+            <div style="{{ nightStyle }}"></div>
+          </div>
+          <div style="padding:18px 20px 8px;font-family:'Nunito',sans-serif;font-size:11px;color:#bdb6c9">Residents</div>
+          <!-- tapping a resident selects it (on device: opens the card as a bottom sheet) -->
+          <div style="display:flex;flex-direction:column;gap:6px;padding:0 16px;overflow:auto">
+            <sc-for list="{{ phoneList }}" as="p" hint-placeholder-count="4">
+              <button onClick="{{ p.onClick }}" style="display:flex;align-items:center;gap:12px;background:#221c2a;border:0;border-radius:14px;padding:10px 12px;color:#fff;text-align:left;cursor:pointer">
+                <span style="display:flex;align-items:center;justify-content:center;width:44px;height:28px">{{ p.el }}</span>
+                <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span style="font-weight:800;font-size:14px">{{ p.name }}</span><span style="font-size:12px;color:#bdb6c9">{{ p.meta }}</span></span>
+                <span style="font-family:'Nunito',sans-serif;font-size:11px;color:#bdb6c9">{{ p.mood }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <!-- ═══════════ 1c SCREEN MAP ═══════════ condensed from spec.md -->
+    <div id="1c" style="display:flex;flex-direction:column;gap:10px;width:360px">
+      <div style="display:flex;gap:10px;align-items:center"><a href="#1c" style="font-family:'Nunito',sans-serif;font-size:12px;font-weight:600;background:#2b2a33;color:#fff;padding:2px 8px;border-radius:999px;text-decoration:none">1c</a><span style="font-size:14px;color:#55524a">Screen map for the Tauri build (full detail in spec.md)</span></div>
+      <div data-screen-label="1c Screen map" style="background:#f7f4ec;border:1.5px solid #2b2a33;border-radius:10px;box-shadow:6px 6px 0 #2b2a33;padding:18px 20px;display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.45">
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Window 1 · tank</div><div>Transparent, frameless, always-on-top, resizable. The frame bezel runs edge-to-edge and is the drag handle. Hover → drawer slides out from behind (light, bubbles/mist, sound, mode, tree, setup, exit).</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Window 2 · critter card</div><div>Spawned on click, beside the tank. Rename · mood/energy · trait · genetics · favourite spot · lineage · memorial state.</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Window 3 · family tree</div><div>Generation rows · living + memorial nodes · click → card.</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Window 4 · setup</div><div>Mode · frame · dialog theme + variant · tank toggles · simulation speed (slider, Real time snap) · add critter.</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Dialog themes</div><div>Modern (default) · Modern dark · Classic 98 · Paper notebook · Handheld LCD · Neon terminal. Applies to windows 2–4 and the drawer; independent of the tank frame. Modern/Modern dark follow the OS light/dark preference by default.</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Mobile · companion</div><div>Read-only jar + resident list; tap → card as a sheet. Home-screen widget shows a jar snapshot.</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Targets</div><div>Linux (GNOME, Cinnamon) · Windows · Android. GNOME has no tray by default → show/hide also lives in Setup.</div></div>
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-family:'Nunito',sans-serif;font-size:11px;color:#7a7668">Sim rules</div><div>Real time, 1 jar-day = 2 min · sleeps 21:00–07:00 by system clock at real time, by jar time when sped up · adults breed awake under the cap · elders pass gently, stay in the tree · state saved every tick.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;timeScale&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:1,&quot;max&quot;:60,&quot;step&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Simulation&quot;,&quot;unit&quot;:&quot;×&quot;},&quot;timeOfDay&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;auto&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;day&quot;,&quot;night&quot;],&quot;tsType&quot;:&quot;'auto'|'day'|'night'&quot;,&quot;section&quot;:&quot;Simulation&quot;},&quot;startMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;aquarium&quot;,&quot;options&quot;:[&quot;aquarium&quot;,&quot;gecko&quot;],&quot;tsType&quot;:&quot;'aquarium'|'gecko'&quot;,&quot;section&quot;:&quot;Tank&quot;},&quot;dialogTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;modern&quot;,&quot;options&quot;:[&quot;modern&quot;,&quot;retro&quot;,&quot;neon&quot;],&quot;tsType&quot;:&quot;'modern'|'retro'|'neon'&quot;,&quot;section&quot;:&quot;Tank&quot;}}">
+class Component extends DCLogic {
+  state = { mode: null, frame: 'glass', theme: null, variant: {}, speed: null, light: true, bubbles: true, sound: false, hover: false, settings: true, selected: null, tree: true, tick: 0, blip: null };
+  NAMES = ['Pickle','Sir Bubbles','Mortimer','Fig','Beans','Wanda','Nugget','Kevin','Marmalade','Toast','Dr. Fins','Gus','Olive','Bartholomew','Peach','Ziggy','Lentil','Doris','Waffles','Ned','Gladys','Crouton'];
+  TRAITS = { shy: 'happier with fewer neighbours', greedy: 'first to the food, always', curious: 'loves a crowd, hates a corner', sleepy: 'naps whenever possible', bold: 'patrols the whole jar', dramatic: 'mood swings, big ones' };
+  FINS = ['fan','forked','veil'];
+  DAY = 120; // sim seconds per jar-day (2 real minutes at 1×)
+  pop = { fish: [], gecko: [] }; simSec = 0; nextId = 1; used = {}; lastDraw = 0;
+  rnd(a, b) { return a + Math.random() * (b - a); }
+  pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  speed() { return Number(this.state.speed ?? this.props.timeScale ?? 1); }
+  mode() { return this.state.mode ?? this.props.startMode ?? 'aquarium'; }
+  theme() { return this.state.theme ?? this.props.dialogTheme ?? 'modern'; }
+  sp() { return this.mode() === 'aquarium' ? 'fish' : 'gecko'; }
+  pickName() { const n = this.pick(this.NAMES); const c = this.used[n] = (this.used[n] || 0) + 1; return c > 1 ? n + ' ' + ['II','III','IV','V','VI'][Math.min(c - 2, 4)] : n; }
+  // genetics: hue averages parents ±18°, fin/spots inherit from one parent; originals roll fresh
+  make(sp, p) {
+    let hue, fin;
+    if (p) { hue = (p[0].hue + p[1].hue) / 2 + this.rnd(-18, 18); fin = this.pick([p[0].fin, p[1].fin]); }
+    else { hue = sp === 'fish' ? this.rnd(0, 360) : this.pick([28, 42, 75, 110, 150]); fin = this.pick(this.FINS); }
+    const fish = sp === 'fish';
+    const c = { id: this.nextId++, sp, name: this.pickName(), hue: (hue + 360) % 360, fin, trait: this.pick(Object.keys(this.TRAITS)), spots: p ? (p[0].spots || p[1].spots) && Math.random() < .7 : Math.random() < .5,
+      x: this.rnd(15, 85), y: fish ? this.rnd(20, 75) : 76, dir: 1, wob: Math.random() * 6, pause: 0,
+      fav: { x: this.rnd(12, 88), y: fish ? this.rnd(25, 80) : 76 },
+      ageSec: p ? 0 : this.rnd(3, 12) * this.DAY, life: this.rnd(26, 36), mood: this.rnd(55, 85), energy: this.rnd(50, 95),
+      parents: p ? [p[0].id, p[1].id] : [], gen: p ? Math.max(p[0].gen, p[1].gen) + 1 : 0, alive: true, born: this.simSec, died: null,
+      speed: fish ? this.rnd(5, 11) : this.rnd(2, 4) };
+    c.tx = c.x; c.ty = c.y; return c;
+  }
+  componentDidMount() {
+    const d = new Date(); this.jarStart = d.getHours() + d.getMinutes() / 60;
+    for (let i = 0; i < 4; i++) this.pop.fish.push(this.make('fish'));
+    for (let i = 0; i < 2; i++) this.pop.gecko.push(this.make('gecko'));
+    this.setState({ selected: this.pop.fish[0].id });
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.frame);
+    this.timer = setInterval(this.simTick, 1000);
+  }
+  componentWillUnmount() { cancelAnimationFrame(this.raf); clearInterval(this.timer); clearTimeout(this.bt); }
+  // Real time (1×) → system clock drives night. Any faster speed → the jar's own clock (24 jar-hours per jar-day) takes over, so sped-up critters sleep on jar time, not yours.
+  hour() { const f = this.props.timeOfDay ?? 'auto'; if (f === 'day') return 13; if (f === 'night') return 23; const d = new Date(), sys = d.getHours() + d.getMinutes() / 60; if (this.speed() === 1) return sys; return ((this.jarStart ?? sys) + this.simSec / (this.DAY / 24)) % 24; }
+  jarClock() { return this.speed() !== 1; }
+  isNight() { const h = this.hour(); return h < 7 || h >= 21; }
+  stage(c) { const d = c.ageSec / this.DAY; return d < 2 ? (c.sp === 'fish' ? 'fry' : 'hatchling') : d < 5 ? 'juvenile' : d < 22 ? 'adult' : 'elder'; }
+  all() { return [...this.pop.fish, ...this.pop.gecko]; }
+  byId(id) { return this.all().find(c => c.id === id); }
+  blip(msg) { this.setState({ blip: msg }); clearTimeout(this.bt); this.bt = setTimeout(() => this.setState({ blip: null }), 4000); }
+  // occasional critter sound: fish 'blub' (sine sweep down), gecko chirp (triangle sweep up)
+  sfx() {
+    try {
+      const ac = this.ac || (this.ac = new (window.AudioContext || window.webkitAudioContext)());
+      const o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination);
+      const t = ac.currentTime, fish = this.sp() === 'fish';
+      o.type = fish ? 'sine' : 'triangle';
+      o.frequency.setValueAtTime(fish ? 720 : 1900, t); o.frequency.exponentialRampToValueAtTime(fish ? 260 : 2600, t + (fish ? .14 : .08));
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + .01); g.gain.exponentialRampToValueAtTime(0.0001, t + (fish ? .16 : .1));
+      o.start(t); o.stop(t + .2);
+    } catch (e) {}
+  }
+  // 1 real second per tick; dt = sim seconds elapsed (timeScale tweak)
+  simTick = () => {
+    const dt = this.speed(); this.simSec += dt; const night = this.isNight();
+    for (const sp of ['fish', 'gecko']) {
+      const arr = this.pop[sp], alive = arr.filter(c => c.alive);
+      for (const c of alive) {
+        c.ageSec += dt;
+        c.energy = night ? Math.min(100, c.energy + .03 * dt) : Math.max(5, c.energy - .006 * dt);
+        const n = alive.length;
+        let target = 66 + (this.state.light ? 4 : -6) + (c.trait === 'shy' ? -n * 3 : c.trait === 'curious' ? n * 2 : 0) + (c.energy < 30 ? -15 : 0) + (c.trait === 'greedy' ? -5 : 0);
+        c.mood = Math.max(5, Math.min(100, c.mood + (target - c.mood) * Math.min(1, .002 * dt) + this.rnd(-1, 1) * (c.trait === 'dramatic' ? 4 : 1)));
+        if (c.ageSec / this.DAY > c.life) { c.alive = false; c.died = this.simSec; this.blip(c.name + ' has passed on, gently.'); }
+      }
+      const adults = alive.filter(a => a.alive && this.stage(a) === 'adult'), cap = sp === 'fish' ? 10 : 4;
+      if (!night && adults.length >= 2 && alive.length < cap && Math.random() < .0015 * dt * adults.length) {
+        const a = this.pick(adults), b = this.pick(adults.filter(x => x !== a)), k = this.make(sp, [a, b]);
+        k.x = k.tx = a.x; k.y = k.ty = a.y; arr.push(k);
+        this.blip(a.name + ' & ' + b.name + ' had a ' + (sp === 'fish' ? 'fry' : 'hatchling') + ': ' + k.name);
+      }
+    }
+    if (this.state.sound && !night && Math.random() < .12) this.sfx();
+    this.setState(s => ({ tick: s.tick + 1 }));
+  };
+  // movement loop; only the visible species animates. Night → everyone drifts to their favourite spot and settles.
+  frame = (now) => {
+    const dtR = Math.min(.05, (now - this.last) / 1000); this.last = now; const night = this.isNight();
+    for (const c of this.pop[this.sp()]) {
+      if (!c.alive) continue;
+      const fish = c.sp === 'fish';
+      if (night) { c.tx = c.fav.x; c.ty = fish ? 84 : 76; }
+      else if (c.pause > 0) c.pause -= dtR;
+      else if (Math.hypot(c.tx - c.x, c.ty - c.y) < 1.5) {
+        if (Math.random() < .3) { c.tx = c.fav.x + this.rnd(-5, 5); c.ty = c.fav.y; }
+        else if (fish) { c.tx = this.rnd(8, 92); c.ty = c.trait === 'bold' ? this.rnd(8, 84) : this.rnd(15, 78); }
+        else { const branch = Math.random() < .35; c.tx = branch ? this.rnd(30, 66) : this.rnd(8, 92); c.ty = branch ? 44 : 76; }
+        if (!fish) c.pause = this.rnd(1, 4); else if (c.trait === 'sleepy') c.pause = this.rnd(.5, 2.5);
+      }
+      const spd = night ? 1.5 : (c.pause > 0 ? 0 : c.speed * (.5 + c.energy / 200));
+      const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy);
+      if (d > .1 && spd > 0) { const st = Math.min(d, spd * dtR); c.x += dx / d * st; c.y += dy / d * st; if (Math.abs(dx) > .5) c.dir = dx > 0 ? 1 : -1; }
+      c.wob += dtR * (fish ? 3 : 0);
+    }
+    if (now - this.lastDraw > 33) { this.lastDraw = now; this.forceUpdate(); }
+    this.raf = requestAnimationFrame(this.frame);
+  };
+  // flat-vector critter art. Fish: side view, tail shape = fin gene. Gecko: top-down (as if on the glass).
+  svg(c, size, sleeping) {
+    const e = React.createElement, H = c.hue;
+    if (c.sp === 'fish') {
+      const body = `hsl(${H} 62% 56%)`, fin = `hsl(${H} 55% 40%)`, belly = `hsl(${H} 50% 84%)`;
+      const tail = c.fin === 'fan' ? 'M16 18 L3 6 L3 30 Z' : c.fin === 'forked' ? 'M16 18 L2 6 L7 18 L2 30 Z' : 'M16 18 C6 4 0 6 2 12 C4 18 4 18 2 24 C0 30 6 32 16 18 Z';
+      return e('svg', { viewBox: '0 0 60 36', width: size, height: size * .6, style: { display: 'block', overflow: 'visible' } },
+        e('path', { d: tail, fill: fin }),
+        e('path', { d: 'M22 9 Q32 -3 44 9 Z', fill: fin }),
+        e('ellipse', { cx: 33, cy: 18, rx: 20, ry: 11, fill: body }),
+        e('ellipse', { cx: 35, cy: 23, rx: 14, ry: 5, fill: belly, opacity: .8 }),
+        c.spots ? e('g', { fill: fin, opacity: .7 }, e('circle', { cx: 26, cy: 14, r: 2.5 }), e('circle', { cx: 34, cy: 12, r: 2 }), e('circle', { cx: 30, cy: 20, r: 1.8 })) : null,
+        e('path', { d: 'M30 22 Q36 31 41 24 Z', fill: fin }),
+        e('circle', { cx: 45, cy: 15, r: 3.2, fill: '#fff' }),
+        sleeping ? e('path', { d: 'M42 15.5 Q45 18.5 48 15.5', stroke: '#1d1d1f', strokeWidth: 1.4, fill: 'none' }) : e('circle', { cx: 45.6, cy: 15, r: 1.7, fill: '#1d1d1f' }));
+    }
+    const body = `hsl(${H} 45% 55%)`, dark = `hsl(${H} 45% 36%)`, light = `hsl(${H} 45% 78%)`;
+    return e('svg', { viewBox: '0 0 90 44', width: size * 1.4, height: size * .68, style: { display: 'block', overflow: 'visible' } },
+      e('path', { d: 'M22 22 C6 22 0 34 10 38 C18 40 12 30 24 26', stroke: body, strokeWidth: 5, fill: 'none', strokeLinecap: 'round' }),
+      e('g', { stroke: dark, strokeWidth: 3, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' },
+        e('path', { d: 'M32 27 L26 36 L19 35' }), e('path', { d: 'M52 27 L58 36 L65 35' }), e('path', { d: 'M32 17 L26 8 L19 9' }), e('path', { d: 'M52 17 L58 8 L65 9' })),
+      e('ellipse', { cx: 42, cy: 22, rx: 20, ry: 8, fill: body }),
+      e('ellipse', { cx: 66, cy: 22, rx: 10, ry: 7, fill: body }),
+      e('ellipse', { cx: 42, cy: 22, rx: 14, ry: 2.5, fill: light, opacity: .5 }),
+      c.spots ? e('g', { fill: dark }, e('circle', { cx: 34, cy: 20, r: 2.2 }), e('circle', { cx: 44, cy: 25, r: 1.8 }), e('circle', { cx: 50, cy: 19, r: 2 }), e('circle', { cx: 40, cy: 18, r: 1.3 })) : null,
+      sleeping ? e('g', { stroke: '#1d1d1f', strokeWidth: 1.4 }, e('path', { d: 'M66 16 L70 16' }), e('path', { d: 'M66 28 L70 28' })) : e('g', { fill: '#1d1d1f' }, e('circle', { cx: 68, cy: 17, r: 2.3 }), e('circle', { cx: 68, cy: 27, r: 2.3 })));
+  }
+  layer(scale) {
+    const e = React.createElement, night = this.isNight(), sel = this.state.selected;
+    return e('div', { style: { position: 'absolute', inset: 0, pointerEvents: 'none' } },
+      this.pop[this.sp()].filter(c => c.alive).map(c => {
+        const st = this.stage(c), size = (c.sp === 'fish' ? 54 : 40) * (st === 'fry' || st === 'hatchling' ? .45 : st === 'juvenile' ? .75 : 1) * scale;
+        const bob = c.sp === 'fish' ? Math.sin(c.wob) * 1.2 : 0;
+        return e('div', { key: c.id, onClick: () => this.setState({ selected: c.id }), style: { position: 'absolute', left: c.x + '%', top: c.y + '%', transform: `translate(-50%,-50%) translateY(${bob}px)`, pointerEvents: 'auto', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, filter: sel === c.id ? 'drop-shadow(0 0 6px rgba(255,255,255,.9))' : 'drop-shadow(0 3px 3px rgba(0,0,0,.25))' } },
+          night ? e('span', { style: { position: 'absolute', top: -14, right: -6, fontFamily: "'Nunito',sans-serif", fontSize: 11 * scale, color: '#fff', animation: `zz ${2 + (c.id % 3) * .5}s ease-out infinite` } }, 'z') : null,
+          e('div', { style: { transform: `scaleX(${c.dir}) rotate(${c.sp === 'fish' ? Math.sin(c.wob * .7) * 4 : 0}deg)` } }, this.svg(c, size, night)),
+          scale >= 1 ? e('span', { style: { fontFamily: "'Nunito',sans-serif", fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.6)', whiteSpace: 'nowrap' } }, c.name) : null);
+      }));
+  }
+  // TANK FRAMES — bezel only, no title bar. `pad` = bezel thickness, `r` = inner tank radius, `drawer` = drawer colours.
+  frames() {
+    return {
+      bevel: { label: 'Bevelled 98', sw: '#c9c6bd', win: { background: '#c9c6bd', padding: 4, border: '2px solid', borderColor: '#f7f5ef #6d6a63 #6d6a63 #f7f5ef', boxShadow: '3px 3px 0 #2b2a33' }, r: 0, drawer: ['#c9c6bd', '#2b2a33'] },
+      wood: { label: 'Wood stand', sw: 'linear-gradient(180deg,#8a5a2b,#5e3a1c)', win: { background: 'repeating-linear-gradient(180deg,#8a5a2b 0 6px,#7c4f25 6px 9px)', padding: '10px 10px 26px', borderRadius: 10, boxShadow: 'inset 0 2px 0 rgba(255,255,255,.25), 0 16px 34px rgba(0,0,0,.32)' }, r: 4, drawer: ['#5e3a1c', '#f3e2c4'] },
+      metal: { label: 'Brushed metal', sw: 'linear-gradient(90deg,#bfc3c8,#e4e7ea,#bfc3c8)', win: { background: 'repeating-linear-gradient(90deg,#bfc3c8 0 2px,#dadde1 2px 4px)', padding: 8, borderRadius: 14, boxShadow: '0 0 0 1px #8e949b, inset 0 1px 0 #fff, 0 14px 28px rgba(0,0,0,.28)' }, r: 8, drawer: ['#5b6168', '#eef1f4'] },
+      glass: { label: 'Rounded glass', sw: 'linear-gradient(135deg,rgba(255,255,255,.9),rgba(200,220,230,.4))', win: { background: 'rgba(255,255,255,.2)', padding: 0, borderRadius: 24, boxShadow: '0 0 0 1.5px rgba(255,255,255,.8), inset 0 0 0 1px rgba(255,255,255,.4), 0 22px 44px rgba(0,0,0,.28)' }, r: 24, drawer: ['#2b2a33', '#fff'] },
+      neon: { label: 'Neon / CRT', sw: '#141018', win: { background: '#141018', padding: 14, borderRadius: 20, boxShadow: 'inset 0 0 0 3px #ff3fd8, 0 0 26px rgba(255,63,216,.7), 0 14px 30px rgba(0,0,0,.4)' }, r: 10, crt: true, drawer: ['#141018', '#ff3fd8'] },
+      cardboard: { label: 'Cardboard cutout', sw: '#c9a06a', win: { background: '#c9a06a', padding: 12, borderRadius: 4, border: '3px dashed #8a6a3e', boxShadow: '0 14px 28px rgba(0,0,0,.25)' }, r: 2, drawer: ['#b78c58', '#4a3316'] },
+    };
+  }
+  // DIALOG THEMES — applied to critter card, family tree, setup overlay and the drawer. Each theme has named variants
+  // (accent colours, window types, paper stocks, shell colours) picked in Setup; the variant list changes with the theme.
+  VARIANTS = {
+    modern: { kind: 'Accent', list: [['lagoon', 'Lagoon', '#2d3e8f'], ['bubblegum', 'Bubblegum', '#ff3fd8'], ['moss', 'Moss', '#2f8f5b'], ['clementine', 'Clementine', '#e0762e']] },
+    dark: { kind: 'Accent', list: [['lagoon', 'Lagoon', '#7f95e6'], ['bubblegum', 'Bubblegum', '#ff6be2'], ['moss', 'Moss', '#5cc98a'], ['clementine', 'Clementine', '#ff9a52']] },
+    retro: { kind: 'Window type', list: [['classic', 'Classic blue', '#2d3e8f', '#6f8bd6', '#c9c6bd', '#2b2a33'], ['teal', 'Teal desktop', '#00706e', '#12a3a0', '#c0c0c0', '#1d1d1f'], ['brick', 'Brick', '#7a1f1f', '#b85a3c', '#d8cbb0', '#2b2a33'], ['rainy', 'Rainy day', '#4a5d73', '#8ea3ba', '#d0d5dc', '#1d2430'], ['contrast', 'High contrast', '#000000', '#000000', '#ffffff', '#000000']] },
+    paper: { kind: 'Paper stock', list: [['cream', 'Ruled cream', '#fff9ec', '#e9dcc0', '#3b2f2a', '#c2452d'], ['graph', 'Graph paper', '#f4f8ff', '#c9d8f0', '#1f2d4a', '#c2452d'], ['legal', 'Legal pad', '#fff3a8', '#e6d47a', '#3b2f2a', '#1f5fbf'], ['kraft', 'Kraft', '#c9a06a', '#b78c58', '#3b2418', '#1f5fbf']] },
+    lcd: { kind: 'Shell', list: [['pea', 'Pea soup', ['#9bbc0f', '#8bac0f', '#306230', '#0f380f']], ['pocket', 'Pocket grey', ['#c4cfa1', '#8b956d', '#4d533c', '#1f1f1f']], ['berry', 'Berry', ['#ffc2d4', '#f08aa8', '#8a2f55', '#3a0f24']], ['glacier', 'Glacier', ['#cfe8ff', '#8fc1ea', '#2d5f8a', '#0f2a44']]] },
+    neon: { kind: 'Phosphor', list: [['magenta', 'Magenta', '#ff3fd8'], ['amber', 'Amber', '#ffb000'], ['phosphor', 'Phosphor green', '#39ff14'], ['cyan', 'Cyan', '#00e5ff']] },
+  };
+  variant(th) { const V = this.VARIANTS[th]; const k = (this.state.variant || {})[th]; return V.list.find(v => v[0] === k) || V.list[0]; }
+  themes() {
+    const sans = "'Nunito',sans-serif", mono = sans;
+    const vm = this.variant('modern'), vd = this.variant('dark'), vr = this.variant('retro'), vp = this.variant('paper'), vl = this.variant('lcd')[2], vn = this.variant('neon');
+    const A = vm[2], AD = vd[2], N = vn[2], glow = (c, a) => c + Math.round(a * 255).toString(16).padStart(2, '0');
+    const hc = vr[0] === 'contrast';
+    return {
+      modern: { label: 'Modern', sw: '#fbfaf6', accent: A,
+        win: { background: '#fbfaf6', border: '1px solid rgba(43,42,51,.12)', borderRadius: 18, boxShadow: '0 24px 60px rgba(30,25,40,.22)', color: '#2b2a33' },
+        title: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px 0', fontFamily: sans, fontWeight: 800, fontSize: 15, color: '#2b2a33' },
+        close: { width: 24, height: 24, borderRadius: '50%', background: '#ece7db', border: 0, cursor: 'pointer', color: '#2b2a33', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: sans },
+        text: '#2b2a33', muted: '#6f6b60', panel: '#ece7db', track: '#e3ded2', chipOn: [A, '#fff', A], chipOff: ['#fff', '#2b2a33', '#d6d0c2'], overlay: 'rgba(251,250,246,.96)', primary: [A, '#fff'], radius: 12, mono, sans, drawer: null },
+      dark: { label: 'Modern dark', sw: '#1c1a22', accent: AD,
+        win: { background: '#1c1a22', border: '1px solid rgba(255,255,255,.1)', borderRadius: 18, boxShadow: '0 24px 60px rgba(0,0,0,.45)', color: '#f1eee6' },
+        title: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px 0', fontFamily: sans, fontWeight: 800, fontSize: 15, color: '#f1eee6' },
+        close: { width: 24, height: 24, borderRadius: '50%', background: '#2e2b36', border: 0, cursor: 'pointer', color: '#f1eee6', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: sans },
+        text: '#f1eee6', muted: '#a49f93', panel: '#2e2b36', track: '#2e2b36', chipOn: [AD, '#1c1a22', AD], chipOff: ['#26232d', '#f1eee6', '#3d3946'], overlay: 'rgba(28,26,34,.96)', primary: [AD, '#1c1a22'], radius: 12, mono, sans, drawer: ['#1c1a22', '#f1eee6', '1px solid rgba(255,255,255,.1)'] },
+      retro: { label: 'Classic 98', sw: 'linear-gradient(90deg,' + vr[2] + ',' + vr[3] + ')', accent: vr[2],
+        win: { background: vr[4], border: '2px solid', borderColor: hc ? '#000' : '#f7f5ef #6d6a63 #6d6a63 #f7f5ef', borderRadius: 0, boxShadow: '3px 3px 0 ' + vr[5], padding: 3, color: vr[5] },
+        title: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 6px 4px 10px', background: 'linear-gradient(90deg,' + vr[2] + ',' + vr[3] + ')', color: hc ? '#ffff00' : '#fff', fontFamily: mono, fontWeight: 600, fontSize: 12 },
+        close: { width: 18, height: 16, background: vr[4], border: '1.5px solid', borderColor: hc ? '#000' : '#fff #6d6a63 #6d6a63 #fff', cursor: 'pointer', color: vr[5], fontSize: 12, lineHeight: 1, padding: 0, fontFamily: mono, fontWeight: 600 },
+        text: vr[5], muted: hc ? '#000' : '#55524a', panel: '#fff', track: '#fff', chipOn: [vr[2], hc ? '#ffff00' : '#fff', vr[2]], chipOff: [hc ? '#fff' : '#e6e3da', vr[5], hc ? '#000' : '#8a877e'], overlay: glow(vr[4], .97), primary: [vr[2], hc ? '#ffff00' : '#fff'], radius: 0, mono, sans, drawer: [vr[4], vr[5], '2px solid', hc ? '#000' : '#f7f5ef #6d6a63 #6d6a63 #f7f5ef', '3px 3px 0 ' + vr[5]] },
+      paper: { label: 'Paper notebook', sw: 'repeating-linear-gradient(180deg,' + vp[2] + ' 0 5px,' + vp[3] + ' 5px 6px)', accent: vp[5],
+        win: { background: vp[0] === 'graph' ? 'linear-gradient(' + vp[3] + ' 1px,transparent 1px) 0 0/16px 16px,linear-gradient(90deg,' + vp[3] + ' 1px,' + vp[2] + ' 1px) 0 0/16px 16px' : 'repeating-linear-gradient(180deg,' + vp[2] + ' 0 23px,' + vp[3] + ' 23px 24px)', border: '1.5px solid ' + vp[4], borderRadius: 6, boxShadow: '4px 4px 0 ' + glow(vp[4], .25), color: vp[4] },
+        title: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px 0', fontFamily: sans, fontWeight: 800, fontSize: 15, color: vp[4], fontStyle: 'italic' },
+        close: { width: 22, height: 22, borderRadius: '50%', background: 'transparent', border: '1.5px dashed ' + vp[4], cursor: 'pointer', color: vp[4], fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, fontFamily: sans },
+        text: vp[4], muted: glow(vp[4], .65), panel: glow(vp[4], .08), track: glow(vp[4], .14), chipOn: [vp[4], vp[2], vp[4]], chipOff: ['transparent', vp[4], glow(vp[4], .4)], overlay: glow(vp[2], .97), primary: [vp[5], vp[2]], radius: 6, mono, sans, drawer: [vp[2], vp[4], '1.5px solid ' + vp[4]] },
+      lcd: { label: 'Handheld LCD', sw: vl[0], accent: vl[3],
+        win: { background: vl[0], border: '3px solid ' + vl[3], borderRadius: 4, boxShadow: '0 0 0 3px ' + vl[1] + ', 0 14px 30px ' + glow(vl[3], .35), color: vl[3] },
+        title: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: vl[3], color: vl[0], fontFamily: mono, fontWeight: 600, fontSize: 12, letterSpacing: 1 },
+        close: { width: 18, height: 16, borderRadius: 2, background: vl[0], border: 0, cursor: 'pointer', color: vl[3], fontSize: 12, lineHeight: 1, padding: 0, fontFamily: mono, fontWeight: 600 },
+        text: vl[3], muted: vl[2], panel: vl[1], track: vl[1], chipOn: [vl[3], vl[0], vl[3]], chipOff: [vl[1], vl[3], vl[2]], overlay: glow(vl[0], .97), primary: [vl[3], vl[0]], radius: 2, mono, sans, drawer: [vl[0], vl[3], '3px solid ' + vl[3]] },
+      neon: { label: 'Neon terminal', sw: '#141018', accent: N,
+        win: { background: '#141018', border: '2px solid ' + N, borderRadius: 12, boxShadow: '0 0 22px ' + glow(N, .5) + ', 0 18px 40px rgba(0,0,0,.45)', color: '#f1e9ff' },
+        title: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px 0', fontFamily: mono, fontWeight: 600, fontSize: 12, color: N, textShadow: '0 0 8px ' + glow(N, .8) },
+        close: { width: 20, height: 20, borderRadius: '50%', background: 'transparent', border: '1.5px solid ' + N, cursor: 'pointer', color: N, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, fontFamily: mono },
+        text: '#f1e9ff', muted: glow(N, .7), panel: '#221a2c', track: '#2c2238', chipOn: [N, '#141018', N], chipOff: ['transparent', '#f1e9ff', glow(N, .4)], overlay: 'rgba(20,16,24,.96)', primary: [N, '#141018'], radius: 8, mono, sans, drawer: ['#141018', N, '2px solid ' + N, undefined, '0 0 18px ' + glow(N, .5)] },
+    };
+  }
+  NAME_CANDIDATES = [
+    ['Menagerie', 30, 'A kept collection of small creatures — names the whole roster, fish or gecko.'],
+    ['Diorama', 260, 'A tiny built scene you watch, not play — matches the no-goal, glance-and-go tone.'],
+    ['Snowglobe', 200, 'A sealed little world that runs on its own — novelty-desktop-toy energy, built in.'],
+    ['Grotto', 190, 'A small sheltered pocket of water or stone — works for both tank modes.'],
+    ['Warren', 25, 'A dwelling a small creature digs out for itself — cozy, a bit earthy.'],
+    ['Roost', 12, "Where something small settles for the night — echoes the sleep/wake cycle."],
+    ['Bower', 145, 'A leafy, built shelter — soft and a little old-fashioned, fits the terrarium half.'],
+    ['Cove', 205, 'A tucked-away, water-facing pocket — quieter than "aquarium."'],
+    ['Burrow', 34, 'Small dug-out home, single syllable, easy to say out loud.'],
+    ['Pocket', 320, 'The generic "small contained thing you carry a fondness for" word — pocket pets.'],
+  ];
+  renderVals() {
+    const s = this.state, mode = this.mode(), sp = this.sp(), night = this.isNight(), F = this.frames(), f = F[s.frame], TH = this.themes(), T = TH[this.theme()];
+    const alive = this.pop[sp].filter(c => c.alive);
+    const h = this.hour(), hh = String(Math.floor(h)).padStart(2, '0'), mm = String(Math.floor((h % 1) * 60)).padStart(2, '0');
+    // drawer follows the dialog theme + variant; Modern borrows the frame's colours, Classic 98 gets bevelled pushed-in buttons
+    const th = this.theme(), D = T.drawer;
+    const dBg = D ? D[0] : f.drawer[0], dFg = D ? D[1] : f.drawer[1];
+    const drawerBtn = (on) => th === 'retro'
+      ? { fontFamily: T.sans, fontSize: 11, fontWeight: 700, padding: '6px 8px', borderRadius: 0, border: '2px solid', borderColor: on ? '#6d6a63 #f7f5ef #f7f5ef #6d6a63' : '#f7f5ef #6d6a63 #6d6a63 #f7f5ef', background: on ? T.chipOn[0] : dBg, color: on ? T.chipOn[1] : dFg, cursor: 'pointer', width: 76, textAlign: 'center', whiteSpace: 'nowrap', boxSizing: 'border-box' }
+      : { fontFamily: T.sans, fontSize: 11, fontWeight: 700, padding: '7px 8px', borderRadius: th === 'neon' ? 4 : th === 'lcd' ? 2 : 8, border: '1.5px solid ' + (on ? dFg : th === 'neon' || th === 'paper' ? T.chipOff[2] : 'transparent'), background: on ? dFg : th === 'neon' || th === 'paper' ? 'transparent' : 'rgba(127,127,127,.18)', color: on ? dBg : dFg, cursor: 'pointer', width: 76, textAlign: 'center', whiteSpace: 'nowrap', boxSizing: 'border-box', textShadow: th === 'neon' && !on ? '0 0 6px ' + T.muted : 'none' };
+    const chip = (on) => ({ display: 'flex', alignItems: 'center', gap: 8, fontFamily: T.sans, fontSize: 12, fontWeight: 700, padding: '7px 10px', borderRadius: T.radius, border: '1.5px solid ' + (on ? T.chipOn[2] : T.chipOff[2]), background: on ? T.chipOn[0] : T.chipOff[0], color: on ? T.chipOn[1] : T.chipOff[1], cursor: 'pointer', textAlign: 'left' });
+    const win = (extra) => ({ position: 'absolute', overflow: 'hidden', display: 'flex', flexDirection: 'column', animation: 'popin .16s ease-out', fontFamily: T.sans, ...T.win, ...extra });
+    const controls = [
+      { label: 'Light', on: s.light, onClick: () => this.setState({ light: !s.light }) },
+      { label: sp === 'fish' ? 'Bubbles' : 'Mist', on: s.bubbles, onClick: () => this.setState({ bubbles: !s.bubbles }) },
+      { label: 'Sound', on: s.sound, onClick: () => { this.setState({ sound: !s.sound }); if (!s.sound) this.sfx(); } },
+      { label: sp === 'fish' ? 'Gecko' : 'Fish', on: false, onClick: () => this.setState({ mode: mode === 'aquarium' ? 'gecko' : 'aquarium', selected: null }) },
+      { label: 'Tree', on: s.tree, onClick: () => this.setState({ tree: !s.tree }) },
+      { label: 'Setup', on: s.settings, onClick: () => this.setState({ settings: !s.settings }) },
+      { label: 'Exit', on: false, onClick: () => this.blip('Jar saved. (Closes the app in the build.)') },
+    ].map(c => ({ ...c, style: drawerBtn(c.on) }));
+    const sel = this.byId(s.selected);
+    let selV = null;
+    if (sel) {
+      const st = this.stage(sel), days = Math.floor(sel.ageSec / this.DAY), fish = sel.sp === 'fish';
+      const par = sel.parents.map(id => this.byId(id)).filter(Boolean);
+      const bar = (v, col) => ({ height: '100%', width: Math.round(v) + '%', background: col, borderRadius: 999, transition: 'width .6s' });
+      const doing = !sel.alive ? '' : night ? 'Asleep at the favourite spot.' : sel.pause > 0 ? 'Pausing. Considering things.' : sel.mood > 75 ? 'Cruising happily.' : sel.mood > 45 ? 'Drifting about.' : 'Sulking a little.';
+      selV = { name: sel.name, alive: sel.alive, dead: !sel.alive, winTitle: (this.theme() === 'modern' ? '' : 'critter — ') + sel.name,
+        portraitBg: { width: 120, height: 80, borderRadius: T.radius, background: fish ? 'linear-gradient(180deg,#8fdcea,#3fa9c7)' : 'linear-gradient(180deg,#e9f0d4,#c9dcb0)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+        sub: (fish ? 'Fish' : 'Gecko') + ' · ' + st + (sel.alive ? '' : ' · at rest'),
+        ageText: sel.alive ? days + (days === 1 ? ' day old' : ' days old') : 'Lived ' + Math.floor(sel.life) + ' days',
+        moodStyle: bar(sel.mood, sel.mood > 60 ? '#3aa86a' : sel.mood > 35 ? '#e0a83a' : '#d95c5c'), moodText: Math.round(sel.mood),
+        energyStyle: bar(sel.energy, T.accent), energyText: Math.round(sel.energy), doing,
+        memorial: sel.name + ' rests in the family tree. Remembered as the ' + sel.trait + ' one.',
+        trait: sel.trait, traitDesc: this.TRAITS[sel.trait],
+        hueStyle: { width: 14, height: 14, borderRadius: '50%', background: `hsl(${sel.hue} 60% 55%)`, border: '1.5px solid ' + T.text, display: 'inline-block' },
+        geneText: 'hue ' + Math.round(sel.hue) + '°', geneSub: (fish ? sel.fin + ' tail' : 'banded body') + (sel.spots ? ', spotted' : ', plain'),
+        favText: (sel.fav.x < 33 ? 'left' : sel.fav.x < 66 ? 'middle' : 'right') + ', ' + (fish ? (sel.fav.y < 40 ? 'near the top' : sel.fav.y < 70 ? 'mid-water' : 'by the sand') : 'on the floor'),
+        genText: 'Generation ' + (sel.gen + 1), parentsText: par.length ? 'child of ' + par.map(p => p.name).join(' & ') : 'original resident',
+        portrait: this.svg(sel, 76, !sel.alive || night) };
+    }
+    const nameCandidates = this.NAME_CANDIDATES.map(([name, hue, desc]) => ({ name, desc, swatch: { width: 14, height: 14, borderRadius: '50%', background: `hsl(${hue} 45% 45%)`, flexShrink: 0, display: 'inline-block' } }));
+    const gens = {}; this.pop[sp].forEach(c => (gens[c.gen] = gens[c.gen] || []).push(c));
+    const treeGens = Object.keys(gens).sort().map(g => ({ label: 'Gen ' + (Number(g) + 1), nodes: gens[g].map(c => ({
+      name: c.name, el: this.svg(c, 30, !c.alive), meta: c.alive ? this.stage(c) : '† remembered', onClick: () => this.setState({ selected: c.id }),
+      metaStyle: { fontSize: 10, color: T.muted },
+      style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 8px', borderRadius: T.radius, border: '1.5px solid ' + (s.selected === c.id ? T.chipOn[2] : T.chipOff[2]), background: c.alive ? T.chipOff[0] === 'transparent' ? T.panel : T.chipOff[0] : T.panel, opacity: c.alive ? 1 : .75, cursor: 'pointer', fontFamily: T.sans, color: T.text, minWidth: 76 } })) }));
+    const status = alive.length + (alive.length === 1 ? (sp === 'fish' ? ' fish' : ' gecko') : (sp === 'fish' ? ' fish' : ' geckos')) + ' · ' + hh + ':' + mm + (night ? ' · asleep' : s.light ? ' · lit' : ' · dim');
+    return {
+      nameCandidates,
+      isAquarium: mode === 'aquarium', isGecko: mode === 'gecko', lightOn: s.light, bubblesOn: s.bubbles && sp === 'fish', crt: !!f.crt,
+      frameStyle: { position: 'relative', zIndex: 2, boxSizing: 'border-box', ...f.win },
+      tankStyle: { position: 'relative', height: 420, borderRadius: f.r, overflow: 'hidden', background: '#1e6f8f' },
+      drawerStyle: { position: 'absolute', zIndex: 1, right: -100, top: '50%', transform: 'translate(0,-50%)', width: 118, padding: '10px 12px 10px 30px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 6, background: dBg, borderRadius: th === 'retro' ? 0 : '0 14px 14px 0', border: D && D[2] ? D[2] : 0, borderColor: D && D[3] ? D[3] : undefined, borderLeft: th === 'retro' ? 0 : undefined, boxShadow: D && D[4] ? D[4] : th === 'modern' || th === 'dark' ? '6px 8px 20px rgba(0,0,0,.28)' : 'none', animation: 'drawer .2s ease-out' },
+      nightStyle: { position: 'absolute', inset: 0, pointerEvents: 'none', background: night ? (s.light ? 'rgba(10,20,50,.22)' : 'rgba(6,12,40,.62)') : (s.light ? 'transparent' : 'rgba(10,20,40,.28)'), transition: 'background 1s' },
+      critterLayer: this.layer(1), critterLayerSmall: this.layer(.7),
+      statusText: status, clockText: 'Jar clock ' + hh + ':' + mm + (this.props.timeOfDay && this.props.timeOfDay !== 'auto' ? ' (forced)' : this.jarClock() ? ' · jar time' : ' · system clock') + ' · sleeps 21:00–07:00',
+      blip: s.blip, controlsVisible: s.hover, controls,
+      onEnter: () => this.setState({ hover: true }), onLeave: () => this.setState({ hover: false }),
+      settingsOpen: s.settings, closeSettings: () => this.setState({ settings: false }),
+      setupWinStyle: win({ left: 1060, top: 48, width: 460 }),
+      speed: this.speed(), speedText: this.speed() === 1 ? 'Real time' : this.speed() + '×',
+      speedHint: this.speed() === 1 ? 'One jar-day every 2 minutes. Night follows your system clock.' : 'A jar-day every ' + (Math.round(1200 / this.speed()) / 10) + ' s. The jar keeps its own clock — nights come and go on jar time.',
+      setSpeed: (ev) => this.setState({ speed: Number(ev.target.value) }), setRealtime: () => this.setState({ speed: 1 }),
+      sliderStyle: { flex: 1, accentColor: T.accent, cursor: 'pointer' },
+      realtimeStyle: { fontFamily: T.sans, fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: T.radius, border: '1.5px solid ' + (this.speed() === 1 ? T.chipOn[2] : T.chipOff[2]), background: this.speed() === 1 ? T.chipOn[0] : T.chipOff[0], color: this.speed() === 1 ? T.chipOn[1] : T.chipOff[1], cursor: 'pointer', whiteSpace: 'nowrap' },
+      overlayStyle: { position: 'absolute', inset: 0, background: T.overlay, backdropFilter: 'blur(6px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'popin .16s ease-out', overflow: 'auto', color: T.text, fontFamily: T.sans },
+      // theme text styles shared by the card, tree and overlay
+      hStyle: { fontWeight: 800, fontSize: 16, color: T.text }, lStyle: { fontFamily: T.sans, fontSize: 11, fontWeight: 700, color: T.muted },
+      mStyle: { fontSize: 12, color: T.muted }, bStyle: { fontSize: 12, fontWeight: 700, color: T.text }, iStyle: { fontSize: 12, color: T.muted, fontStyle: 'italic' },
+      numStyle: { fontFamily: T.mono, fontSize: 12, textAlign: 'right', color: T.text }, trackStyle: { height: 8, background: T.track, borderRadius: 999, overflow: 'hidden' },
+      panelStyle: { fontSize: 12, color: T.muted, background: T.panel, borderRadius: T.radius, padding: '8px 10px' },
+      inputStyle: { fontFamily: T.sans, fontWeight: 800, fontSize: 18, border: 0, borderBottom: '1.5px dashed ' + T.muted, background: 'transparent', padding: '2px 0', color: T.text, outline: 'none', width: '100%' },
+      primaryStyle: { fontFamily: T.sans, fontSize: 12, fontWeight: 700, background: T.primary[0], color: T.primary[1], border: 0, borderRadius: T.radius === 0 ? 0 : 999, padding: '6px 14px', cursor: 'pointer' },
+      secondaryStyle: { fontFamily: T.sans, fontSize: 12, fontWeight: 700, background: T.chipOff[0], color: T.chipOff[1], border: '1.5px solid ' + T.chipOff[2], borderRadius: T.radius === 0 ? 0 : 999, padding: '6px 12px', cursor: 'pointer', alignSelf: 'flex-start' },
+      modeOptions: [['aquarium', 'Aquarium — fish'], ['gecko', 'Terrarium — gecko']].map(([k, l]) => ({ label: l, style: chip(mode === k), onClick: () => this.setState({ mode: k, selected: null }) })),
+      frameOptions: Object.keys(F).map(k => ({ label: F[k].label, style: chip(s.frame === k), swatch: { width: 18, height: 18, borderRadius: 5, background: F[k].sw, border: '1px solid rgba(0,0,0,.25)', flexShrink: 0 }, onClick: () => this.setState({ frame: k }) })),
+      variantKind: this.VARIANTS[this.theme()].kind,
+      variantOptions: this.VARIANTS[this.theme()].list.map(v => ({ label: v[1], style: chip(this.variant(this.theme())[0] === v[0]), swatch: { width: 18, height: 18, borderRadius: 5, background: Array.isArray(v[2]) ? 'linear-gradient(135deg,' + v[2][0] + ',' + v[2][3] + ')' : this.theme() === 'retro' ? 'linear-gradient(90deg,' + v[2] + ',' + v[3] + ')' : this.theme() === 'paper' ? 'repeating-linear-gradient(180deg,' + v[2] + ' 0 5px,' + v[3] + ' 5px 6px)' : v[2], border: '1px solid rgba(0,0,0,.25)', flexShrink: 0 }, onClick: () => this.setState({ variant: { ...(s.variant || {}), [this.theme()]: v[0] } }) })),
+      themeOptions: Object.keys(TH).map(k => ({ label: TH[k].label, style: chip(this.theme() === k), swatch: { width: 18, height: 18, borderRadius: 5, background: TH[k].sw, border: '1px solid rgba(0,0,0,.25)', flexShrink: 0 }, onClick: () => this.setState({ theme: k }) })),
+      toggles: [['light', 'Light ' + (s.light ? 'on' : 'off')], ['bubbles', (sp === 'fish' ? 'Bubbles ' : 'Mist ') + (s.bubbles ? 'on' : 'off')], ['sound', 'Critter sounds ' + (s.sound ? 'on' : 'off')]].map(([k, l]) => ({ label: l, style: chip(s[k]), onClick: () => this.setState({ [k]: !s[k] }) })),
+      addCritter: () => { const c = this.make(sp); this.pop[sp].push(c); this.blip(c.name + ' moved in.'); this.setState({ selected: c.id }); },
+      hasSel: !!selV, sel: selV, closeSel: () => this.setState({ selected: null }),
+      cardWinStyle: win({ left: 700, top: 48, width: 330 }), treeWinStyle: win({ left: 40, top: 480, width: 600, maxHeight: 250 }),
+      wtitleStyle: T.title, closeStyle: T.close, genLabelStyle: { fontFamily: T.mono, fontSize: 10, color: T.muted, width: 48, paddingTop: 8, flexShrink: 0 },
+      rename: (ev) => { if (sel) { sel.name = ev.target.value; this.forceUpdate(); } },
+      openTree: () => this.setState({ tree: true }), treeOpen: s.tree, closeTree: () => this.setState({ tree: false }),
+      treeTitle: (this.theme() === 'modern' ? 'Family tree · ' : 'family tree — ') + this.pop[sp].length + ' ever', treeGens,
+      titleShort: mode === 'aquarium' ? 'Aquarium' : 'Terrarium',
+      phoneList: alive.map(c => ({ name: c.name, el: this.svg(c, 34, night), meta: this.stage(c) + ' · ' + c.trait, mood: night ? 'zzz' : 'mood ' + Math.round(c.mood), onClick: () => this.setState({ selected: c.id }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>
