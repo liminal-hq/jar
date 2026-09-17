@@ -16,9 +16,9 @@ export function Drawer() {
   const settings = useJarStore((s) => s.settings);
 
   const toggleMode = () => jar.setMode(settings.mode === 'Fish' ? 'Gecko' : 'Fish');
-  const toggleLight = () => jar.setToggle('Light', !settings.light_on);
-  const toggleAmbient = () => jar.setToggle('AmbientParticles', !settings.ambient_particles_on);
-  const toggleSound = () => jar.setToggle('Sound', !settings.sound_on);
+  const toggleLight = () => jar.setToggle('light', !settings.light_on);
+  const toggleAmbient = () => jar.setToggle('ambientParticles', !settings.ambient_particles_on);
+  const toggleSound = () => jar.setToggle('sound', !settings.sound_on);
 
   const exit = async () => {
     // The shutdown autosave flush (rust-core.md §5.3) fires from the

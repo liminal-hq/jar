@@ -95,7 +95,7 @@ export function SetupWindow() {
         <input
           type="checkbox"
           checked={settings.light_on}
-          onChange={(e) => void jar.setToggle('Light', e.target.checked)}
+          onChange={(e) => void jar.setToggle('light', e.target.checked)}
         />{' '}
         Light
       </label>
@@ -103,7 +103,7 @@ export function SetupWindow() {
         <input
           type="checkbox"
           checked={settings.ambient_particles_on}
-          onChange={(e) => void jar.setToggle('AmbientParticles', e.target.checked)}
+          onChange={(e) => void jar.setToggle('ambientParticles', e.target.checked)}
         />{' '}
         {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}
       </label>
@@ -111,7 +111,7 @@ export function SetupWindow() {
         <input
           type="checkbox"
           checked={settings.sound_on}
-          onChange={(e) => void jar.setToggle('Sound', e.target.checked)}
+          onChange={(e) => void jar.setToggle('sound', e.target.checked)}
         />{' '}
         Critter sounds
       </label>
