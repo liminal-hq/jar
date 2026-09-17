@@ -166,12 +166,26 @@ function handleEvent(event: SimEvent): void {
   useJarStore.getState().applyEvent(event);
 }
 
+/** SPEC.md §4: the dialog theme defaults to the OS's light/dark preference
+ * on first run only — `DEFAULT_SETTINGS` itself stays pinned to Rust's
+ * `JarSettings::default()` (see the `DEFAULT_SETTINGS` test in
+ * `jarClient.test.ts`), so this is applied at the `ensureJarClientStarted`
+ * call site instead of baked into that constant. Once a jar snapshot
+ * exists on disk, `start` never consults this — see `commands.rs::start`. */
+function firstRunSettings(): JarSettings {
+  const prefersDark =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return prefersDark ? { ...DEFAULT_SETTINGS, dialog_theme: 'ModernDark' } : DEFAULT_SETTINGS;
+}
+
 let startPromise: Promise<void> | null = null;
 
 /** Idempotent — safe to call from every window's top-level effect. Only
  * actually calls the plugin's `start` command once, and only from the tank
  * window; see the multi-window note in this file's header. */
-export function ensureJarClientStarted(settings: JarSettings = DEFAULT_SETTINGS): Promise<void> {
+export function ensureJarClientStarted(settings: JarSettings = firstRunSettings()): Promise<void> {
   if (!startPromise) startPromise = doStart(settings);
   return startPromise;
 }

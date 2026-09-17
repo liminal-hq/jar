@@ -228,3 +228,48 @@ describe('applyEvent — Added', () => {
     expect(useJarStore.getState().critters[9]).toEqual(critter);
   });
 });
+
+describe('ensureJarClientStarted — first-run theme (SPEC.md §4)', () => {
+  // Each case needs its own fresh module instance — `ensureJarClientStarted`
+  // memoizes `startPromise` after the first call, so reusing the
+  // statically-imported module here would only ever exercise one branch.
+  const emptySnapshot = { critters: [], settings: DEFAULT_SETTINGS, sim_seconds: 0 };
+
+  it('defaults dialog_theme to ModernDark when the OS prefers dark', async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: true })),
+    );
+    const pluginApi = await import('tauri-plugin-jar-api');
+    vi.mocked(pluginApi.getSnapshot).mockResolvedValue(emptySnapshot);
+    const { ensureJarClientStarted } = await import('./jarClient');
+
+    await ensureJarClientStarted();
+
+    expect(pluginApi.start).toHaveBeenCalledWith(
+      expect.objectContaining({ dialog_theme: 'ModernDark' }),
+      expect.any(Function),
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps DEFAULT_SETTINGS's Modern theme when the OS has no dark preference", async () => {
+    vi.resetModules();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    const pluginApi = await import('tauri-plugin-jar-api');
+    vi.mocked(pluginApi.getSnapshot).mockResolvedValue(emptySnapshot);
+    const { ensureJarClientStarted } = await import('./jarClient');
+
+    await ensureJarClientStarted();
+
+    expect(pluginApi.start).toHaveBeenCalledWith(
+      expect.objectContaining({ dialog_theme: 'Modern' }),
+      expect.any(Function),
+    );
+    vi.unstubAllGlobals();
+  });
+});

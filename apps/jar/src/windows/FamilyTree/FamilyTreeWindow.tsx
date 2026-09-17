@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo } from 'react';
 
+import { DialogShell } from '../../components/DialogShell';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
@@ -32,8 +33,7 @@ export function FamilyTreeWindow() {
   const totalEver = Object.keys(critters).length;
 
   return (
-    <div style={{ padding: 16, fontFamily: 'sans-serif', fontSize: 13 }}>
-      <h2>{totalEver} ever</h2>
+    <DialogShell title={`${totalEver} ever`}>
       {byGeneration.map(([gen, members]) => (
         <div key={gen} style={{ marginBottom: 12 }}>
           <h3 style={{ margin: '4px 0' }}>Gen {gen}</h3>
@@ -46,8 +46,9 @@ export function FamilyTreeWindow() {
                   opacity: critter.alive ? 1 : 0.5,
                   padding: '4px 8px',
                   borderRadius: 8,
-                  border: '1px solid #ccc',
+                  border: '1px solid var(--jar-accent, #ccc)',
                   background: 'transparent',
+                  color: 'inherit',
                   cursor: 'pointer',
                 }}
               >
@@ -60,6 +61,6 @@ export function FamilyTreeWindow() {
           </div>
         </div>
       ))}
-    </div>
+    </DialogShell>
   );
 }

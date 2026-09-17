@@ -1,4 +1,4 @@
-/* Minimal reset. Theming (SPEC.md §4) lives in theme/theme.ts once built. */
+/* Minimal reset. Theming (SPEC.md §4) lives in theme/theme.ts. */
 * {
   box-sizing: border-box;
 }
@@ -9,4 +9,13 @@ body,
   padding: 0;
   height: 100%;
   background: transparent;
+  font-family: 'Nunito', sans-serif; /* SPEC.md §4: Nunito only */
+}
+
+/* Native form controls don't reliably inherit font-family from the root. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
