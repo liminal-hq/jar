@@ -2,7 +2,14 @@
   "mode": "Fish",
   "frame": "Bevelled98",
   "dialog_theme": "Modern",
-  "theme_variant": "Lagoon",
+  "theme_variants": {
+    "Modern": "Lagoon",
+    "ModernDark": "Lagoon",
+    "Classic98": "Classic blue",
+    "PaperNotebook": "Ruled cream",
+    "HandheldLcd": "Pea soup",
+    "NeonTerminal": "Magenta"
+  },
   "light_on": true,
   "ambient_particles_on": true,
   "sound_on": false,

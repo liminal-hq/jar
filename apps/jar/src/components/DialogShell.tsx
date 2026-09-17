@@ -21,10 +21,11 @@ interface DialogShellProps {
 
 export function DialogShell({ title, children }: DialogShellProps) {
   const theme = useJarStore((s) => s.settings.dialog_theme);
+  const variant = useJarStore((s) => s.settings.theme_variants[s.settings.dialog_theme]);
 
   useEffect(() => {
-    applyDialogTheme(theme);
-  }, [theme]);
+    applyDialogTheme(theme, variant);
+  }, [theme, variant]);
 
   return (
     <div className={styles.shell}>

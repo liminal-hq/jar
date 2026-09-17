@@ -8,7 +8,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { DialogTheme } from '../domain/protocol/generated/DialogTheme';
 import type { TankFrame } from '../domain/protocol/generated/TankFrame';
-import { applyDialogTheme, applyTankFrame, DIALOG_THEMES, TANK_FRAMES } from './theme';
+import {
+  applyDialogTheme,
+  applyTankFrame,
+  defaultVariantOf,
+  DIALOG_THEME_VARIANTS,
+  DIALOG_THEMES,
+  TANK_FRAMES,
+  variantNamesFor,
+} from './theme';
 
 const ALL_DIALOG_THEMES: DialogTheme[] = [
   'Modern',
@@ -70,6 +78,81 @@ describe('applyDialogTheme', () => {
     expect(document.documentElement.style.getPropertyValue('--jar-bg')).toBe(
       DIALOG_THEMES.NeonTerminal.background,
     );
+  });
+
+  it('sets a data-dialog-theme attribute on <html> for per-theme chrome selectors', () => {
+    applyDialogTheme('Classic98');
+    expect(document.documentElement.dataset.dialogTheme).toBe('Classic98');
+  });
+
+  it('overrides background/ink/accent with the given variant, leaving radius/shadow theme-level', () => {
+    applyDialogTheme('Modern', 'Bubblegum');
+    const root = document.documentElement.style;
+    // Non-null: 'Bubblegum' is one of Modern's own static keys above.
+    const bubblegum = DIALOG_THEME_VARIANTS.Modern.Bubblegum!;
+
+    expect(root.getPropertyValue('--jar-bg')).toBe(bubblegum.background);
+    expect(root.getPropertyValue('--jar-ink')).toBe(bubblegum.ink);
+    expect(root.getPropertyValue('--jar-accent')).toBe(bubblegum.accent);
+    expect(root.getPropertyValue('--jar-radius')).toBe(DIALOG_THEMES.Modern.radius);
+    expect(root.getPropertyValue('--jar-shadow')).toBe(DIALOG_THEMES.Modern.shadow);
+  });
+
+  it('falls back to the theme base tokens when no variant is given', () => {
+    applyDialogTheme('Modern');
+    const root = document.documentElement.style;
+
+    expect(root.getPropertyValue('--jar-accent')).toBe(DIALOG_THEMES.Modern.accent);
+  });
+
+  it("falls back to the theme base tokens when the variant name isn't found", () => {
+    applyDialogTheme('Modern', 'Not A Real Variant');
+    const root = document.documentElement.style;
+
+    expect(root.getPropertyValue('--jar-bg')).toBe(DIALOG_THEMES.Modern.background);
+    expect(root.getPropertyValue('--jar-accent')).toBe(DIALOG_THEMES.Modern.accent);
+  });
+});
+
+describe('DIALOG_THEME_VARIANTS', () => {
+  it('has at least one complete, non-empty variant per theme', () => {
+    for (const theme of ALL_DIALOG_THEMES) {
+      const variants = DIALOG_THEME_VARIANTS[theme];
+      expect(Object.keys(variants).length).toBeGreaterThan(0);
+      for (const tokens of Object.values(variants)) {
+        expect(tokens.background).toBeTruthy();
+        expect(tokens.ink).toBeTruthy();
+        expect(tokens.accent).toBeTruthy();
+      }
+    }
+  });
+
+  it('gives Modern and Modern dark independent variant tables with the same names', () => {
+    expect(Object.keys(DIALOG_THEME_VARIANTS.Modern)).toEqual(
+      Object.keys(DIALOG_THEME_VARIANTS.ModernDark),
+    );
+    expect(DIALOG_THEME_VARIANTS.Modern.Lagoon).not.toEqual(
+      DIALOG_THEME_VARIANTS.ModernDark.Lagoon,
+    );
+  });
+});
+
+describe('variantNamesFor / defaultVariantOf', () => {
+  it('returns the display-order variant names for a theme', () => {
+    expect(variantNamesFor('Classic98')).toEqual([
+      'Classic blue',
+      'Teal desktop',
+      'Brick',
+      'Rainy day',
+      'High contrast',
+    ]);
+  });
+
+  it('returns the first variant name as the default, matching SPEC.md §4', () => {
+    expect(defaultVariantOf('Modern')).toBe('Lagoon');
+    expect(defaultVariantOf('PaperNotebook')).toBe('Ruled cream');
+    expect(defaultVariantOf('HandheldLcd')).toBe('Pea soup');
+    expect(defaultVariantOf('NeonTerminal')).toBe('Magenta');
   });
 });
 
