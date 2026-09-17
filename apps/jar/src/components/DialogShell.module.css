@@ -6,6 +6,13 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  /* Real rounding, not a fake CSS clip — these windows are transparent:true
+   * (domain/windows.ts) specifically so the corners this clips away show
+   * actual transparency (the desktop behind), the same pattern the tank
+   * window's own bezel already relies on. Applies to the whole window
+   * shape, title bar included, not just .shell. */
+  border-radius: var(--jar-radius, 0);
+  overflow: hidden;
 }
 
 .shell {
