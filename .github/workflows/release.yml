@@ -4,38 +4,272 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Tag to release, e.g. v0.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  build:
+  prepare-release:
+    name: Prepare release
+    runs-on: ubuntu-24.04
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      release_version: ${{ steps.meta.outputs.release_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${TAG_NAME}" >&2
+            echo "Expected a tag matching vX.Y.Z or vX.Y.Z-beta.N" >&2
+            exit 1
+          fi
+
+          echo "tag_name=${TAG_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "release_version=${TAG_NAME#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or reuse GitHub Release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.meta.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          PRERELEASE=false
+          if [[ "${TAG_NAME}" == *-* ]]; then
+            PRERELEASE=true
+          fi
+
+          RELEASE_MATCH="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"${TAG_NAME}\") | [.id, .html_url] | @tsv" \
+              | head -n 1 || true
+          )"
+
+          if [[ -z "${RELEASE_MATCH}" ]]; then
+            RELEASE_JSON="$(
+              gh api \
+                --method POST \
+                "repos/${GITHUB_REPOSITORY}/releases" \
+                -f tag_name="${TAG_NAME}" \
+                -f target_commitish="${GITHUB_SHA}" \
+                -f name="Jar ${TAG_NAME}" \
+                -f body='See assets below to download and install.' \
+                -F generate_release_notes=true \
+                -F draft=true \
+                -F prerelease="${PRERELEASE}"
+            )"
+            RELEASE_URL="$(printf '%s' "${RELEASE_JSON}" | jq -r '.html_url')"
+            RELEASE_ACTION="created"
+          else
+            RELEASE_ID="$(awk '{print $1}' <<< "${RELEASE_MATCH}")"
+            RELEASE_URL="$(awk '{print $2}' <<< "${RELEASE_MATCH}")"
+            RELEASE_ACTION="reused"
+          fi
+
+          echo "release_url=${RELEASE_URL}" >> "${GITHUB_OUTPUT}"
+          echo "release_action=${RELEASE_ACTION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Jar Release Summary"
+            echo
+            echo "- Release tag: \`${{ steps.meta.outputs.tag_name || 'unavailable' }}\`"
+            echo "- Release action: \`${{ steps.release.outputs.release_action || 'unavailable' }}\`"
+            echo "- Release URL: ${{ steps.release.outputs.release_url || 'unavailable' }}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  build-linux:
+    name: Build Linux release bundles
+    needs: prepare-release
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-latest
-            args: ''
-          - platform: windows-latest
-            args: ''
-    runs-on: ${{ matrix.platform }}
+          - runner: ubuntu-24.04
+            artefact_name: linux-release-assets-x64
+          - runner: ubuntu-24.04-arm
+            artefact_name: linux-release-assets-arm64
+    container:
+      image: ghcr.io/liminal-hq/tauri-ci-desktop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag_name }}
+
+      - name: Trust the GitHub workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - uses: dtolnay/rust-toolchain@stable
+
       - uses: Swatinem/rust-cache@v2
-      - name: Install Tauri Linux dependencies
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - run: bun install --frozen-lockfile
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux release bundles
+        run: bun run tauri build --bundles deb,rpm
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+
+          release_dir="release-assets/linux"
+          mkdir -p "${release_dir}"
+
+          mapfile -t bundle_files < <(find target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' \) | sort)
+          if [[ "${#bundle_files[@]}" -eq 0 ]]; then
+            echo "No Linux release artefacts found under target/release/bundle" >&2
+            exit 1
+          fi
+
+          for file in "${bundle_files[@]}"; do
+            cp "${file}" "${release_dir}/"
+          done
+
+      - name: Upload staged release assets
+        uses: actions/upload-artifact@v7
         with:
-          projectPath: apps/jar
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Jar ${{ github.ref_name }}'
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          name: ${{ matrix.artefact_name }}
+          path: release-assets/linux/**
+          if-no-files-found: error
+
+  package-appimage:
+    name: Package AppImage
+    needs:
+      - prepare-release
+      - build-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            deb-artifact: linux-release-assets-x64
+          - runner: ubuntu-24.04-arm
+            deb-artifact: linux-release-assets-arm64
+    uses: liminal-hq/.github/.github/workflows/package-arch-appimage.yml@main
+    with:
+      runs-on: ${{ matrix.runner }}
+      deb-artifact-name: ${{ matrix.deb-artifact }}
+      app-version: ${{ needs.prepare-release.outputs.release_version }}
+    secrets: inherit
+
+  build-windows:
+    name: Build Windows release bundles
+    needs: prepare-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag_name }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build Windows release bundles
+        run: bun run tauri build --bundles msi,nsis
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+
+          release_dir="release-assets/windows"
+          mkdir -p "${release_dir}"
+
+          mapfile -t bundle_files < <(find target/release/bundle -type f \( -name '*.msi' -o -name '*.exe' \) | sort)
+          if [[ "${#bundle_files[@]}" -eq 0 ]]; then
+            echo "No Windows release artefacts found under target/release/bundle" >&2
+            exit 1
+          fi
+
+          for file in "${bundle_files[@]}"; do
+            cp "${file}" "${release_dir}/"
+          done
+
+      - name: Upload staged release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-release-assets
+          path: release-assets/windows/**
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release assets
+    needs:
+      - prepare-release
+      - build-linux
+      - package-appimage
+      - build-windows
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Linux release assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: linux-release-assets-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Download AppImage assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: appimage-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-release-assets
+          path: release-assets
+
+      - name: Compute checksums
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum ./* | sed 's# \./#  #' > SHA256SUMS
+
+      - name: Upload assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+        run: gh release upload "${TAG_NAME}" release-assets/* --clobber
