@@ -18,7 +18,7 @@
     "validate": "bun run format:check && bun run test:js && bun run build && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && bun run test:rust"
   },
   "devDependencies": {
-    "jsdom": "^25.0.0",
+    "jsdom": "^30.0.1",
     "prettier": "^3.3.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
