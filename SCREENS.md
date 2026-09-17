@@ -3,6 +3,7 @@
 Companion to `SPEC.md` (see its §3, which points here). This is the full window/screen inventory. Product positioning, platforms, themes, simulation rules and persistence live in `SPEC.md`; 3D rendering specifics for the Tank window live in `docs/architecture/3d-engine.md`.
 
 ## W1 · Tank (main)
+
 - No OS chrome. The chosen frame is the only bezel and runs edge to edge.
 - Contents: backdrop (aquarium or terrarium), critters, bubbles/mist, night tint, status chip (bottom-left: `4 fish · 22:14 · asleep`), event toasts (top-centre, 4 s).
 - Hover → the **drawer** slides out from behind the tank to one side (right by default; flips to the side with screen room). It overlaps the bezel by ~18 px so it reads as attached.
@@ -12,6 +13,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `docs/architecture/3d-engine.md`; only the bezel/drawer/toasts/status chip are flat HTML/CSS chrome around it.
 
 ## W4 · Setup
+
 - Its own window (nothing covers the tank). Shows every option at once:
   - Mode: Aquarium — fish / Terrarium — gecko
   - Frame: Bevelled 98 · Wood stand · Brushed metal · Rounded glass · Neon/CRT · Cardboard cutout
@@ -23,6 +25,7 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
   - (Build-only additions: always-on-top, show/hide, quit, reset jar)
 
 ## W2 · Critter card
+
 - Spawns on clicking a critter (tank, tree, or phone list). One card at a time; clicking another critter retargets it.
 - Portrait on a habitat swatch · **name field (inline rename, dashed underline)** · species · life stage · age in days.
 - Live bars: Mood (green > 60, amber > 35, red) and Energy. Italic one-liner of what they're doing.
@@ -31,11 +34,13 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
 - Button: Open family tree.
 
 ## W3 · Family tree
+
 - One row per generation (Gen 1, Gen 2 …). Nodes: portrait, name, stage. Passed critters: muted, `† remembered`.
 - Click node → focuses W2.
 - Title shows `N ever` (all critters that have lived in this mode).
 
 ## Mobile companion (Android)
+
 - Header: mode name + status chip. Compact tank (same live sim, 0.7 scale, no labels). Residents list: portrait, name, stage · trait, mood (or `zzz` at night).
 - Tap resident → critter card as a bottom sheet. Read-only except rename.
 - Home-screen widget: jar snapshot + status line.

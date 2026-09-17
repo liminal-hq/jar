@@ -19,6 +19,7 @@ Screen-by-screen window/UI inventory lives in `SCREENS.md`. Rendering, physics, 
 - Window is resizable to any size; the tank layout is percentage-based.
 
 ### Platform notes
+
 - Tank window: `transparent: true`, `decorations: false`, `alwaysOnTop` (toggleable), `skipTaskbar` optional.
 - Dragging: the whole bezel is a drag region (`data-tauri-drag-region`); the tank interior is not (clicks select critters).
 - Tray icon for show/hide. GNOME has no tray by default → show/hide + quit also live in the Setup overlay.
@@ -37,6 +38,7 @@ Two independent axes, both chosen in Setup and persisted:
 **Tank frame** (bezel of W1): Bevelled 98 · Wood stand · Brushed metal · Rounded glass (0 px bezel, truly edge-to-edge) · Neon/CRT (adds scanlines) · Cardboard cutout.
 
 **Dialog theme** (W2, W3, W4 and the drawer):
+
 - Modern (default): warm off-white `#fbfaf6`, 18 px radius, soft shadow, Nunito, pill buttons.
 - Modern dark: same shapes on `#1c1a22` with `#f1eee6` ink. On first run the app follows the OS light/dark preference (`prefers-color-scheme`) to pick Modern vs Modern dark; an explicit pick in Setup overrides it.
 - Classic 98: `#c9c6bd` bevel, blue gradient title bar, square buttons.
@@ -45,6 +47,7 @@ Two independent axes, both chosen in Setup and persisted:
 - Neon terminal: `#141018`, magenta `#ff3fd8` border/glow, dark panels.
 
 **Variants** (named; one remembered per theme):
+
 - Modern / Modern dark — Accent: Lagoon (blue) · Bubblegum (magenta) · Moss (green) · Clementine (orange). Drives primary buttons, selected chips, energy bar.
 - Classic 98 — Window type: Classic blue · Teal desktop · Brick · Rainy day · High contrast (black/white/yellow).
 - Paper notebook — Paper stock: Ruled cream · Graph paper · Legal pad · Kraft.
@@ -57,7 +60,7 @@ Type: Nunito only — no monospace anywhere; small labels are bold Nunito. Ink `
 
 Real time, slow. 1 tick = 1 real second. Simulation speed (Setup slider, 1–60×; Real time = 1×) multiplies sim seconds per tick. Persisted.
 
-The discrete rules below (aging, mood/energy, breeding, genetics, passing, naming) are owned and implemented by the Rust simulation core — see `docs/architecture/rust-core.md`. This section is the authoritative statement of *what* the rules are; that document specifies *where* they run and the wire contract with the frontend. Movement, steering and rendering of critters living out these rules is specified in `docs/architecture/3d-engine.md`.
+The discrete rules below (aging, mood/energy, breeding, genetics, passing, naming) are owned and implemented by the Rust simulation core — see `docs/architecture/rust-core.md`. This section is the authoritative statement of _what_ the rules are; that document specifies _where_ they run and the wire contract with the frontend. Movement, steering and rendering of critters living out these rules is specified in `docs/architecture/3d-engine.md`.
 
 - **Jar-day** = 120 sim seconds (2 real minutes at 1×).
 - **Time of day**: at Real time (1×) it follows the system clock. At any faster speed the jar's own clock takes over — 24 jar-hours per jar-day, seeded from the system time when the app started — so sped-up critters cycle through nights on jar time. Night = 21:00–07:00 on whichever clock is active. The Setup clock line says which. At night the tank dims and every critter drifts to its favourite spot and sleeps (`z`s, closed eyes). LIGHT on at night only lifts the dim partly — they keep sleeping. Sleep is indefinite in sim terms: nothing ages faster, nothing breeds.

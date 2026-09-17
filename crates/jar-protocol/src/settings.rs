@@ -65,3 +65,28 @@ impl Default for JarSettings {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pinned against `apps/jar/src/domain/jarClient.ts`'s hand-duplicated
+    /// `DEFAULT_SETTINGS` object, which mirrors this `Default` impl for the
+    /// settings a fresh jar starts with before any snapshot exists — the
+    /// two have no shared generated source, so this test is the
+    /// sync-enforcement mechanism between them (same pattern as
+    /// `jar-core`'s `life_stage_boundaries_match_spec`).
+    #[test]
+    fn default_settings_match_the_frontends_hand_duplicated_copy() {
+        let settings = JarSettings::default();
+        assert_eq!(settings.mode, Species::Fish);
+        assert_eq!(settings.frame, TankFrame::Bevelled98);
+        assert_eq!(settings.dialog_theme, DialogTheme::Modern);
+        assert_eq!(settings.theme_variant, "Lagoon");
+        assert!(settings.light_on);
+        assert!(settings.ambient_particles_on);
+        assert!(!settings.sound_on);
+        assert_eq!(settings.simulation_speed, 1);
+        assert!(!settings.always_on_top);
+    }
+}

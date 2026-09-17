@@ -153,9 +153,8 @@ fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) 
         // Chance per tick proportional to the number of eligible
         // opposite-sex pairs (SPEC.md §5) — deliberately not "one roll per
         // possible pair" to keep this O(1) rather than O(pairs) per tick.
-        let pair_count = (males.len() * females.len()) as f32;
-        let breed_chance = (0.002 * pair_count).min(0.2);
-        if !rng.chance(breed_chance) {
+        let chance = breed_chance(males.len() * females.len());
+        if !rng.chance(chance) {
             continue;
         }
 
@@ -163,6 +162,12 @@ fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) 
         let parent_b = females[rng.range_u16(0, females.len() as u16) as usize];
         spawn_child(state, rng, parent_a, parent_b, outcome);
     }
+}
+
+/// Chance per tick that a species breeds, proportional to the number of
+/// eligible opposite-sex adult pairs (SPEC.md §5), capped at 0.2.
+fn breed_chance(pair_count: usize) -> f32 {
+    (0.002 * pair_count as f32).min(0.2)
 }
 
 fn sex_of(state: &JarState, id: CritterId) -> Option<Sex> {
@@ -210,4 +215,473 @@ fn spawn_child(
         parent_a: parent_a_id,
         parent_b: parent_b_id,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use jar_protocol::{Critter, FavouriteSpot, FinType, JarSettings};
+
+    use super::*;
+
+    /// Between `ADULT_AT_DAYS` (5 jar-days = 600s) and `ELDER_AT_DAYS`
+    /// (22 jar-days = 2640s).
+    const ADULT_AGE: f32 = 700.0;
+    /// Between `JUVENILE_AT_DAYS` (2 jar-days = 240s) and `ADULT_AT_DAYS`
+    /// (600s).
+    const JUVENILE_AGE: f32 = 300.0;
+    /// Pre-tick sim-seconds that land the clock at 61s (fraction ~0.508)
+    /// after `advance_one_tick` — inside the day window.
+    const DAY_SIM_SECONDS: f64 = 60.0;
+    /// Pre-tick sim-seconds that land the clock at exactly 105s
+    /// (fraction 0.875 = 21:00) after `advance_one_tick` — the start of
+    /// the night window.
+    const NIGHT_SIM_SECONDS: f64 = 104.0;
+
+    fn make_critter(
+        id: u32,
+        species: Species,
+        sex: Sex,
+        personality: Personality,
+        age_sec: f32,
+        energy: f32,
+    ) -> Critter {
+        Critter {
+            id: CritterId(id),
+            species,
+            name: format!("Critter{id}"),
+            hue: 180,
+            fin: match species {
+                Species::Fish => Some(FinType::Veil),
+                Species::Gecko => None,
+            },
+            spots: false,
+            sex,
+            personality,
+            mood: 66.0,
+            energy,
+            age_sec,
+            life: 100_000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 50.0,
+                y: 50.0,
+                z: 50.0,
+            },
+        }
+    }
+
+    fn state_with(critters: Vec<Critter>, sim_seconds: f64, light_on: bool) -> JarState {
+        let mut state = JarState::new(JarSettings {
+            light_on,
+            ..JarSettings::default()
+        });
+        state.critters = critters;
+        state.clock = crate::clock::JarClock::resume(sim_seconds, 1);
+        state
+    }
+
+    #[test]
+    fn life_stage_boundaries_match_spec() {
+        // Paired with `simConstants.test.ts`'s equivalent cases — together
+        // they're the sync-enforcement mechanism for the frontend's
+        // hand-duplicated copy of these thresholds (SPEC.md §5).
+        assert_eq!(life_stage(239.0), LifeStage::Fry);
+        assert_eq!(life_stage(240.0), LifeStage::Juvenile);
+        assert_eq!(life_stage(599.0), LifeStage::Juvenile);
+        assert_eq!(life_stage(600.0), LifeStage::Adult);
+        assert_eq!(life_stage(2639.0), LifeStage::Adult);
+        assert_eq!(life_stage(2640.0), LifeStage::Elder);
+    }
+
+    #[test]
+    fn breed_chance_scales_with_pair_count_and_caps_at_0_2() {
+        assert_eq!(breed_chance(0), 0.0);
+        assert!((breed_chance(1) - 0.002).abs() < 1e-6);
+        assert!((breed_chance(50) - 0.1).abs() < 1e-6);
+        assert!((breed_chance(100) - 0.2).abs() < 1e-6);
+        assert_eq!(breed_chance(1000), 0.2); // well above the cap
+    }
+
+    #[test]
+    fn no_births_at_the_fish_population_cap() {
+        let mut critters = Vec::new();
+        for i in 0..5 {
+            critters.push(make_critter(
+                i,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+            critters.push(make_critter(
+                i + 5,
+                Species::Fish,
+                Sex::Female,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+        }
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        for _ in 0..200 {
+            let outcome = tick(&mut state, &mut rng);
+            assert!(outcome.born.is_empty());
+            assert!(state.living_count(Species::Fish) <= 10);
+        }
+    }
+
+    #[test]
+    fn no_births_at_the_gecko_population_cap() {
+        let mut critters = Vec::new();
+        for i in 0..2 {
+            critters.push(make_critter(
+                i,
+                Species::Gecko,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+            critters.push(make_critter(
+                i + 2,
+                Species::Gecko,
+                Sex::Female,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+        }
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        for _ in 0..200 {
+            let outcome = tick(&mut state, &mut rng);
+            assert!(outcome.born.is_empty());
+            assert!(state.living_count(Species::Gecko) <= 4);
+        }
+    }
+
+    #[test]
+    fn no_births_without_an_opposite_sex_pair() {
+        let critters = vec![
+            make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ),
+            make_critter(
+                2,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ),
+        ];
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        for _ in 0..200 {
+            assert!(tick(&mut state, &mut rng).born.is_empty());
+        }
+    }
+
+    #[test]
+    fn juveniles_and_elders_do_not_breed() {
+        let critters = vec![
+            make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                JUVENILE_AGE,
+                100.0,
+            ),
+            make_critter(
+                2,
+                Species::Fish,
+                Sex::Female,
+                Personality::Bold,
+                JUVENILE_AGE,
+                100.0,
+            ),
+        ];
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        for _ in 0..200 {
+            assert!(tick(&mut state, &mut rng).born.is_empty());
+        }
+    }
+
+    #[test]
+    fn no_breeding_at_night() {
+        let critters = vec![
+            make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ),
+            make_critter(
+                2,
+                Species::Fish,
+                Sex::Female,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ),
+        ];
+        let mut state = state_with(critters, NIGHT_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        for _ in 0..30 {
+            assert!(tick(&mut state, &mut rng).born.is_empty());
+        }
+    }
+
+    #[test]
+    fn energy_refills_while_asleep_and_drains_while_awake() {
+        let mut rng = JarRng::new();
+
+        let mut night_state = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                50.0,
+            )],
+            NIGHT_SIM_SECONDS,
+            true,
+        );
+        tick(&mut night_state, &mut rng);
+        assert_eq!(night_state.critters[0].energy, 52.0);
+
+        let mut day_state = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                50.0,
+            )],
+            DAY_SIM_SECONDS,
+            true,
+        );
+        tick(&mut day_state, &mut rng);
+        assert!((day_state.critters[0].energy - 49.95).abs() < 1e-6);
+    }
+
+    #[test]
+    fn energy_is_clamped_to_0_and_100() {
+        let mut rng = JarRng::new();
+
+        let mut low = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                0.02,
+            )],
+            DAY_SIM_SECONDS,
+            true,
+        );
+        tick(&mut low, &mut rng);
+        assert_eq!(low.critters[0].energy, 0.0);
+
+        let mut high = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                99.5,
+            )],
+            NIGHT_SIM_SECONDS,
+            true,
+        );
+        tick(&mut high, &mut rng);
+        assert_eq!(high.critters[0].energy, 100.0);
+    }
+
+    #[test]
+    fn mood_converges_toward_the_target_with_bounded_noise() {
+        // Bold has no mood modifier; light on, full energy -> target 70,
+        // one tick moves mood 66 -> 66.2 plus noise bounded to +/-1.
+        let mut state = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            )],
+            DAY_SIM_SECONDS,
+            true,
+        );
+        let mut rng = JarRng::new();
+        tick(&mut state, &mut rng);
+        let mood = state.critters[0].mood;
+        assert!(
+            (65.2..=67.2).contains(&mood),
+            "mood {mood} out of expected range"
+        );
+    }
+
+    #[test]
+    fn shy_critters_lose_mood_as_population_grows() {
+        // target = 66 + 4 (light on) - 3*5 (population) = 55; mood 66 ->
+        // 65.45 plus noise bounded to +/-1.
+        let mut critters = vec![make_critter(
+            1,
+            Species::Fish,
+            Sex::Male,
+            Personality::Shy,
+            ADULT_AGE,
+            100.0,
+        )];
+        for i in 2..=5 {
+            critters.push(make_critter(
+                i,
+                Species::Fish,
+                Sex::Female,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+        }
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        tick(&mut state, &mut rng);
+        let mood = state.critters[0].mood;
+        assert!(
+            (64.45..=66.45).contains(&mood),
+            "mood {mood} out of expected range"
+        );
+    }
+
+    #[test]
+    fn low_energy_pulls_mood_down_regardless_of_personality() {
+        // target = 66 + 4 (light) - 15 (low energy) = 55; mood 66 -> 65.45
+        // plus noise bounded to +/-1.
+        let mut state = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                20.0,
+            )],
+            DAY_SIM_SECONDS,
+            true,
+        );
+        let mut rng = JarRng::new();
+        tick(&mut state, &mut rng);
+        let mood = state.critters[0].mood;
+        assert!(
+            (64.45..=66.45).contains(&mood),
+            "mood {mood} out of expected range"
+        );
+    }
+
+    #[test]
+    fn dramatic_critters_get_wider_mood_noise() {
+        // Same 66.2 centre as the Bold case, but +/-4 noise instead of +/-1.
+        let mut state = state_with(
+            vec![make_critter(
+                1,
+                Species::Fish,
+                Sex::Male,
+                Personality::Dramatic,
+                ADULT_AGE,
+                100.0,
+            )],
+            DAY_SIM_SECONDS,
+            true,
+        );
+        let mut rng = JarRng::new();
+        tick(&mut state, &mut rng);
+        let mood = state.critters[0].mood;
+        assert!(
+            (62.2..=70.2).contains(&mood),
+            "mood {mood} out of expected range"
+        );
+    }
+
+    #[test]
+    fn mood_never_leaves_0_100_even_under_an_extreme_target() {
+        let mut critters = vec![make_critter(
+            1,
+            Species::Fish,
+            Sex::Male,
+            Personality::Shy,
+            ADULT_AGE,
+            100.0,
+        )];
+        critters[0].mood = 0.0;
+        for i in 2..=51 {
+            critters.push(make_critter(
+                i,
+                Species::Fish,
+                Sex::Female,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+        }
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+        tick(&mut state, &mut rng);
+        assert_eq!(state.critters[0].mood, 0.0);
+    }
+
+    #[test]
+    fn child_generation_is_max_parent_gen_plus_one_and_parents_are_recorded() {
+        let mut rng = JarRng::new();
+        let parent_a = make_critter(
+            1,
+            Species::Fish,
+            Sex::Male,
+            Personality::Bold,
+            ADULT_AGE,
+            100.0,
+        );
+        let mut parent_b = make_critter(
+            2,
+            Species::Fish,
+            Sex::Female,
+            Personality::Bold,
+            ADULT_AGE,
+            100.0,
+        );
+        parent_b.gen = 3;
+
+        let child = genetics::roll_child(
+            CritterId(3),
+            Parent { critter: &parent_a },
+            Parent { critter: &parent_b },
+            parent_a.gen.max(parent_b.gen) + 1,
+            0.0,
+            &mut rng,
+            &[],
+        );
+
+        assert_eq!(child.gen, 4);
+        assert_eq!(child.parents, Some([CritterId(1), CritterId(2)]));
+    }
 }
