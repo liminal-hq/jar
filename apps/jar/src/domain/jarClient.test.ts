@@ -33,6 +33,7 @@ vi.mock('tauri-plugin-jar-api', () => ({
   loadSnapshot: vi.fn(),
 }));
 
+import defaultSettingsFixture from './protocol/generated/defaultSettings.json';
 import type { Critter } from './protocol/generated/Critter';
 import { DEFAULT_SETTINGS, useJarStore } from './jarClient';
 
@@ -66,6 +67,20 @@ beforeEach(() => {
     settings: DEFAULT_SETTINGS,
     simSeconds: 0,
     hydrated: false,
+  });
+});
+
+describe('DEFAULT_SETTINGS', () => {
+  it("matches defaultSettings.json, generated from Rust's JarSettings::default()", () => {
+    // `defaultSettings.json` is written by
+    // `crates/jar-protocol/src/settings.rs`'s `export_default_settings_fixture`
+    // test, the same `cargo test`-time regeneration convention as the
+    // `ts-rs` type bindings alongside it. Comparing against that generated
+    // artifact — rather than a second hand-copied literal — means a changed
+    // Rust default actually fails this test the next time `cargo test`
+    // regenerates the fixture, instead of two independent copies silently
+    // drifting in lockstep.
+    expect(DEFAULT_SETTINGS).toEqual(defaultSettingsFixture);
   });
 });
 

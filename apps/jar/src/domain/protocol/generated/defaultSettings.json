@@ -1,0 +1,11 @@
+{
+  "mode": "Fish",
+  "frame": "Bevelled98",
+  "dialog_theme": "Modern",
+  "theme_variant": "Lagoon",
+  "light_on": true,
+  "ambient_particles_on": true,
+  "sound_on": false,
+  "simulation_speed": 1,
+  "always_on_top": false
+}
