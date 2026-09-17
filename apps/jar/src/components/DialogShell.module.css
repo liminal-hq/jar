@@ -1,0 +1,14 @@
+.shell {
+  min-height: 100vh;
+  padding: 16px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  background: var(--jar-bg, #fbfaf6);
+  color: var(--jar-ink, #2b2a33);
+  box-sizing: border-box;
+}
+
+.title {
+  margin: 0 0 8px;
+  color: var(--jar-accent, #3a8dde);
+}

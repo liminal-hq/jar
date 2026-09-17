@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react';
 
+import { DialogShell } from '../../components/DialogShell';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { DialogTheme } from '../../domain/protocol/generated/DialogTheme';
 import type { Species } from '../../domain/protocol/generated/Species';
@@ -43,93 +44,89 @@ export function SetupWindow() {
   const jarDay = (simSeconds / 120).toFixed(2);
 
   return (
-    <div
-      style={{
-        padding: 16,
-        fontFamily: 'sans-serif',
-        fontSize: 13,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}
-    >
-      <h2 style={{ margin: 0 }}>Setup</h2>
+    <DialogShell title="Setup">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label>
+          Mode
+          <select
+            value={settings.mode}
+            onChange={(e) => void jar.setMode(e.target.value as Species)}
+          >
+            <option value="Fish">Aquarium — fish</option>
+            <option value="Gecko">Terrarium — gecko</option>
+          </select>
+        </label>
 
-      <label>
-        Mode
-        <select value={settings.mode} onChange={(e) => void jar.setMode(e.target.value as Species)}>
-          <option value="Fish">Aquarium — fish</option>
-          <option value="Gecko">Terrarium — gecko</option>
-        </select>
-      </label>
+        <label>
+          Frame
+          <select
+            value={settings.frame}
+            onChange={(e) => void jar.setFrame(e.target.value as TankFrame)}
+          >
+            {FRAMES.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <label>
-        Frame
-        <select
-          value={settings.frame}
-          onChange={(e) => void jar.setFrame(e.target.value as TankFrame)}
-        >
-          {FRAMES.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
-      </label>
+        <label>
+          Dialog theme
+          <select
+            value={settings.dialog_theme}
+            onChange={(e) =>
+              void jar.setTheme(e.target.value as DialogTheme, settings.theme_variant)
+            }
+          >
+            {THEMES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <label>
-        Dialog theme
-        <select
-          value={settings.dialog_theme}
-          onChange={(e) => void jar.setTheme(e.target.value as DialogTheme, settings.theme_variant)}
-        >
-          {THEMES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.light_on}
+            onChange={(e) => void jar.setToggle('light', e.target.checked)}
+          />{' '}
+          Light
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.ambient_particles_on}
+            onChange={(e) => void jar.setToggle('ambientParticles', e.target.checked)}
+          />{' '}
+          {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.sound_on}
+            onChange={(e) => void jar.setToggle('sound', e.target.checked)}
+          />{' '}
+          Critter sounds
+        </label>
 
-      <label>
-        <input
-          type="checkbox"
-          checked={settings.light_on}
-          onChange={(e) => void jar.setToggle('light', e.target.checked)}
-        />{' '}
-        Light
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={settings.ambient_particles_on}
-          onChange={(e) => void jar.setToggle('ambientParticles', e.target.checked)}
-        />{' '}
-        {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={settings.sound_on}
-          onChange={(e) => void jar.setToggle('sound', e.target.checked)}
-        />{' '}
-        Critter sounds
-      </label>
+        <label>
+          Simulation speed: {settings.simulation_speed}x
+          {settings.simulation_speed === 1 && ' (Real time)'}
+          <input
+            type="range"
+            min={1}
+            max={60}
+            value={settings.simulation_speed}
+            onChange={(e) => void jar.setSpeed(Number(e.target.value))}
+          />
+        </label>
+        <p>Jar clock: day {jarDay}</p>
 
-      <label>
-        Simulation speed: {settings.simulation_speed}x
-        {settings.simulation_speed === 1 && ' (Real time)'}
-        <input
-          type="range"
-          min={1}
-          max={60}
-          value={settings.simulation_speed}
-          onChange={(e) => void jar.setSpeed(Number(e.target.value))}
-        />
-      </label>
-      <p>Jar clock: day {jarDay}</p>
-
-      <button onClick={() => void jar.addCritter(settings.mode)}>+ Add a critter</button>
-    </div>
+        <button onClick={() => void jar.addCritter(settings.mode)}>+ Add a critter</button>
+      </div>
+    </DialogShell>
   );
 }

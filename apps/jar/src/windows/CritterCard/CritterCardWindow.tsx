@@ -6,15 +6,14 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 
+import { DialogShell } from '../../components/DialogShell';
 import { StatBar } from '../../components/StatBar';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { onCritterSelected } from '../../domain/selection';
 import { lifeStageOf, SECONDS_PER_JAR_DAY } from '../../domain/simConstants';
-
-const cardStyle: CSSProperties = { padding: 16, fontFamily: 'sans-serif', fontSize: 13 };
 
 export function CritterCardWindow() {
   const [selectedId, setSelectedId] = useState<CritterId | null>(null);
@@ -29,15 +28,14 @@ export function CritterCardWindow() {
   }, []);
 
   if (!critter) {
-    return <div style={cardStyle}>No critter selected yet.</div>;
+    return <DialogShell>No critter selected yet.</DialogShell>;
   }
 
   if (!critter.alive) {
     return (
-      <div style={cardStyle}>
-        <h2>{critter.name}</h2>
+      <DialogShell title={critter.name}>
         <p style={{ fontStyle: 'italic' }}>Remembered fondly — this one has passed on.</p>
-      </div>
+      </DialogShell>
     );
   }
 
@@ -45,21 +43,23 @@ export function CritterCardWindow() {
   const ageDays = (critter.age_sec / SECONDS_PER_JAR_DAY).toFixed(1);
 
   return (
-    <div style={cardStyle}>
-      <h2 style={{ marginBottom: 4 }}>
+    <DialogShell
+      title={
         <input
           key={critter.id}
           defaultValue={critter.name}
           onBlur={(e) => void jar.renameCritter(critter.id, e.target.value)}
           style={{
             border: 'none',
-            borderBottom: '1px dashed #999',
+            borderBottom: '1px dashed var(--jar-ink, #999)',
             background: 'transparent',
+            color: 'inherit',
             font: 'inherit',
             width: '100%',
           }}
         />
-      </h2>
+      }
+    >
       <p>
         {critter.species} · {stage} · {ageDays} days old
       </p>
@@ -97,6 +97,6 @@ export function CritterCardWindow() {
             : ' · original resident'}
         </dd>
       </dl>
-    </div>
+    </DialogShell>
   );
 }
