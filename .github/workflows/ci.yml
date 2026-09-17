@@ -7,11 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
-  checks: write
   contents: read
   packages: read
-  pull-requests: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -38,12 +35,17 @@ jobs:
           path: test-results/junit.xml
           if-no-files-found: error
 
-      - name: Publish frontend unit test results
+      # Consumed by publish-test-results.yml — the pull_request event's own
+      # GITHUB_TOKEN is read-only for Dependabot and fork PRs, so publishing
+      # the JUnit check run has to happen from a separate `workflow_run`
+      # workflow instead, which runs with this repo's own permissions
+      # regardless of who opened the PR.
+      - name: Upload event file
         if: always()
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: actions/upload-artifact@v7
         with:
-          check_name: Jar frontend tests
-          files: test-results/junit.xml
+          name: event-file
+          path: ${{ github.event_path }}
 
   rust-tests:
     runs-on: ubuntu-latest
@@ -69,13 +71,6 @@ jobs:
           name: rust-test-results
           path: target/nextest/ci/junit.xml
           if-no-files-found: error
-
-      - name: Publish Rust unit test results
-        if: always()
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        with:
-          check_name: Jar Rust tests
-          files: target/nextest/ci/junit.xml
 
   protocol-bindings-drift:
     runs-on: ubuntu-latest
