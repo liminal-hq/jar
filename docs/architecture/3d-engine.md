@@ -4,8 +4,8 @@ This document augments `SPEC.md` and `SCREENS.md`. It does not replace
 anything in them — the positioning (§1), platforms (§2), theme system (§4),
 persistence (§6) and out-of-scope list (§7) of `SPEC.md`, and the full
 window/screen inventory in `SCREENS.md`, all stand as written. This doc
-replaces **only** the *rendering* half of `SCREENS.md`'s W1 (Tank) and the
-*movement/render* half of `SPEC.md` §5 (Simulation) — i.e. everything
+replaces **only** the _rendering_ half of `SCREENS.md`'s W1 (Tank) and the
+_movement/render_ half of `SPEC.md` §5 (Simulation) — i.e. everything
 downstream of "here is a critter's state," not the state itself.
 
 Hand this file, `SPEC.md` and `SCREENS.md` together to the implementing
@@ -34,7 +34,7 @@ adapted, or structurally mirrored — an implementor should not be reaching
 into it for code to reuse, and shouldn't feel bound by how it happens to be
 organized.
 
-What *is* worth pulling from it is the **behavior it specifies**: the
+What _is_ worth pulling from it is the **behavior it specifies**: the
 sim's rules and constants (aging/mood/energy/breeding/passing, the
 genetics formulas in `make()`, jar-day timing), the theme/frame color and
 layout values, and the window/dialog content — in other words, everything
@@ -42,7 +42,7 @@ layout values, and the window/dialog content — in other words, everything
 a working mock. Treat the file the same way you'd treat a screenshot with
 annotations: authoritative about what the thing should look like and do,
 silent on how the real implementation should be built. The one part of its
-actual rendering approach worth naming explicitly as *not* carrying
+actual rendering approach worth naming explicitly as _not_ carrying
 forward is the movement/render loop — `requestAnimationFrame` +
 `forceUpdate()` driving a `svg()` function that draws flat SVG at
 CSS `left/top` percentages. Section 3 below specifies its replacement from
@@ -78,7 +78,7 @@ template markup, themed per §4 of `SPEC.md`. Only the tank viewport goes
 ### 1.1 Transparency (the tank window is see-through by design)
 
 `SPEC.md` §2 already requires `transparent: true`, `decorations: false` on
-the W1 `WebviewWindow`. The 3D canvas must be transparent *inside* that
+the W1 `WebviewWindow`. The 3D canvas must be transparent _inside_ that
 window too, or the "glass"/"cardboard"/etc. bezel will show a black box
 instead of the tank contents. Required, in this order:
 
@@ -166,7 +166,7 @@ concept:
   (§4.2), so their `z` stays close to a fixed "on the glass wall / on the
   branch" band rather than roaming freely — this matches the original
   design intent (2D gecko art was explicitly "top-down, as if on the
-  glass") while letting them read as sitting *in* a real terrarium instead
+  glass") while letting them read as sitting _in_ a real terrarium instead
   of painted on its front pane.
 
 ### 2.2 World space
@@ -182,7 +182,7 @@ concept:
 - Conversion is a pure function, `simPercentToWorld(x, y, z) → Vector3`,
   called once per critter per physics step to feed the target the steering
   layer chases. Physics/render positions are the source of truth once a
-  critter exists (§3); the sim's `x/y/z` fields become the *intent* signal
+  critter exists (§3); the sim's `x/y/z` fields become the _intent_ signal
   (favourite spot, spawn point), not a per-frame authority.
 
 ### 2.3 Camera
@@ -219,13 +219,13 @@ object exists with these fields" — the replacement for the prototype's
 
 **Per-critter runtime split, once a critter is spawned:**
 
-| Owns | Field(s) | Lives in |
-|---|---|---|
-| Identity & stats (unchanged from `SPEC.md` §5) | `id, sp, name, hue, fin, spots, sex, trait, mood, energy, ageSec, life, gen, parents, alive` | `/src/sim` (tick-driven, 1 Hz) |
-| Intent (where does it *want* to be) | `x, y, z, fav.{x,y,z}` (target percents, not live position) | `/src/sim`, read by steering |
-| Steering (how does it get there) | `YUKA.Vehicle` position/velocity, active behaviors | `/src/render/steering` |
-| Physical truth (where is it *actually*) | `RigidBody` translation/rotation | Rapier world, `@react-three/rapier` |
-| Presentation (how does it look doing that) | GLTF pose, spine-wave phase, material uniforms | R3F component |
+| Owns                                           | Field(s)                                                                                     | Lives in                            |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Identity & stats (unchanged from `SPEC.md` §5) | `id, sp, name, hue, fin, spots, sex, trait, mood, energy, ageSec, life, gen, parents, alive` | `/src/sim` (tick-driven, 1 Hz)      |
+| Intent (where does it _want_ to be)            | `x, y, z, fav.{x,y,z}` (target percents, not live position)                                  | `/src/sim`, read by steering        |
+| Steering (how does it get there)               | `YUKA.Vehicle` position/velocity, active behaviors                                           | `/src/render/steering`              |
+| Physical truth (where is it _actually_)        | `RigidBody` translation/rotation                                                             | Rapier world, `@react-three/rapier` |
+| Presentation (how does it look doing that)     | GLTF pose, spine-wave phase, material uniforms                                               | R3F component                       |
 
 Per frame: read the `RigidBody`'s actual position → feed it into the
 `YUKA.Vehicle` so steering always reasons from ground truth → `vehicle.update(delta)`
@@ -249,12 +249,12 @@ an actual heading quaternion computed from the steering velocity vector.
 ### 4.1 Fish
 
 - **Active behaviors: `WanderBehavior` + `SeparationBehavior`.** That's the
-  full default set — deliberately *not* `CohesionBehavior` or
+  full default set — deliberately _not_ `CohesionBehavior` or
   `AlignmentBehavior`. Jar's critters are named, individual pets, not an
   anonymous school; boid flocking makes multiple named fish move in
   lockstep, which reads as less alive, not more. Leave both weights at 0 by
   default.
-  - *Stretch, explicitly opt-in later:* a per-relationship "bonded pair"
+  - _Stretch, explicitly opt-in later:_ a per-relationship "bonded pair"
     attraction (e.g. parent/child, or two critters flagged as attached) as
     a small custom steering force scoped to that one relationship — not a
     global flock behavior. Not required for v1.
@@ -264,17 +264,18 @@ an actual heading quaternion computed from the steering velocity vector.
   same 30%-of-the-time rule `Jar.dc.html`'s mock uses, re-expressed as a
   proper steering behavior instead of a linear-interpolation target.
 - **Trait modulation** (traits are already defined in `SPEC.md` §5 —
-  this table says how each one bends the *steering* parameters, since the
+  this table says how each one bends the _steering_ parameters, since the
   2D version only had ad-hoc movement tweaks):
 
-  | Trait | Steering effect |
-  |---|---|
-  | `bold` | Larger wander circle radius; roams full tank height *and* depth (2D-only version restricted this to height) |
-  | `shy` | Separation radius scales up with population count — mirrors the existing mood formula's `-3×population` penalty, so shy fish are visibly keeping their distance, not just quietly unhappy about it |
-  | `curious` | Separation radius scales down with population — tolerates (seeks out) crowding |
-  | `sleepy` | Higher probability of a zero-length pause between wander-circle updates |
-  | `dramatic` | Wander jitter (the circle's angular displacement per step) at ~4× the base rate, matching the existing `4× noise` on its mood stat |
-  | `greedy` | No steering effect (its penalty is mood-only per `SPEC.md` §5) |
+  | Trait      | Steering effect                                                                                                                                                                                    |
+  | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `bold`     | Larger wander circle radius; roams full tank height _and_ depth (2D-only version restricted this to height)                                                                                        |
+  | `shy`      | Separation radius scales up with population count — mirrors the existing mood formula's `-3×population` penalty, so shy fish are visibly keeping their distance, not just quietly unhappy about it |
+  | `curious`  | Separation radius scales down with population — tolerates (seeks out) crowding                                                                                                                     |
+  | `sleepy`   | Higher probability of a zero-length pause between wander-circle updates                                                                                                                            |
+  | `dramatic` | Wander jitter (the circle's angular displacement per step) at ~4× the base rate, matching the existing `4× noise` on its mood stat                                                                 |
+  | `greedy`   | No steering effect (its penalty is mood-only per `SPEC.md` §5)                                                                                                                                     |
+
 - **Energy coupling:** `vehicle.maxSpeed` scales with `energy` — low energy
   slows movement, exactly as `SPEC.md` §5 already specifies ("Low energy
   slows movement and drops mood"); it's the same existing rule, not a new
@@ -430,23 +431,23 @@ would look like a different app wearing Jar's UI:
 
 ### 6.5 Genetics → visual mapping (reference table)
 
-| Gene (from `SPEC.md` §5) | 2D implementation | 3D implementation |
-|---|---|---|
-| `hue` | CSS `hsl(H, %, %)` per SVG element | `material.color.setHSL()` on the shared body material |
-| `fin` (fan/forked/veil) | Different SVG `path` per value | Morph-target selection on the `tail` bone's geometry |
-| `spots` (bool) | 3–4 SVG `<circle>` overlays | 3–4 small sphere primitives, visibility-toggled |
-| `sex` (male/female) | Not modeled in the 2D prototype; now tracked in the sim (`SPEC.md` §5) and shown in the critter card (`SCREENS.md` W2), but never had a *visual* form | Subtle dimorphism per §6.7 — small fin/scale/saturation multiplier, not a second mesh |
-| `trait` | Movement-loop branching | Yuka steering parameter modulation (§4.1) |
-| life stage | SVG size multiplier | Root-bone uniform scale (§6.3) |
-| `mood`/`energy` | (not visually shown beyond card UI) | Same — stats stay in the critter card, not the 3D model |
+| Gene (from `SPEC.md` §5) | 2D implementation                                                                                                                                     | 3D implementation                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `hue`                    | CSS `hsl(H, %, %)` per SVG element                                                                                                                    | `material.color.setHSL()` on the shared body material                                 |
+| `fin` (fan/forked/veil)  | Different SVG `path` per value                                                                                                                        | Morph-target selection on the `tail` bone's geometry                                  |
+| `spots` (bool)           | 3–4 SVG `<circle>` overlays                                                                                                                           | 3–4 small sphere primitives, visibility-toggled                                       |
+| `sex` (male/female)      | Not modeled in the 2D prototype; now tracked in the sim (`SPEC.md` §5) and shown in the critter card (`SCREENS.md` W2), but never had a _visual_ form | Subtle dimorphism per §6.7 — small fin/scale/saturation multiplier, not a second mesh |
+| `trait`                  | Movement-loop branching                                                                                                                               | Yuka steering parameter modulation (§4.1)                                             |
+| life stage               | SVG size multiplier                                                                                                                                   | Root-bone uniform scale (§6.3)                                                        |
+| `mood`/`energy`          | (not visually shown beyond card UI)                                                                                                                   | Same — stats stay in the critter card, not the 3D model                               |
 
 ### 6.6 Animation — procedural spine wave (primary), baked clips (optional secondary)
 
 Primary technique — no baked animation required:
 
 ```js
-const frequency = 4 + speed * 2;                    // faster swim → faster beat
-const amplitude = 0.15 + Math.abs(turnRate) * 0.3;   // sharper turn → bigger S-curve
+const frequency = 4 + speed * 2; // faster swim → faster beat
+const amplitude = 0.15 + Math.abs(turnRate) * 0.3; // sharper turn → bigger S-curve
 spineBones.forEach((bone, i) => {
   const phase = t * frequency + i * 1.1 + phaseSeed; // 1.1 rad stagger → wave travels head→tail
   bone.rotation.y = Math.sin(phase) * amplitude * (i / spineBones.length); // tail whips more than head
@@ -503,7 +504,7 @@ than a second character model:
 - **Genetics:** same hue-via-material-color and spot-via-toggleable-primitive
   approach as fish (§6.4/6.5). Gecko originals roll hue from the fixed
   palette already specified in `SPEC.md`/`Jar.dc.html` (`[28, 42, 75, 110,
-  150]`) rather than a free 0–360 roll — carry that constraint forward
+150]`) rather than a free 0–360 roll — carry that constraint forward
   unchanged.
 - **Gait:** procedural alternating-diagonal-pair leg rotation (same sine-
   wave technique as the fish spine, applied per-leg-pair with a phase
@@ -524,7 +525,7 @@ than a second character model:
 The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded
 glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window
 chrome around the 3D canvas — it does not change with this spec. The 3D
-scene is only what's *inside* the tank viewport.
+scene is only what's _inside_ the tank viewport.
 
 ### 8.1 Aquarium
 
@@ -590,6 +591,7 @@ visual particles only.
   benefit to more, real cost to more.
 
 ### 9.2 Mist (terrarium, `mist` toggle — same drawer slot as bubbles per
+
 `SCREENS.md`'s W1 drawer button list)
 
 - Same noise-perturbed-drift technique, but: softer/larger additive
@@ -720,7 +722,7 @@ components in `/src/render/models/`.
 Stated plainly so nobody accidentally scope-creeps toward them:
 
 - No real fluid/SPH water simulation.
-- No buoyancy force as the *primary* locomotion driver (steering is;
+- No buoyancy force as the _primary_ locomotion driver (steering is;
   buoyancy is idle-only flavor, §5.3).
 - No user-adjustable/orbit camera — fixed frontal view only (§2.3).
 - No ray-traced or screen-space-heavy water rendering as a v1 requirement.

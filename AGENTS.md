@@ -134,7 +134,7 @@ Examples:
 ## Frontend Code Conventions
 
 - **No barrel files.** Don't create an `index.ts`/`index.tsx` that only re-exports from sibling files. Import directly from the file that defines the thing (e.g. `import { FishModel } from '../render/models/FishModel'`, not from a `render/models/index.ts` that re-exports it). Barrels obscure the real dependency graph and slow down tree-shaking and IDE "go to definition."
-- **`/src/sim` does not exist.** Discrete sim logic (aging, mood, breeding, genetics, passing) lives in `crates/jar-core`, not TypeScript — see `docs/architecture/rust-core.md`. Frontend code only ever *reacts* to `TickUpdate`/`Born`/`Passed` events pushed over the Tauri `Channel`; it never re-derives sim rules.
+- **`/src/sim` does not exist.** Discrete sim logic (aging, mood, breeding, genetics, passing) lives in `crates/jar-core`, not TypeScript — see `docs/architecture/rust-core.md`. Frontend code only ever _reacts_ to `TickUpdate`/`Born`/`Passed` events pushed over the Tauri `Channel`; it never re-derives sim rules.
 
 ## Documentation
 

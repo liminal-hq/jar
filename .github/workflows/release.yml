@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
   build:
@@ -12,9 +12,9 @@ jobs:
       matrix:
         include:
           - platform: ubuntu-latest
-            args: ""
+            args: ''
           - platform: windows-latest
-            args: ""
+            args: ''
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
         with:
           projectPath: apps/jar
           tagName: ${{ github.ref_name }}
-          releaseName: "Jar ${{ github.ref_name }}"
+          releaseName: 'Jar ${{ github.ref_name }}'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

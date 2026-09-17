@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Jar is a tiny desktop/mobile digital-pet toy: a floating, transparent aquarium or terrarium window with a few auto-named critters who live, sleep, breed, age and pass on in real time. Built with Tauri v2, React (R3F/three.js for the 3D tank), and Rust. See `AGENTS.md` for the authoritative contributor conventions — most importantly: **Canadian English** spelling everywhere; **Conventional Commits** for commit messages but **never in PR titles**; the licence/copyright header on new source files; and **no pushes unless explicitly asked**. `SPEC.md` (+ `SCREENS.md`) describe product behaviour; `docs/architecture/3d-engine.md` and `docs/architecture/rust-core.md` describe the render/physics/AI stack and the Rust simulation core respectively.
 
-`docs/ui-mockups/` holds the original Claude Design prototype (`Jar.dc.html`, `support.js`, `ios-frame.jsx`, screenshots) that this app's product design and behaviour were specified from. It is historical reference only — see `docs/architecture/3d-engine.md` §0 for why its code is not meant to be ported, adapted, or structurally mirrored. Only the *behaviour* it demonstrates is authoritative, and only via `SPEC.md`/`SCREENS.md`.
+`docs/ui-mockups/` holds the original Claude Design prototype (`Jar.dc.html`, `support.js`, `ios-frame.jsx`, screenshots) that this app's product design and behaviour were specified from. It is historical reference only — see `docs/architecture/3d-engine.md` §0 for why its code is not meant to be ported, adapted, or structurally mirrored. Only the _behaviour_ it demonstrates is authoritative, and only via `SPEC.md`/`SCREENS.md`.
 
 ## Layout
 
