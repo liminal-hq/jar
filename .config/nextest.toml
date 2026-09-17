@@ -5,3 +5,4 @@ slow-timeout = { period = "30s", terminate-after = 2 }
 [profile.ci]
 retries = 2
 failure-output = "immediate-final"
+junit = { path = "junit.xml" }

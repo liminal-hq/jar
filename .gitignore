@@ -4,6 +4,7 @@
 # JS / Bun
 node_modules/
 dist/
+test-results/
 
 # Tauri
 apps/jar/src-tauri/gen/

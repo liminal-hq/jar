@@ -11,6 +11,7 @@
     "tauri": "bun run --cwd apps/jar tauri",
     "build": "bun run --cwd apps/jar build",
     "test:js": "vitest run",
+    "test:js:ci": "vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml",
     "test:rust": "cargo nextest run --workspace",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

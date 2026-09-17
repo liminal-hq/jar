@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: 'cargo'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    groups:
+      tauri:
+        patterns:
+          - 'tauri*'
+
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    groups:
+      tauri:
+        patterns:
+          - '@tauri-apps/*'
+          - 'tauri-plugin-*'
+      react-three:
+        patterns:
+          - 'three'
+          - '@types/three'
+          - '@react-three/*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
