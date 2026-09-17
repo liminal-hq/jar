@@ -2,5 +2,6 @@
 import type { Critter } from "./Critter";
 import type { CritterId } from "./CritterId";
 import type { CritterStats } from "./CritterStats";
+import type { JarSettings } from "./JarSettings";
 
-export type SimEvent = { "type": "Born", child: Critter, parent_a: CritterId, parent_b: CritterId, } | { "type": "Passed", id: CritterId, } | { "type": "TickUpdate", critters: Array<CritterStats>, };
+export type SimEvent = { "type": "Born", child: Critter, parent_a: CritterId, parent_b: CritterId, } | { "type": "Passed", id: CritterId, } | { "type": "TickUpdate", critters: Array<CritterStats>, } | { "type": "SettingsChanged", settings: JarSettings, } | { "type": "Renamed", id: CritterId, name: string, } | { "type": "Added", critter: Critter, };

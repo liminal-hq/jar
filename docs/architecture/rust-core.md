@@ -108,10 +108,15 @@ pub enum SimEvent {
     Born { child: Critter, parent_a: CritterId, parent_b: CritterId },
     Passed { id: CritterId },
     TickUpdate { critters: Vec<CritterStats> },  // mood/energy/age deltas
+    SettingsChanged { settings: JarSettings },
+    Renamed { id: CritterId, name: String },
+    Added { critter: Critter },
 }
 ```
 
 `CritterStats` is a slim projection (id + the fields that actually change tick-to-tick: mood, energy, age_sec, alive) — no reason to re-send genetics or name on every routine push when nothing about them changed.
+
+`SettingsChanged`/`Renamed`/`Added` are the same one-shot push mechanism as `Born`/`Passed`, fired by every `set_*`/`rename_critter`/`add_critter` command rather than only by the tick loop — a setting or a critter's roster changes at the moment a command runs, not on the tick cadence, so it's pushed then, not batched into the next `TickUpdate`.
 
 ### 3.4 Commands (frontend → core)
 
@@ -163,7 +168,9 @@ A native loop, independent of the webview, driving `jar-core`'s tick via the fix
 
 ### 5.2 Push model
 
-A Tauri `Channel<SimEvent>` (City Sim's exact mechanism — Tauri v2's purpose-built primitive for repeated backend→frontend pushes, cheaper than the general event bus for this). Two kinds of push, per §4.7: routine `TickUpdate`s on the regular cadence, and `Born`/`Passed` pushed the instant they occur.
+A Tauri `Channel<SimEvent>` (City Sim's exact mechanism — Tauri v2's purpose-built primitive for repeated backend→frontend pushes, cheaper than the general event bus for this). Two kinds of push, per §4.7: routine `TickUpdate`s on the regular cadence, and one-shot events — `Born`/`Passed` from the tick loop, `SettingsChanged`/`Renamed`/`Added` from command handlers — pushed the instant they occur.
+
+The plugin keeps exactly one live `Channel`, registered by whichever window last called `start` (in practice, the tank window — see `AGENTS.md`'s repository layout note on `apps/jar/src/domain/jarClient.ts`). Every other open window never holds a `Channel` of its own; it hydrates once via `get_snapshot` and then listens for the tank window's rebroadcast of each event over a plain Tauri app event, so a setting changed from Setup, a critter renamed from the critter card, or a critter added from any window reaches every other open window without each one needing its own channel. A window closed at the moment an event fires can miss it — a known, accepted limitation of this simplification, not something the command handlers or this doc's event contract try to paper over.
 
 ### 5.3 Persistence — the autosave decision
 

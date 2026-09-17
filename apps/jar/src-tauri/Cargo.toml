@@ -16,5 +16,12 @@ tauri = { workspace = true, features = ["tray-icon"] }
 tauri-plugin-jar = { path = "../../../plugins/tauri-plugin-jar" }
 tauri-plugin-window-state = "2"
 tauri-plugin-os = "2"
+# Debug-only automation bridge (see `run()` in `src/lib.rs` — only
+# registered under `#[cfg(debug_assertions)]`), lets an agent drive and
+# screenshot the running app during development. Not a dev-dependency:
+# `[dev-dependencies]` aren't available to the main lib/bin target, only to
+# tests/examples/benches, so it has to be a normal dependency even though
+# it's only ever activated in debug builds.
+tauri-plugin-mcp-bridge = "0.13"
 serde = { workspace = true }
 serde_json = "1"

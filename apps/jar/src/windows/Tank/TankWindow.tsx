@@ -6,6 +6,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Drawer } from '../../components/Drawer';
@@ -29,6 +30,13 @@ export function TankWindow() {
     applyDialogTheme(settings.dialog_theme);
     applyTankFrame(settings.frame);
   }, [settings.dialog_theme, settings.frame]);
+
+  useEffect(() => {
+    // `settings.always_on_top` (SPEC.md §6) is a fact about the window,
+    // not just a stored preference — keep the OS-level window flag in sync
+    // with it whenever it changes, from any window.
+    void getCurrentWindow().setAlwaysOnTop(settings.always_on_top);
+  }, [settings.always_on_top]);
 
   const statusText = useMemo(() => {
     if (!hydrated) return 'loading…';
