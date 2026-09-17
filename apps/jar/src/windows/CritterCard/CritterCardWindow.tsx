@@ -28,12 +28,12 @@ export function CritterCardWindow() {
   }, []);
 
   if (!critter) {
-    return <DialogShell>No critter selected yet.</DialogShell>;
+    return <DialogShell windowTitle="Critter card">No critter selected yet.</DialogShell>;
   }
 
   if (!critter.alive) {
     return (
-      <DialogShell title={critter.name}>
+      <DialogShell windowTitle="Critter card" title={critter.name}>
         <p style={{ fontStyle: 'italic' }}>Remembered fondly — this one has passed on.</p>
       </DialogShell>
     );
@@ -44,6 +44,7 @@ export function CritterCardWindow() {
 
   return (
     <DialogShell
+      windowTitle="Critter card"
       title={
         <input
           key={critter.id}

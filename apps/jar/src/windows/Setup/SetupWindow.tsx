@@ -43,7 +43,7 @@ export function SetupWindow() {
   const jarDay = (simSeconds / 120).toFixed(2);
 
   return (
-    <DialogShell title="Setup">
+    <DialogShell windowTitle="Setup" title="Setup">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <label>
           Mode

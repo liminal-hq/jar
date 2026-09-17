@@ -1,14 +1,22 @@
 /* (c) Copyright 2026 Scott Morris */
 /* SPDX-License-Identifier: Apache-2.0 OR MIT */
 
+.wrapper {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
 .shell {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   padding: 16px;
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
   background: var(--jar-bg, #fbfaf6);
   color: var(--jar-ink, #2b2a33);
-  border-radius: var(--jar-radius, 0);
   box-shadow: var(--jar-shadow, none);
   box-sizing: border-box;
 }
@@ -16,25 +24,4 @@
 .title {
   margin: 0 0 8px;
   color: var(--jar-accent, #3a8dde);
-}
-
-/* SPEC.md §4's per-theme title chrome — not expressible as a single
- * --jar-* token, so these key off the `data-dialog-theme` attribute
- * `applyDialogTheme` sets on <html> instead. */
-html[data-dialog-theme='Classic98'] .title {
-  margin: -16px -16px 12px;
-  padding: 6px 16px;
-  background: linear-gradient(90deg, #0a1f8f, #2d3e8f 60%, #6c7fd6);
-  color: #fff;
-}
-
-html[data-dialog-theme='PaperNotebook'] .title {
-  font-style: italic;
-}
-
-html[data-dialog-theme='HandheldLcd'] .title {
-  margin: -16px -16px 12px;
-  padding: 6px 16px;
-  background: #0f380f;
-  color: #9bbc0f;
 }

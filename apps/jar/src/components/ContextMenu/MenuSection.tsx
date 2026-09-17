@@ -1,0 +1,29 @@
+// Grouped section of items within the context menu.
+//
+// (c) Copyright 2026 Scott Morris
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+import styles from './ContextMenu.module.css';
+import { MenuItem } from './MenuItem';
+import type { MenuItem as MenuItemType, MenuSection as MenuSectionType } from './types';
+
+interface MenuSectionProps {
+  section: MenuSectionType;
+  onItemClick: (itemId: string, action?: () => void) => void;
+}
+
+export function MenuSection({ section, onItemClick }: MenuSectionProps) {
+  return (
+    <div className={styles.menuSection}>
+      {section.title && <div className={styles.menuSectionTitle}>{section.title}</div>}
+      {section.items.map((item, idx) => {
+        if ('type' in item && item.type === 'separator') {
+          return <div key={idx} className={styles.menuSeparator} />;
+        }
+
+        const menuItem = item as MenuItemType;
+        return <MenuItem key={menuItem.id} item={menuItem} onItemClick={onItemClick} />;
+      })}
+    </div>
+  );
+}

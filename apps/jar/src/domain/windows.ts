@@ -48,6 +48,10 @@ export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<voi
     x: tankPosition.x + tankSize.width + 16,
     y: tankPosition.y,
     resizable: true,
+    // OS chrome is replaced entirely by `components/TitleBar`, themed per
+    // SPEC.md §4 — `spec.title` above still sets the OS-level window title
+    // (taskbar/alt-tab), independent of what TitleBar renders in-content.
+    decorations: false,
   });
 
   win.once('tauri://error', (e) => {
