@@ -4,7 +4,9 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
-    open-pull-requests-limit: 5
+    # Dormant while the aquarium/theming PR stack is landing (matches the
+    # org's own default) — bump this back to 5 once that stack is merged.
+    open-pull-requests-limit: 0
     labels:
       - 'build'
     groups:
@@ -16,7 +18,7 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - 'build'
     groups:
@@ -34,6 +36,6 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     labels:
       - 'ci'
