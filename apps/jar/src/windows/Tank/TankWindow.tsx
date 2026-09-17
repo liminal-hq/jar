@@ -27,9 +27,9 @@ export function TankWindow() {
   }, []);
 
   useEffect(() => {
-    applyDialogTheme(settings.dialog_theme);
+    applyDialogTheme(settings.dialog_theme, settings.theme_variants[settings.dialog_theme]);
     applyTankFrame(settings.frame);
-  }, [settings.dialog_theme, settings.frame]);
+  }, [settings.dialog_theme, settings.theme_variants, settings.frame]);
 
   useEffect(() => {
     // `settings.always_on_top` (SPEC.md §6) is a fact about the window,

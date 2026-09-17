@@ -1,8 +1,6 @@
 // W4 · Setup (SCREENS.md). Shows every option at once: mode, frame, dialog
 // theme + variant, tank toggles, simulation speed, jar clock, add a
-// critter. Variant selection (the row that changes per theme, SPEC.md §4)
-// isn't wired up yet — `jar.setTheme` always sends the theme's default
-// variant name for now; see `NEXT_STEPS.md`.
+// critter.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -14,6 +12,7 @@ import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient
 import type { DialogTheme } from '../../domain/protocol/generated/DialogTheme';
 import type { Species } from '../../domain/protocol/generated/Species';
 import type { TankFrame } from '../../domain/protocol/generated/TankFrame';
+import { defaultVariantOf, variantNamesFor } from '../../theme/theme';
 
 const FRAMES: TankFrame[] = [
   'Bevelled98',
@@ -75,9 +74,14 @@ export function SetupWindow() {
           Dialog theme
           <select
             value={settings.dialog_theme}
-            onChange={(e) =>
-              void jar.setTheme(e.target.value as DialogTheme, settings.theme_variant)
-            }
+            onChange={(e) => {
+              const nextTheme = e.target.value as DialogTheme;
+              // Switching theme never changes its remembered variant
+              // (SPEC.md §4/§6) — pass through whatever's already stored
+              // for it, falling back to that theme's documented default.
+              const nextVariant = settings.theme_variants[nextTheme] ?? defaultVariantOf(nextTheme);
+              void jar.setTheme(nextTheme, nextVariant);
+            }}
           >
             {THEMES.map((t) => (
               <option key={t} value={t}>
@@ -86,6 +90,28 @@ export function SetupWindow() {
             ))}
           </select>
         </label>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {variantNamesFor(settings.dialog_theme).map((variant) => {
+            const active = settings.theme_variants[settings.dialog_theme] === variant;
+            return (
+              <button
+                key={variant}
+                onClick={() => void jar.setTheme(settings.dialog_theme, variant)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  border: active ? '2px solid var(--jar-accent)' : '1px solid var(--jar-ink)',
+                  background: active ? 'var(--jar-accent)' : 'transparent',
+                  color: active ? 'var(--jar-bg)' : 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                {variant}
+              </button>
+            );
+          })}
+        </div>
 
         <label>
           <input

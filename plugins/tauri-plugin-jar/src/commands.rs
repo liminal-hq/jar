@@ -142,11 +142,16 @@ pub fn set_toggle(plugin: State<'_, JarPlugin>, toggle: Toggle, on: bool) -> Res
     Ok(())
 }
 
+/// Switches the active dialog theme and/or updates that theme's remembered
+/// variant (SPEC.md §4 — "one remembered per theme") in one call: the
+/// frontend passes the already-remembered variant on a plain theme switch,
+/// or the current theme with a newly picked variant on a chip click, so
+/// this always just records whatever `variant` it's given against `theme`.
 #[command]
 pub fn set_theme(plugin: State<'_, JarPlugin>, theme: DialogTheme, variant: String) -> Result<()> {
     let settings = with_jar(&plugin, |jar| {
         jar.settings.dialog_theme = theme;
-        jar.settings.theme_variant = variant;
+        jar.settings.theme_variants.insert(theme, variant);
         Ok(jar.settings.clone())
     })?;
     push_event(&plugin, SimEvent::SettingsChanged { settings });

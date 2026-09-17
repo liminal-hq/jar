@@ -5,11 +5,14 @@ import type { TankFrame } from "./TankFrame";
 
 export type JarSettings = { mode: Species, frame: TankFrame, dialog_theme: DialogTheme, 
 /**
- * One remembered variant name per theme (SPEC.md §4's "Variants" table)
- * — kept as a free string here since the variant vocabulary differs per
- * theme and is a presentation-only concern the core doesn't interpret.
+ * One remembered variant name per theme (SPEC.md §4's "Variants" table
+ * and §6's "dialog theme + variant per theme" persistence rule) — kept
+ * as free strings here since the variant vocabulary differs per theme
+ * and is a presentation-only concern the core doesn't interpret.
+ * Switching `dialog_theme` never touches this map; only an explicit
+ * variant pick (or the initial default below) writes to it.
  */
-theme_variant: string, light_on: boolean, ambient_particles_on: boolean, sound_on: boolean, 
+theme_variants: { [key in DialogTheme]?: string }, light_on: boolean, ambient_particles_on: boolean, sound_on: boolean, 
 /**
  * 1-60, Real time = 1 (SPEC.md §5).
  */

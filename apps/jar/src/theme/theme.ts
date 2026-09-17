@@ -19,9 +19,9 @@ export interface DialogThemeTokens {
   shadow: string;
 }
 
-/** One entry per `DialogTheme` variant (SPEC.md §4). Variant-specific
- * accents (Lagoon/Bubblegum/Moss/Clementine for Modern, etc.) aren't
- * modelled per-variant yet — `accent` below is each theme's default. */
+/** Each theme's base tokens — overridden by the currently-selected variant's
+ * background/ink/accent in `applyDialogTheme` (see `DIALOG_THEME_VARIANTS`
+ * below); `accent` here is only the fallback used before a variant hydrates. */
 export const DIALOG_THEMES: Record<DialogTheme, DialogThemeTokens> = {
   Modern: {
     background: '#fbfaf6',
@@ -67,6 +67,77 @@ export const DIALOG_THEMES: Record<DialogTheme, DialogThemeTokens> = {
   },
 };
 
+export interface DialogThemeVariantTokens {
+  background: string;
+  ink: string;
+  accent: string;
+}
+
+/** Named variant lists per `DialogTheme` (SPEC.md §4's "Variants" table) —
+ * one remembered pick per theme, per `JarSettings.theme_variants`. Each
+ * entry's key order is display order (the first is that theme's documented
+ * default). Only background/ink/accent vary by variant; radius and shadow
+ * stay theme-level (`DIALOG_THEMES`). Modern and Modern dark share the same
+ * accent vocabulary but pick independently, matching `theme_variants` being
+ * keyed by theme rather than by variant list. */
+export const DIALOG_THEME_VARIANTS: Record<
+  DialogTheme,
+  Record<string, DialogThemeVariantTokens>
+> = {
+  Modern: {
+    Lagoon: { background: '#fbfaf6', ink: '#2b2a33', accent: '#3a8dde' },
+    Bubblegum: { background: '#fbfaf6', ink: '#2b2a33', accent: '#ff3fd8' },
+    Moss: { background: '#fbfaf6', ink: '#2b2a33', accent: '#4caf50' },
+    Clementine: { background: '#fbfaf6', ink: '#2b2a33', accent: '#e07a2c' },
+  },
+  ModernDark: {
+    Lagoon: { background: '#1c1a22', ink: '#f1eee6', accent: '#3a8dde' },
+    Bubblegum: { background: '#1c1a22', ink: '#f1eee6', accent: '#ff3fd8' },
+    Moss: { background: '#1c1a22', ink: '#f1eee6', accent: '#4caf50' },
+    Clementine: { background: '#1c1a22', ink: '#f1eee6', accent: '#e07a2c' },
+  },
+  Classic98: {
+    'Classic blue': { background: '#c9c6bd', ink: '#101010', accent: '#2d3e8f' },
+    'Teal desktop': { background: '#bcd2ce', ink: '#0d2b28', accent: '#1f7a6c' },
+    Brick: { background: '#d9c3b0', ink: '#3a1c12', accent: '#a13d24' },
+    'Rainy day': { background: '#c7ccd1', ink: '#20272d', accent: '#51697f' },
+    'High contrast': { background: '#000000', ink: '#ffffff', accent: '#ffe600' },
+  },
+  PaperNotebook: {
+    'Ruled cream': { background: '#fff9ec', ink: '#3b2f2a', accent: '#c2452d' },
+    'Graph paper': { background: '#f2f7f7', ink: '#2c3b3b', accent: '#2f7d7d' },
+    'Legal pad': { background: '#fdf6c9', ink: '#3a3115', accent: '#c98a12' },
+    Kraft: { background: '#d9c19a', ink: '#3a2c19', accent: '#7a4a25' },
+  },
+  HandheldLcd: {
+    'Pea soup': { background: '#9bbc0f', ink: '#0f380f', accent: '#306230' },
+    'Pocket grey': { background: '#c8cbc0', ink: '#2b2d28', accent: '#5a5d54' },
+    Berry: { background: '#d68fc2', ink: '#3a0f2b', accent: '#8a2a63' },
+    Glacier: { background: '#9fd0e0', ink: '#0f2f38', accent: '#2b7f97' },
+  },
+  NeonTerminal: {
+    Magenta: { background: '#141018', ink: '#ff3fd8', accent: '#ff3fd8' },
+    Amber: { background: '#141018', ink: '#ffb000', accent: '#ffb000' },
+    'Phosphor green': { background: '#0d1410', ink: '#39ff14', accent: '#39ff14' },
+    Cyan: { background: '#0d1418', ink: '#00e5ff', accent: '#00e5ff' },
+  },
+};
+
+/** Display-order variant names for a theme — the first is its documented
+ * default (SPEC.md §4). Useful as a fallback when `theme_variants` has no
+ * entry yet for a theme (shouldn't happen once `JarSettings::default()`/
+ * `migrate_v1` have run, but keeps the UI from indexing a missing key). */
+export function variantNamesFor(theme: DialogTheme): string[] {
+  return Object.keys(DIALOG_THEME_VARIANTS[theme]);
+}
+
+/** A theme's documented default variant (SPEC.md §4) — the non-null
+ * assertion reflects that every theme's variant list is a non-empty static
+ * literal above, not a runtime guess. */
+export function defaultVariantOf(theme: DialogTheme): string {
+  return variantNamesFor(theme)[0]!;
+}
+
 /** Bezel treatment per `TankFrame` (SPEC.md §4). Only the CSS-level parts —
  * the 3D-side Neon/CRT scanline pass lives in
  * `render/effects` per `docs/architecture/3d-engine.md` §10.3. */
@@ -79,8 +150,12 @@ export const TANK_FRAMES: Record<TankFrame, { bezelWidth: string; bezelColor: st
   CardboardCutout: { bezelWidth: '16px', bezelColor: '#b89666' },
 };
 
-export function applyDialogTheme(theme: DialogTheme): void {
+/** `variant`, if given, should be one of `variantNamesFor(theme)` — SPEC.md
+ * §4's named per-theme accent/palette pick. Falls back to the theme's base
+ * tokens when omitted or not found (e.g. before `theme_variants` hydrates). */
+export function applyDialogTheme(theme: DialogTheme, variant?: string): void {
   const tokens = DIALOG_THEMES[theme];
+  const variantTokens = variant ? DIALOG_THEME_VARIANTS[theme][variant] : undefined;
   const root = document.documentElement;
   // A selector hook for the theme-specific chrome that isn't expressible as
   // a single custom-property value (SPEC.md §4: Classic 98's title bar,
@@ -88,10 +163,10 @@ export function applyDialogTheme(theme: DialogTheme): void {
   // `components/DialogShell.module.css`.
   root.dataset.dialogTheme = theme;
   const style = root.style;
-  style.setProperty('--jar-bg', tokens.background);
-  style.setProperty('--jar-ink', tokens.ink);
+  style.setProperty('--jar-bg', variantTokens?.background ?? tokens.background);
+  style.setProperty('--jar-ink', variantTokens?.ink ?? tokens.ink);
   style.setProperty('--jar-radius', tokens.radius);
-  style.setProperty('--jar-accent', tokens.accent);
+  style.setProperty('--jar-accent', variantTokens?.accent ?? tokens.accent);
   style.setProperty('--jar-shadow', tokens.shadow);
 }
 

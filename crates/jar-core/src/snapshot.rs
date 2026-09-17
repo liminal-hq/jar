@@ -7,7 +7,10 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{Critter, JarSettings};
+use jar_protocol::{
+    default_theme_variants, known_theme_variant_names, Critter, DialogTheme, JarSettings, Species,
+    TankFrame,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -17,12 +20,21 @@ use crate::state::JarState;
 const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
-/// every time `SnapshotV1` (or its successor) changes shape.
-const CURRENT_VERSION: u16 = 1;
+/// every time the current snapshot body changes shape.
+const CURRENT_VERSION: u16 = 2;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
 // yet.
+//
+// v2 (2026-09-17): `JarSettings.theme_variant: String` became
+// `theme_variants: BTreeMap<DialogTheme, String>` (SPEC.md §6: "dialog
+// theme + variant per theme" — one remembered per theme, not one global
+// slot). `postcard` isn't self-describing, so this shape change means old
+// bytes can't just be read with the new `JarSettings` — `SettingsV1`/
+// `SnapshotV1` below are frozen copies of the pre-v2 shape, kept only so
+// `migrate_v1` can decode them and carry the single old variant forward
+// into its theme's new map slot.
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -30,8 +42,31 @@ struct SnapshotHeader {
     version: u16,
 }
 
+/// The pre-v2 `JarSettings` shape — see the v2 comment above. Not the live
+/// `jar_protocol::JarSettings`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct SettingsV1 {
+    mode: Species,
+    frame: TankFrame,
+    dialog_theme: DialogTheme,
+    theme_variant: String,
+    light_on: bool,
+    ambient_particles_on: bool,
+    sound_on: bool,
+    simulation_speed: u8,
+    always_on_top: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV1 {
+    critters: Vec<Critter>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: SettingsV1,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV2 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -55,7 +90,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV1 {
+    let body = SnapshotV2 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -67,20 +102,59 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
     Ok(bytes)
 }
 
+/// Carries a v1 snapshot's single remembered variant into its theme's slot
+/// in the new per-theme map, backfilling every other theme with
+/// `JarSettings::default()`'s documented defaults (SPEC.md §4) — those
+/// themes were never visited under v1, so there's no real prior pick to
+/// preserve for them.
+fn migrate_v1(v1: SnapshotV1) -> SnapshotV2 {
+    let mut theme_variants = default_theme_variants();
+    // v1 had one global variant slot, not one per theme — the pre-variants-
+    // map Setup UI could only ever echo that single slot's current value
+    // back on a plain theme switch, so it's often a stale name that never
+    // actually belonged to `dialog_theme` (e.g. "Lagoon" left over from
+    // Modern while `dialog_theme` reads NeonTerminal). Only trust it when
+    // it's actually one of `dialog_theme`'s own named variants; otherwise
+    // the seeded default above stands.
+    if known_theme_variant_names(v1.settings.dialog_theme)
+        .contains(&v1.settings.theme_variant.as_str())
+    {
+        theme_variants.insert(v1.settings.dialog_theme, v1.settings.theme_variant);
+    }
+
+    SnapshotV2 {
+        critters: v1.critters,
+        sim_seconds: v1.sim_seconds,
+        speed: v1.speed,
+        settings: JarSettings {
+            mode: v1.settings.mode,
+            frame: v1.settings.frame,
+            dialog_theme: v1.settings.dialog_theme,
+            theme_variants,
+            light_on: v1.settings.light_on,
+            ambient_particles_on: v1.settings.ambient_particles_on,
+            sound_on: v1.settings.sound_on,
+            simulation_speed: v1.settings.simulation_speed,
+            always_on_top: v1.settings.always_on_top,
+        },
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
     if header.magic != MAGIC {
         return Err(SnapshotError::BadMagic);
     }
-    if header.version != CURRENT_VERSION {
-        // No prior versions exist yet to migrate from — once one does, this
-        // is where a `match header.version { 0 => migrate_v0(...), ... }`
-        // ladder goes, not a hard error.
-        return Err(SnapshotError::UnsupportedVersion(header.version));
-    }
 
-    let body: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+    let body: SnapshotV2 = match header.version {
+        1 => {
+            let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v1(v1)
+        }
+        2 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        other => return Err(SnapshotError::UnsupportedVersion(other)),
+    };
 
     let mut state = JarState::new(body.settings);
     state.critters = body.critters;
@@ -133,5 +207,99 @@ mod tests {
 
         assert!(!restored.settings.light_on);
         assert_eq!(restored.settings.simulation_speed, 42);
+    }
+
+    #[test]
+    fn decode_migrates_a_v1_snapshot_into_the_per_theme_variants_map() {
+        let v1 = SnapshotV1 {
+            critters: Vec::new(),
+            sim_seconds: 12.0,
+            speed: 3,
+            settings: SettingsV1 {
+                mode: Species::Fish,
+                frame: TankFrame::WoodStand,
+                dialog_theme: DialogTheme::NeonTerminal,
+                theme_variant: "Cyan".to_string(),
+                light_on: false,
+                ambient_particles_on: true,
+                sound_on: true,
+                simulation_speed: 5,
+                always_on_top: true,
+            },
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 1,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v1).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        // The one variant v1 actually had a pick for carries forward...
+        assert_eq!(
+            restored
+                .settings
+                .theme_variants
+                .get(&DialogTheme::NeonTerminal),
+            Some(&"Cyan".to_string())
+        );
+        // ...every other theme is backfilled with its documented default,
+        // not left missing.
+        assert_eq!(restored.settings.theme_variants.len(), 6);
+        assert_eq!(
+            restored.settings.theme_variants.get(&DialogTheme::Modern),
+            Some(&"Lagoon".to_string())
+        );
+        // The rest of v1's settings and the clock/critters carry over too.
+        assert_eq!(restored.settings.dialog_theme, DialogTheme::NeonTerminal);
+        assert_eq!(restored.settings.frame, TankFrame::WoodStand);
+        assert!(restored.settings.always_on_top);
+        assert_eq!(restored.clock.sim_seconds, 12.0);
+        assert_eq!(restored.clock.speed, 3);
+    }
+
+    #[test]
+    fn decode_discards_a_v1_variant_that_never_belonged_to_its_theme() {
+        // v1's single global variant slot could only ever echo back its
+        // current value on a plain theme switch (there was no per-theme
+        // chip UI yet) — so a real v1 snapshot commonly has a `dialog_theme`
+        // of, say, NeonTerminal paired with a `theme_variant` of "Lagoon",
+        // left over from whenever Modern's default was last active. That
+        // combination should be treated as stale, not carried forward.
+        let v1 = SnapshotV1 {
+            critters: Vec::new(),
+            sim_seconds: 0.0,
+            speed: 1,
+            settings: SettingsV1 {
+                mode: Species::Fish,
+                frame: TankFrame::Bevelled98,
+                dialog_theme: DialogTheme::NeonTerminal,
+                theme_variant: "Lagoon".to_string(), // not one of NeonTerminal's variants
+                light_on: true,
+                ambient_particles_on: true,
+                sound_on: false,
+                simulation_speed: 1,
+                always_on_top: false,
+            },
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 1,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v1).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        // The stale "Lagoon" is discarded; NeonTerminal keeps its own
+        // documented default instead of an invalid value.
+        assert_eq!(
+            restored
+                .settings
+                .theme_variants
+                .get(&DialogTheme::NeonTerminal),
+            Some(&"Magenta".to_string())
+        );
     }
 }
