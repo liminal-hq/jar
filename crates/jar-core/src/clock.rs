@@ -90,3 +90,67 @@ impl Default for JarClock {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accumulate_returns_whole_ticks_and_carries_the_remainder() {
+        let mut clock = JarClock::new();
+        clock.speed = 1;
+        assert_eq!(clock.accumulate(1.0), 1);
+        assert_eq!(clock.accumulate(0.5), 0); // half a second isn't a whole tick yet
+        assert_eq!(clock.accumulate(0.5), 1); // the other half completes it
+    }
+
+    #[test]
+    fn accumulate_caps_at_max_ticks_per_step_and_carries_the_rest() {
+        let mut clock = JarClock::new();
+        clock.speed = 60;
+        // 10 real seconds at 60x = 600 sim-seconds, capped at 120 per step
+        // — 600 / 120 = exactly 5 capped steps, then the accumulator is
+        // empty and a further step yields nothing.
+        assert_eq!(clock.accumulate(10.0), 120);
+        assert_eq!(clock.accumulate(0.0), 120);
+        assert_eq!(clock.accumulate(0.0), 120);
+        assert_eq!(clock.accumulate(0.0), 120);
+        assert_eq!(clock.accumulate(0.0), 120);
+        assert_eq!(clock.accumulate(0.0), 0); // accumulator now empty
+    }
+
+    #[test]
+    fn resume_preserves_sim_seconds_and_speed_with_an_empty_accumulator() {
+        let clock = JarClock::resume(1234.0, 30);
+        assert_eq!(clock.sim_seconds, 1234.0);
+        assert_eq!(clock.speed, 30);
+
+        let mut clock = clock;
+        // An empty accumulator means a zero-length step yields no ticks.
+        assert_eq!(clock.accumulate(0.0), 0);
+    }
+
+    #[test]
+    fn is_night_at_the_day_start_boundary() {
+        // 7/24 of a 120s jar-day = 35s exactly. The day window is
+        // [7/24, 21/24), so 35s is day and anything just below it is night.
+        assert!(!JarClock::resume(35.0, 1).is_night());
+        assert!(JarClock::resume(34.0, 1).is_night());
+    }
+
+    #[test]
+    fn is_night_at_the_night_start_boundary() {
+        // 21/24 of a 120s jar-day = 105s exactly. The day window's end is
+        // exclusive, so 105s is already night; just below it is still day.
+        assert!(JarClock::resume(105.0, 1).is_night());
+        assert!(!JarClock::resume(104.0, 1).is_night());
+    }
+
+    #[test]
+    fn is_night_wraps_across_midnight() {
+        // A fraction of exactly 0 (a fresh jar-day boundary) is still within
+        // the night window, which spans the wrap.
+        assert!(JarClock::resume(0.0, 1).is_night());
+        assert!(JarClock::resume(120.0, 1).is_night()); // one full jar-day later
+    }
+}

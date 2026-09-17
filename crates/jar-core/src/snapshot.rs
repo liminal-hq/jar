@@ -87,3 +87,51 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     state.clock = JarClock::resume(body.sim_seconds, body.speed);
     Ok(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_rejects_bytes_with_the_wrong_magic() {
+        let mut bytes = encode(&JarState::new(JarSettings::default())).unwrap();
+        bytes[0] = b'X'; // corrupt the first magic byte
+        assert!(matches!(decode(&bytes), Err(SnapshotError::BadMagic)));
+    }
+
+    #[test]
+    fn decode_rejects_a_version_newer_than_this_build_supports() {
+        // Constructed directly against the private header type rather than
+        // by poking raw bytes, since postcard varint-encodes `version` —
+        // its byte width isn't fixed, so hand-corrupting offsets would be
+        // fragile. `decode` checks the version before it ever looks at the
+        // body, so no body bytes are needed here.
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: CURRENT_VERSION + 1,
+        };
+        let bytes = postcard::to_allocvec(&header).unwrap();
+
+        let err = decode(&bytes).err().expect("expected decode to fail");
+        match err {
+            SnapshotError::UnsupportedVersion(v) => assert_eq!(v, CURRENT_VERSION + 1),
+            other => panic!("expected UnsupportedVersion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn settings_survive_a_round_trip() {
+        let settings = JarSettings {
+            light_on: false,
+            simulation_speed: 42,
+            ..JarSettings::default()
+        };
+        let state = JarState::new(settings);
+
+        let bytes = encode(&state).unwrap();
+        let restored = decode(&bytes).unwrap();
+
+        assert!(!restored.settings.light_on);
+        assert_eq!(restored.settings.simulation_speed, 42);
+    }
+}
