@@ -81,12 +81,18 @@ export const TANK_FRAMES: Record<TankFrame, { bezelWidth: string; bezelColor: st
 
 export function applyDialogTheme(theme: DialogTheme): void {
   const tokens = DIALOG_THEMES[theme];
-  const root = document.documentElement.style;
-  root.setProperty('--jar-bg', tokens.background);
-  root.setProperty('--jar-ink', tokens.ink);
-  root.setProperty('--jar-radius', tokens.radius);
-  root.setProperty('--jar-accent', tokens.accent);
-  root.setProperty('--jar-shadow', tokens.shadow);
+  const root = document.documentElement;
+  // A selector hook for the theme-specific chrome that isn't expressible as
+  // a single custom-property value (SPEC.md §4: Classic 98's title bar,
+  // Paper notebook's italic titles, Handheld LCD's title strip) — see
+  // `components/DialogShell.module.css`.
+  root.dataset.dialogTheme = theme;
+  const style = root.style;
+  style.setProperty('--jar-bg', tokens.background);
+  style.setProperty('--jar-ink', tokens.ink);
+  style.setProperty('--jar-radius', tokens.radius);
+  style.setProperty('--jar-accent', tokens.accent);
+  style.setProperty('--jar-shadow', tokens.shadow);
 }
 
 export function applyTankFrame(frame: TankFrame): void {

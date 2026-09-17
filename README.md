@@ -6,7 +6,7 @@
 
 A tiny simulation in a box. A floating desktop aquarium/terrarium with a few auto-named critters who live, sleep, breed, age and pass on in real time. Windows 98 novelty-desktop-pet energy, with a nicer interface and flat vector art — a toy you glance at, not a game you win.
 
-> **Status:** the aquarium/fish path is a working vertical slice — a native Rust simulation core with unit test coverage, a background tick loop that keeps running while the window is hidden, a real-time R3F tank, and all four windows (Tank, Setup, Critter card, Family tree). `bun run validate` (frontend and backend tests, formatting, lint) runs on every change. The dialog theme system only reaches the tank window's drawer so far — Setup, Critter card, and Family tree aren't themed yet, and theme variants and the neon/CRT tank-frame effect aren't wired up. Terrarium/gecko mode is a planned future extension, not yet started.
+> **Status:** the aquarium/fish path is a working vertical slice — a native Rust simulation core with unit test coverage, a background tick loop that keeps running while the window is hidden, a real-time R3F tank, and all four windows (Tank, Setup, Critter card, Family tree) themed and live-updating together. `bun run validate` (frontend and backend tests, formatting, lint) runs on every change. Theme variants and the neon/CRT tank-frame effect aren't wired up yet. Terrarium/gecko mode is a planned future extension, not yet started.
 
 ## What's in the jar
 
