@@ -54,10 +54,9 @@ pub fn set_speed(plugin: State<'_, JarPlugin>, speed: u8) -> Result<()> {
     let settings = with_jar(&plugin, |jar| {
         let clamped = speed.clamp(1, 60);
         jar.clock.speed = clamped;
-        // `set_speed` used to leave `settings.simulation_speed` stale —
-        // the clock's own speed field was updated, but `get_snapshot`
-        // (and thus every satellite window's hydration) kept reporting
-        // whatever speed the jar started with.
+        // `clock.speed` drives the sim; `settings.simulation_speed` is the
+        // persisted/reported copy `get_snapshot` and every window's
+        // hydration read — both must stay equal, since they're one fact.
         jar.settings.simulation_speed = clamped;
         Ok(jar.settings.clone())
     })?;
@@ -231,10 +230,9 @@ mod tests {
     /// `apps/jar/src/domain/jarClient.ts`'s `jar.setToggle` sends. The two
     /// have no shared generated source — `Toggle` isn't `#[ts(export)]`ed,
     /// since it's this plugin's own command-argument shape, not a
-    /// `jar-protocol` type — so a hand-typed mismatch here previously went
-    /// undetected by every existing test and by `cargo build`/`clippy`: it
-    /// only ever surfaced as a runtime `invalid args` rejection the first
-    /// time a real toggle command actually ran.
+    /// `jar-protocol` type — so nothing else in the build (`cargo
+    /// build`/`clippy`, the frontend's own type-check) can catch a
+    /// hand-typed mismatch between the two; only this test can.
     #[test]
     fn toggle_deserializes_from_the_frontends_camelcase_strings() {
         assert!(matches!(

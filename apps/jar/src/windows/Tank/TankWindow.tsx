@@ -32,9 +32,9 @@ export function TankWindow() {
   }, [settings.dialog_theme, settings.frame]);
 
   useEffect(() => {
-    // Persisted since the scaffold stage (SPEC.md §6) but never actually
-    // applied to the window until now — `set_toggle('alwaysOnTop', ...)`
-    // only ever updated the stored setting.
+    // `settings.always_on_top` (SPEC.md §6) is a fact about the window,
+    // not just a stored preference — keep the OS-level window flag in sync
+    // with it whenever it changes, from any window.
     void getCurrentWindow().setAlwaysOnTop(settings.always_on_top);
   }, [settings.always_on_top]);
 
