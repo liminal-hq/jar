@@ -88,6 +88,13 @@ jobs:
       - name: Snapshot committed generated files
         run: cp -r apps/jar/src/domain/protocol/generated /tmp/generated-before
 
+      - name: Clear the generated directory
+        # A removed or renamed exported type leaves its old file behind
+        # otherwise — ts-rs only ever writes files for types it currently
+        # exports, it never deletes stale ones — which would make the diff
+        # below silently miss that the committed copy is out of date.
+        run: rm -rf apps/jar/src/domain/protocol/generated
+
       - name: Regenerate protocol bindings and fixtures
         run: cargo test -p jar-protocol
 
