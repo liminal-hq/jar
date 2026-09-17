@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{Critter, CritterId, CritterStats};
+use crate::{Critter, CritterId, CritterStats, JarSettings};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -25,5 +25,23 @@ pub enum SimEvent {
     },
     TickUpdate {
         critters: Vec<CritterStats>,
+    },
+    /// Pushed whenever a setting changes via any `set_*` command, so every
+    /// open window — not just the one that made the change — reflects it
+    /// immediately instead of only after its next `get_snapshot` hydration.
+    SettingsChanged {
+        settings: JarSettings,
+    },
+    /// Pushed by `rename_critter`, distinct from `TickUpdate` since a name
+    /// change isn't a stats field and doesn't happen on the tick cadence.
+    Renamed {
+        id: CritterId,
+        name: String,
+    },
+    /// Pushed by `add_critter`. Kept distinct from `Born` — an added
+    /// original has no parents, so it gets its own toast copy rather than
+    /// reusing `Born`'s "A & B had a fry" phrasing.
+    Added {
+        critter: Critter,
     },
 }

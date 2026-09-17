@@ -1,7 +1,7 @@
 // Event toasts (W1 · Tank, SCREENS.md: "top-centre, 4 s"). Fed from
-// `domain/jarClient.ts`'s `onCritterEvent` — a `Born`/`Passed` firing is
-// exactly the "moment in time" that hook exists for, as opposed to
-// `useJarStore`'s continuously-current state.
+// `domain/jarClient.ts`'s `onCritterEvent` — a `Born`/`Passed`/`Added`
+// firing is exactly the "moment in time" that hook exists for, as opposed
+// to `useJarStore`'s continuously-current state.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -28,13 +28,21 @@ export function ToastLayer() {
         const critters = useJarStore.getState().critters;
         let text: string;
 
-        if (event.kind === 'born') {
-          const parentA = critters[event.parentA]?.name ?? 'Someone';
-          const parentB = critters[event.parentB]?.name ?? 'someone';
-          text = `${parentA} & ${parentB} had a fry: ${event.child.name}`;
-        } else {
-          const name = critters[event.id]?.name ?? 'A critter';
-          text = `${name} has passed on, gently.`;
+        switch (event.kind) {
+          case 'born': {
+            const parentA = critters[event.parentA]?.name ?? 'Someone';
+            const parentB = critters[event.parentB]?.name ?? 'someone';
+            text = `${parentA} & ${parentB} had a fry: ${event.child.name}`;
+            break;
+          }
+          case 'passed': {
+            const name = critters[event.id]?.name ?? 'A critter';
+            text = `${name} has passed on, gently.`;
+            break;
+          }
+          case 'added':
+            text = `${event.critter.name} settled into the jar.`;
+            break;
         }
 
         const id = nextToastId++;

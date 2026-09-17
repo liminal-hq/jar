@@ -6,7 +6,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{Critter, CritterId, DialogTheme, JarSettings, Species, TankFrame};
+use jar_protocol::{Critter, CritterId, DialogTheme, JarSettings, SimEvent, Species, TankFrame};
 use serde::Deserialize;
 use tauri::ipc::Channel;
 use tauri::{command, AppHandle, Runtime, State};
@@ -51,18 +51,28 @@ pub fn stop(plugin: State<'_, JarPlugin>) -> Result<()> {
 
 #[command]
 pub fn set_speed(plugin: State<'_, JarPlugin>, speed: u8) -> Result<()> {
-    with_jar(&plugin, |jar| {
-        jar.clock.speed = speed.clamp(1, 60);
-        Ok(())
-    })
+    let settings = with_jar(&plugin, |jar| {
+        let clamped = speed.clamp(1, 60);
+        jar.clock.speed = clamped;
+        // `set_speed` used to leave `settings.simulation_speed` stale —
+        // the clock's own speed field was updated, but `get_snapshot`
+        // (and thus every satellite window's hydration) kept reporting
+        // whatever speed the jar started with.
+        jar.settings.simulation_speed = clamped;
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
 }
 
 #[command]
 pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
-    with_jar(&plugin, |jar| {
+    let settings = with_jar(&plugin, |jar| {
         jar.settings.mode = mode;
-        Ok(())
-    })
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
 }
 
 /// Adds an original critter of the given species (SPEC.md §4 W4's
@@ -71,7 +81,7 @@ pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
 /// `Born` event.
 #[command]
 pub fn add_critter(plugin: State<'_, JarPlugin>, species: Species) -> Result<Critter> {
-    with_jar_mut(&plugin, |jar, rng| {
+    let critter = with_jar_mut(&plugin, |jar, rng| {
         let id = jar.next_critter_id();
         let existing_names: Vec<String> = jar.critters.iter().map(|c| c.name.clone()).collect();
         let critter = jar_core::genetics::roll_original(
@@ -84,7 +94,14 @@ pub fn add_critter(plugin: State<'_, JarPlugin>, species: Species) -> Result<Cri
         );
         jar.critters.push(critter.clone());
         Ok(critter)
-    })
+    })?;
+    push_event(
+        &plugin,
+        SimEvent::Added {
+            critter: critter.clone(),
+        },
+    );
+    Ok(critter)
 }
 
 #[command]
@@ -95,9 +112,11 @@ pub fn rename_critter(plugin: State<'_, JarPlugin>, id: CritterId, name: String)
             .iter_mut()
             .find(|c| c.id == id)
             .ok_or(Error::UnknownCritter)?;
-        critter.name = name;
+        critter.name = name.clone();
         Ok(())
-    })
+    })?;
+    push_event(&plugin, SimEvent::Renamed { id, name });
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,32 +130,38 @@ pub enum Toggle {
 
 #[command]
 pub fn set_toggle(plugin: State<'_, JarPlugin>, toggle: Toggle, on: bool) -> Result<()> {
-    with_jar(&plugin, |jar| {
+    let settings = with_jar(&plugin, |jar| {
         match toggle {
             Toggle::Light => jar.settings.light_on = on,
             Toggle::AmbientParticles => jar.settings.ambient_particles_on = on,
             Toggle::Sound => jar.settings.sound_on = on,
             Toggle::AlwaysOnTop => jar.settings.always_on_top = on,
         }
-        Ok(())
-    })
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
 }
 
 #[command]
 pub fn set_theme(plugin: State<'_, JarPlugin>, theme: DialogTheme, variant: String) -> Result<()> {
-    with_jar(&plugin, |jar| {
+    let settings = with_jar(&plugin, |jar| {
         jar.settings.dialog_theme = theme;
         jar.settings.theme_variant = variant;
-        Ok(())
-    })
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
 }
 
 #[command]
 pub fn set_frame(plugin: State<'_, JarPlugin>, frame: TankFrame) -> Result<()> {
-    with_jar(&plugin, |jar| {
+    let settings = with_jar(&plugin, |jar| {
         jar.settings.frame = frame;
-        Ok(())
-    })
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
 }
 
 /// A point-in-time read of the full jar state — used when a UI window
@@ -183,4 +208,50 @@ fn with_jar_mut<T>(
     let inner = &mut *inner;
     let jar = inner.jar.as_mut().ok_or(Error::NotStarted)?;
     f(jar, &mut inner.rng)
+}
+
+/// Pushes an event to whichever window currently owns the live `Channel`
+/// (the tank window — see `jarClient.ts`'s header comment on why only one
+/// window ever holds it) so a change made from any window's command call
+/// reaches every window via the tank's rebroadcast, not just the caller.
+/// A missing channel (jar started but no window has connected yet) is not
+/// an error — the event is simply not observable yet.
+fn push_event(plugin: &State<'_, JarPlugin>, event: SimEvent) {
+    let inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
+    if let Some(channel) = &inner.channel {
+        let _ = channel.send(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pins `Toggle`'s wire format against the exact camelCase strings
+    /// `apps/jar/src/domain/jarClient.ts`'s `jar.setToggle` sends. The two
+    /// have no shared generated source — `Toggle` isn't `#[ts(export)]`ed,
+    /// since it's this plugin's own command-argument shape, not a
+    /// `jar-protocol` type — so a hand-typed mismatch here previously went
+    /// undetected by every existing test and by `cargo build`/`clippy`: it
+    /// only ever surfaced as a runtime `invalid args` rejection the first
+    /// time a real toggle command actually ran.
+    #[test]
+    fn toggle_deserializes_from_the_frontends_camelcase_strings() {
+        assert!(matches!(
+            serde_json::from_str::<Toggle>("\"light\""),
+            Ok(Toggle::Light)
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Toggle>("\"ambientParticles\""),
+            Ok(Toggle::AmbientParticles)
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Toggle>("\"sound\""),
+            Ok(Toggle::Sound)
+        ));
+        assert!(matches!(
+            serde_json::from_str::<Toggle>("\"alwaysOnTop\""),
+            Ok(Toggle::AlwaysOnTop)
+        ));
+    }
 }

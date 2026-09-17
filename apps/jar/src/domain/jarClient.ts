@@ -74,7 +74,6 @@ interface JarStoreState {
 interface JarStoreActions {
   applyEvent: (event: SimEvent) => void;
   hydrate: (snapshot: { critters: Critter[]; settings: JarSettings; sim_seconds: number }) => void;
-  setSettings: (settings: JarSettings) => void;
 }
 
 export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
@@ -90,8 +89,6 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
       simSeconds: snapshot.sim_seconds,
       hydrated: true,
     }),
-
-  setSettings: (settings) => set({ settings }),
 
   applyEvent: (event) =>
     set((state) => {
@@ -122,6 +119,20 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
           }
           return { critters: next, simSeconds: state.simSeconds + 1 };
         }
+
+        // Pushed by every `set_*` command (rust-core.md §6) so a change
+        // made from any window reaches every window, not just the caller.
+        case 'SettingsChanged':
+          return { settings: event.settings };
+
+        case 'Renamed': {
+          const existing = state.critters[event.id];
+          if (!existing) return state;
+          return { critters: { ...state.critters, [event.id]: { ...existing, name: event.name } } };
+        }
+
+        case 'Added':
+          return { critters: { ...state.critters, [event.critter.id]: event.critter } };
       }
     }),
 }));
@@ -132,7 +143,8 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
  * why these are kept separate from the store. */
 export type CritterEvent =
   | { kind: 'born'; child: Critter; parentA: CritterId; parentB: CritterId }
-  | { kind: 'passed'; id: CritterId };
+  | { kind: 'passed'; id: CritterId }
+  | { kind: 'added'; critter: Critter };
 
 const critterEventListeners = new Set<(event: CritterEvent) => void>();
 
@@ -148,6 +160,8 @@ function handleEvent(event: SimEvent): void {
     }
   } else if (event.type === 'Passed') {
     for (const cb of critterEventListeners) cb({ kind: 'passed', id: event.id });
+  } else if (event.type === 'Added') {
+    for (const cb of critterEventListeners) cb({ kind: 'added', critter: event.critter });
   }
   useJarStore.getState().applyEvent(event);
 }
@@ -193,7 +207,10 @@ export const jar = {
   setMode: (mode: Species) => pluginApi.setMode(mode),
   addCritter: (species: Species) => pluginApi.addCritter(species) as Promise<Critter>,
   renameCritter: (id: CritterId, name: string) => pluginApi.renameCritter(id, name),
-  setToggle: (toggle: 'Light' | 'AmbientParticles' | 'Sound' | 'AlwaysOnTop', on: boolean) =>
+  // camelCase to match `Toggle`'s `#[serde(rename_all = "camelCase")]` on the
+  // Rust side — the PascalCase variant names it's declared with in Rust
+  // source are not what serde expects over the wire.
+  setToggle: (toggle: 'light' | 'ambientParticles' | 'sound' | 'alwaysOnTop', on: boolean) =>
     pluginApi.setToggle(toggle, on),
   setTheme: (theme: DialogTheme, variant: string) => pluginApi.setTheme(theme, variant),
   setFrame: (frame: TankFrame) => pluginApi.setFrame(frame),

@@ -183,3 +183,48 @@ describe('applyEvent — Passed', () => {
     expect(useJarStore.getState().critters[999]).toBeUndefined();
   });
 });
+
+describe('applyEvent — SettingsChanged', () => {
+  it('replaces settings wholesale, so a change from any window reaches every window', () => {
+    const changed = { ...DEFAULT_SETTINGS, light_on: false, simulation_speed: 30 };
+
+    useJarStore.getState().applyEvent({ type: 'SettingsChanged', settings: changed });
+
+    expect(useJarStore.getState().settings).toEqual(changed);
+  });
+});
+
+describe('applyEvent — Renamed', () => {
+  it('updates the name, leaving everything else untouched', () => {
+    const critter = makeCritter({ id: 7, name: 'Pickle' });
+    useJarStore.setState({
+      critters: { 7: critter },
+      settings: DEFAULT_SETTINGS,
+      simSeconds: 0,
+      hydrated: true,
+    });
+
+    useJarStore.getState().applyEvent({ type: 'Renamed', id: 7, name: 'Sir Bubbles' });
+
+    const renamed = useJarStore.getState().critters[7];
+    if (!renamed) throw new Error('expected critter 7 to still exist');
+    expect(renamed.name).toBe('Sir Bubbles');
+    expect(renamed.hue).toBe(critter.hue);
+  });
+
+  it('is a no-op for an unknown critter id', () => {
+    useJarStore.getState().applyEvent({ type: 'Renamed', id: 999, name: 'Nobody' });
+
+    expect(useJarStore.getState().critters[999]).toBeUndefined();
+  });
+});
+
+describe('applyEvent — Added', () => {
+  it('inserts the new critter into the store, same as Born', () => {
+    const critter = makeCritter({ id: 9, name: 'Waffles' });
+
+    useJarStore.getState().applyEvent({ type: 'Added', critter });
+
+    expect(useJarStore.getState().critters[9]).toEqual(critter);
+  });
+});
