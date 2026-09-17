@@ -33,6 +33,7 @@ vi.mock('tauri-plugin-jar-api', () => ({
   loadSnapshot: vi.fn(),
 }));
 
+import defaultSettingsFixture from './protocol/generated/defaultSettings.json';
 import type { Critter } from './protocol/generated/Critter';
 import { DEFAULT_SETTINGS, useJarStore } from './jarClient';
 
@@ -70,23 +71,16 @@ beforeEach(() => {
 });
 
 describe('DEFAULT_SETTINGS', () => {
-  it("matches the Rust side's JarSettings::default(), pinned independently on both sides", () => {
-    // Paired with `crates/jar-protocol/src/settings.rs`'s
-    // `default_settings_match_the_frontends_hand_duplicated_copy` — the two
-    // have no shared generated source, so each side pins the same literal
-    // values against its own suite; a drift on either side breaks that
-    // side's own test rather than this test reading the other file.
-    expect(DEFAULT_SETTINGS).toEqual({
-      mode: 'Fish',
-      frame: 'Bevelled98',
-      dialog_theme: 'Modern',
-      theme_variant: 'Lagoon',
-      light_on: true,
-      ambient_particles_on: true,
-      sound_on: false,
-      simulation_speed: 1,
-      always_on_top: false,
-    });
+  it("matches defaultSettings.json, generated from Rust's JarSettings::default()", () => {
+    // `defaultSettings.json` is written by
+    // `crates/jar-protocol/src/settings.rs`'s `export_default_settings_fixture`
+    // test, the same `cargo test`-time regeneration convention as the
+    // `ts-rs` type bindings alongside it. Comparing against that generated
+    // artifact — rather than a second hand-copied literal — means a changed
+    // Rust default actually fails this test the next time `cargo test`
+    // regenerates the fixture, instead of two independent copies silently
+    // drifting in lockstep.
+    expect(DEFAULT_SETTINGS).toEqual(defaultSettingsFixture);
   });
 });
 

@@ -70,14 +70,8 @@ impl Default for JarSettings {
 mod tests {
     use super::*;
 
-    /// Pinned against `apps/jar/src/domain/jarClient.ts`'s hand-duplicated
-    /// `DEFAULT_SETTINGS` object, which mirrors this `Default` impl for the
-    /// settings a fresh jar starts with before any snapshot exists — the
-    /// two have no shared generated source, so this test is the
-    /// sync-enforcement mechanism between them (same pattern as
-    /// `jar-core`'s `life_stage_boundaries_match_spec`).
     #[test]
-    fn default_settings_match_the_frontends_hand_duplicated_copy() {
+    fn default_settings_match_documented_values() {
         let settings = JarSettings::default();
         assert_eq!(settings.mode, Species::Fish);
         assert_eq!(settings.frame, TankFrame::Bevelled98);
@@ -88,5 +82,27 @@ mod tests {
         assert!(!settings.sound_on);
         assert_eq!(settings.simulation_speed, 1);
         assert!(!settings.always_on_top);
+    }
+
+    /// Exports `JarSettings::default()` as a JSON fixture the frontend reads
+    /// directly (`apps/jar/src/domain/jarClient.test.ts`), so the two sides
+    /// are compared against one generated artifact instead of two
+    /// independently hand-copied literals that could drift in lockstep
+    /// without either suite noticing. Same regeneration convention as the
+    /// `ts-rs` bindings this crate also exports at `cargo test` time — see
+    /// `scripts/generate-protocol-bindings.sh`.
+    #[test]
+    fn export_default_settings_fixture() {
+        let settings = JarSettings::default();
+        let json = serde_json::to_string_pretty(&settings).expect("serializes");
+
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/jar/src/domain/protocol/generated/defaultSettings.json");
+        std::fs::write(&path, format!("{json}\n")).expect("writes fixture");
+
+        let round_tripped: JarSettings =
+            serde_json::from_str(&json).expect("the fixture we just wrote deserializes");
+        assert_eq!(round_tripped.mode, settings.mode);
+        assert_eq!(round_tripped.simulation_speed, settings.simulation_speed);
     }
 }
