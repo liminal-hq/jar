@@ -188,7 +188,15 @@ jobs:
   build-windows:
     name: Build Windows release bundles
     needs: prepare-release
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            artefact_name: windows-release-assets-x64
+          - runner: windows-11-arm
+            artefact_name: windows-release-assets-arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -228,7 +236,7 @@ jobs:
       - name: Upload staged release assets
         uses: actions/upload-artifact@v7
         with:
-          name: windows-release-assets
+          name: ${{ matrix.artefact_name }}
           path: release-assets/windows/**
           if-no-files-found: error
 
@@ -258,8 +266,9 @@ jobs:
       - name: Download Windows release assets
         uses: actions/download-artifact@v7
         with:
-          name: windows-release-assets
+          pattern: windows-release-assets-*
           path: release-assets
+          merge-multiple: true
 
       - name: Compute checksums
         run: |
