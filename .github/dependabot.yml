@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 5
+    labels:
+      - 'build'
     groups:
       tauri:
         patterns:
@@ -15,6 +17,8 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 5
+    labels:
+      - 'build'
     groups:
       tauri:
         patterns:
@@ -31,3 +35,5 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 5
+    labels:
+      - 'ci'
