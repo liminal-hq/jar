@@ -218,6 +218,7 @@ export function TankWindow() {
             : undefined
         }
         onClick={toggleDrawer}
+        data-tauri-drag-region
       >
         <TankScene />
         <ToastLayer />

@@ -44,6 +44,11 @@
   border-image-source: repeating-linear-gradient(180deg, #8a5a2b 0 6px, #7c4f25 6px 9px);
   border-image-slice: 1;
   border-radius: 10px;
+  /* `overflow: hidden` only clips descendants, not this element's own
+   * border-image decoration, so a plain border-radius leaves it with
+   * square outer corners — clip-path clips the box's own painted output
+   * too, rounding the texture itself to match. */
+  clip-path: inset(0 round 10px);
   /* The "stand" foot: extra bottom clearance beyond the other three edges'
    * bezel width, matching the mockup's asymmetric padding. */
   border-bottom-width: calc(var(--jar-bezel-width, 18px) + 12px);
@@ -53,6 +58,7 @@
   border-image-source: repeating-linear-gradient(90deg, #bfc3c8 0 2px, #dadde1 2px 4px);
   border-image-slice: 1;
   border-radius: 14px;
+  clip-path: inset(0 round 14px);
 }
 
 .bezel[data-frame='RoundedGlass'] .tankInterior {
