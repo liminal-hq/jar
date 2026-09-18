@@ -128,7 +128,12 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     >
       <group
         onClick={(e) => {
+          // Stops propagation to other intersected R3F objects, but not
+          // the underlying native DOM click — that would still bubble to
+          // the canvas's own click handler (TankWindow.tsx's drawer
+          // toggle) without also stopping it there.
           e.stopPropagation();
+          e.nativeEvent.stopPropagation();
           void selectCritter(critter.id);
         }}
       >

@@ -32,10 +32,14 @@ const DRAWER_IDLE_MS = 1500;
 export function TankWindow() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // The tank's own pixel width, captured right before growing the window
-  // for the drawer and pinned via inline style while it's open — without
-  // this the 3D scene's container would stretch to fill the wider window
-  // too, resizing/reflowing the tank contents on every toggle instead of
-  // just exposing a new strip on the right for the drawer to occupy.
+  // for the drawer and pinned via inline style only while the drawer is
+  // open — without this the 3D scene's container would stretch to fill
+  // the wider window too, resizing/reflowing the tank contents on every
+  // toggle instead of just exposing a new strip on the right for the
+  // drawer to occupy. Re-derived fresh on every open rather than cached
+  // across toggles, so a window resized (it's user-resizable) while the
+  // drawer was closed is picked up correctly instead of pinning to a
+  // stale width.
   const [tankWidth, setTankWidth] = useState<number | null>(null);
   // Guards against overlapping open/close calls: `setSize`/`outerSize`
   // are IPC round-trips (async from JS even though the underlying GTK
@@ -88,11 +92,7 @@ export function TankWindow() {
     try {
       const win = getCurrentWindow();
       const [scale, size] = await Promise.all([win.scaleFactor(), win.outerSize()]);
-      // Prefer the already-known closed width over re-deriving it from
-      // the window's current size, which (once the drawer's been opened
-      // and closed at least once already) may not actually be at rest
-      // yet — see `resizingRef`'s own comment.
-      const width = tankWidth ?? size.width / scale;
+      const width = size.width / scale;
       const height = size.height / scale;
       setTankWidth(width);
       setDrawerOpen(true);
@@ -177,7 +177,7 @@ export function TankWindow() {
       {mouseOverlayEnabled && <MouseDebugOverlay />}
       <div
         className={styles.tankInterior}
-        style={tankWidth !== null ? { flex: `0 0 ${tankWidth}px` } : undefined}
+        style={drawerOpen && tankWidth !== null ? { flex: `0 0 ${tankWidth}px` } : undefined}
         onClick={toggleDrawer}
       >
         <TankScene />
