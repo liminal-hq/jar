@@ -10,6 +10,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState } from 'react';
 
 import { CritterCardWindow } from './windows/CritterCard/CritterCardWindow';
+import { DevSettingsWindow } from './windows/DevSettings/DevSettingsWindow';
 import { FamilyTreeWindow } from './windows/FamilyTree/FamilyTreeWindow';
 import { SetupWindow } from './windows/Setup/SetupWindow';
 import { TankWindow } from './windows/Tank/TankWindow';
@@ -28,6 +29,8 @@ export function App() {
       return <FamilyTreeWindow />;
     case 'setup':
       return <SetupWindow />;
+    case 'dev-settings':
+      return <DevSettingsWindow />;
     case 'tank':
     // The dev server (no Tauri window context yet) falls through to the
     // tank view too, so `bun run dev` shows something meaningful.

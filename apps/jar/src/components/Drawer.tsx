@@ -23,9 +23,9 @@ const buttonStyle: CSSProperties = {
 };
 
 interface DrawerProps {
-  /** Called right before Tree/Setup open a new window and take its focus —
-   * closes the drawer immediately rather than waiting on the idle timeout
-   * for this specific transition. */
+  /** Called right before Tree/Setup/Dev open a new window and take its
+   * focus — closes the drawer immediately rather than waiting on the idle
+   * timeout for this specific transition. */
   onNavigate: () => void;
 }
 
@@ -36,7 +36,7 @@ export function Drawer({ onNavigate }: DrawerProps) {
   const toggleLight = () => jar.setToggle('light', !settings.light_on);
   const toggleAmbient = () => jar.setToggle('ambientParticles', !settings.ambient_particles_on);
   const toggleSound = () => jar.setToggle('sound', !settings.sound_on);
-  const navigate = (window: 'family-tree' | 'setup') => {
+  const navigate = (window: 'family-tree' | 'setup' | 'dev-settings') => {
     onNavigate();
     void openSatelliteWindow(window);
   };
@@ -85,6 +85,11 @@ export function Drawer({ onNavigate }: DrawerProps) {
       <button style={buttonStyle} onClick={exit}>
         Exit
       </button>
+      {import.meta.env.DEV && (
+        <button style={buttonStyle} onClick={() => navigate('dev-settings')}>
+          Dev
+        </button>
+      )}
     </div>
   );
 }
