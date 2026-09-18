@@ -2,7 +2,7 @@
 // (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup · Exit
 // (saves the jar, quits the app — essential on GNOME where there is no
 // tray)." Mounted by `TankWindow.tsx` into the strip exposed when it grows
-// the tank window rightward on hover — see that file for why it's a resize
+// the tank window rightward on click — see that file for why it's a resize
 // of the tank's own window rather than a second floating window.
 //
 // (c) Copyright 2026 Scott Morris
@@ -22,13 +22,24 @@ const buttonStyle: CSSProperties = {
   color: 'inherit',
 };
 
-export function Drawer() {
+interface DrawerProps {
+  /** Called right before Tree/Setup open a new window and take its focus —
+   * closes the drawer immediately rather than waiting on the idle timeout
+   * for this specific transition. */
+  onNavigate: () => void;
+}
+
+export function Drawer({ onNavigate }: DrawerProps) {
   const settings = useJarStore((s) => s.settings);
 
   const toggleMode = () => jar.setMode(settings.mode === 'Fish' ? 'Gecko' : 'Fish');
   const toggleLight = () => jar.setToggle('light', !settings.light_on);
   const toggleAmbient = () => jar.setToggle('ambientParticles', !settings.ambient_particles_on);
   const toggleSound = () => jar.setToggle('sound', !settings.sound_on);
+  const navigate = (window: 'family-tree' | 'setup') => {
+    onNavigate();
+    void openSatelliteWindow(window);
+  };
 
   const exit = async () => {
     // The shutdown autosave flush (rust-core.md §5.3) fires from the
@@ -65,10 +76,10 @@ export function Drawer() {
       <button style={buttonStyle} onClick={toggleMode}>
         {settings.mode === 'Fish' ? 'Switch to gecko' : 'Switch to fish'}
       </button>
-      <button style={buttonStyle} onClick={() => openSatelliteWindow('family-tree')}>
+      <button style={buttonStyle} onClick={() => navigate('family-tree')}>
         Tree
       </button>
-      <button style={buttonStyle} onClick={() => openSatelliteWindow('setup')}>
+      <button style={buttonStyle} onClick={() => navigate('setup')}>
         Setup
       </button>
       <button style={buttonStyle} onClick={exit}>
