@@ -167,10 +167,11 @@ export function TankWindow() {
   // Opening Setup/Tree/Dev creates and focuses a new window — proactively
   // close the drawer right here rather than waiting on the next idle
   // tick, since we already know this is the one interaction that always
-  // means "done with the drawer."
-  const handleDrawerNavigate = () => {
-    void closeDrawer();
-  };
+  // means "done with the drawer." Returns the resize's own promise so
+  // `Drawer.tsx` can await it: positioning a satellite window beside the
+  // tank, or closing the app on Exit, both need the tank back at its
+  // real closed width first, not mid-resize.
+  const handleDrawerNavigate = () => closeDrawer();
 
   return (
     <div className={styles.bezel} data-tauri-drag-region>

@@ -25,8 +25,11 @@ const buttonStyle: CSSProperties = {
 interface DrawerProps {
   /** Called right before Tree/Setup/Dev open a new window and take its
    * focus — closes the drawer immediately rather than waiting on the idle
-   * timeout for this specific transition. */
-  onNavigate: () => void;
+   * timeout for this specific transition. Its own resize is awaited before
+   * anything else measures or persists the tank window's geometry: the
+   * physical window is still `DRAWER_WIDTH` wider than the closed tank
+   * until this settles. */
+  onNavigate: () => Promise<void>;
 }
 
 export function Drawer({ onNavigate }: DrawerProps) {
@@ -36,12 +39,19 @@ export function Drawer({ onNavigate }: DrawerProps) {
   const toggleLight = () => jar.setToggle('light', !settings.light_on);
   const toggleAmbient = () => jar.setToggle('ambientParticles', !settings.ambient_particles_on);
   const toggleSound = () => jar.setToggle('sound', !settings.sound_on);
-  const navigate = (window: 'family-tree' | 'setup' | 'dev-settings') => {
-    onNavigate();
+  const navigate = async (window: 'family-tree' | 'setup' | 'dev-settings') => {
+    // Await the shrink first — otherwise `openSatelliteWindow` measures the
+    // tank while it's still the drawer's extra width, positioning the new
+    // window separated from the tank instead of beside it.
+    await onNavigate();
     void openSatelliteWindow(window);
   };
 
   const exit = async () => {
+    // Await the shrink first — `tauri-plugin-window-state` persists
+    // whatever size the window closes at, and the drawer's extra width is
+    // never the tank's real closed size.
+    await onNavigate();
     // The shutdown autosave flush (rust-core.md §5.3) fires from the
     // plugin's own `ExitRequested` hook regardless of how the process
     // exits, so this just needs to close the window.
@@ -76,17 +86,17 @@ export function Drawer({ onNavigate }: DrawerProps) {
       <button style={buttonStyle} onClick={toggleMode}>
         {settings.mode === 'Fish' ? 'Switch to gecko' : 'Switch to fish'}
       </button>
-      <button style={buttonStyle} onClick={() => navigate('family-tree')}>
+      <button style={buttonStyle} onClick={() => void navigate('family-tree')}>
         Tree
       </button>
-      <button style={buttonStyle} onClick={() => navigate('setup')}>
+      <button style={buttonStyle} onClick={() => void navigate('setup')}>
         Setup
       </button>
-      <button style={buttonStyle} onClick={exit}>
+      <button style={buttonStyle} onClick={() => void exit()}>
         Exit
       </button>
       {import.meta.env.DEV && (
-        <button style={buttonStyle} onClick={() => navigate('dev-settings')}>
+        <button style={buttonStyle} onClick={() => void navigate('dev-settings')}>
           Dev
         </button>
       )}
