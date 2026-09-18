@@ -15,6 +15,13 @@
   overflow: hidden;
 }
 
+/* A maximized window fills the work area — rounding its corners would just
+ * clip real content into transparent notches, not shape a floating dialog.
+ * TitleBar sets this attribute (mirroring theme.ts's data-dialog-theme). */
+html[data-maximized='true'] .wrapper {
+  border-radius: 0;
+}
+
 .shell {
   flex: 1;
   min-height: 0;

@@ -60,6 +60,15 @@ export function TitleBar({ title }: TitleBarProps) {
 
   const appWindow = getCurrentWindow();
 
+  // A selector hook, matching theme.ts's data-dialog-theme pattern —
+  // DialogShell.module.css uses it to drop the theme's corner radius while
+  // maximized, since a maximized window filling the work area shouldn't
+  // clip its own corners into transparent notches.
+  const applyMaximized = (maximized: boolean) => {
+    setIsMaximized(maximized);
+    document.documentElement.dataset.maximized = String(maximized);
+  };
+
   useEffect(() => {
     const os = platform();
     setPlatformType(os === 'macos' ? 'mac' : os === 'linux' ? 'linux' : 'win');
@@ -72,7 +81,7 @@ export function TitleBar({ title }: TitleBarProps) {
           appWindow.isMinimizable(),
           appWindow.isResizable(),
         ]);
-        setIsMaximized(maximized);
+        applyMaximized(maximized);
         setIsMaximizable(maximizable);
         setIsMinimizable(minimizable);
         setIsResizable(resizable);
@@ -96,7 +105,7 @@ export function TitleBar({ title }: TitleBarProps) {
   const toggleMaximize = async () => {
     try {
       await appWindow.toggleMaximize();
-      setIsMaximized(await appWindow.isMaximized());
+      applyMaximized(await appWindow.isMaximized());
     } catch (e) {
       console.error('Failed to toggle maximize', e);
     }
@@ -106,7 +115,7 @@ export function TitleBar({ title }: TitleBarProps) {
   const handleContextMenu = async (e: ReactMouseEvent) => {
     e.preventDefault();
     try {
-      setIsMaximized(await appWindow.isMaximized());
+      applyMaximized(await appWindow.isMaximized());
     } catch (err) {
       console.error(err);
     }

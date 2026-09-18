@@ -169,9 +169,15 @@ html[data-dialog-theme='Classic98'] .controlButton.linuxClose {
   color: #101010;
 }
 
-/* Paper notebook: italic titles. */
+/* Paper notebook: italic titles, dashed close button. */
 html[data-dialog-theme='PaperNotebook'] .appTitle {
   font-style: italic;
+}
+html[data-dialog-theme='PaperNotebook'] .controlButton.winClose,
+html[data-dialog-theme='PaperNotebook'] .controlButton.linuxClose {
+  border: 1px dashed currentColor;
+  border-radius: 4px;
+  background: transparent;
 }
 
 /* Handheld LCD: dark title strip. */
