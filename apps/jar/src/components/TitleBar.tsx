@@ -19,6 +19,16 @@
 // `startDragging()` explicitly, distinct from the passive
 // `data-tauri-drag-region` the bar itself relies on for a direct drag.
 //
+// `data-tauri-drag-region` doesn't propagate to children or cascade from
+// an ancestor: Tauri's drag detection checks the exact element clicked,
+// so every draggable region — the outer bar, the inner spacer/title
+// elements, and the platform-mirroring `.controlsPlaceholder` — carries
+// the attribute itself rather than relying on inheriting it from a
+// parent. The window control buttons still work nested inside the outer
+// bar's own copy of the attribute: a click that never moves the pointer
+// resolves as a click, not a drag, under normal window-manager
+// semantics.
+//
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
@@ -253,6 +263,7 @@ export function TitleBar({ title }: TitleBarProps) {
     <>
       <div
         className={`${styles.titleBar} ${styles[PLATFORM_CLASS[platformType]]}`}
+        data-tauri-drag-region
         onContextMenu={(e) => void handleContextMenu(e)}
       >
         {platformType === 'mac' && (
@@ -263,13 +274,13 @@ export function TitleBar({ title }: TitleBarProps) {
               {title}
             </div>
             <div className={styles.dragRegion} data-tauri-drag-region />
-            <div className={styles.controlsPlaceholder} />
+            <div className={styles.controlsPlaceholder} data-tauri-drag-region />
           </>
         )}
 
         {platformType === 'linux' && (
           <>
-            <div className={styles.controlsPlaceholder} />
+            <div className={styles.controlsPlaceholder} data-tauri-drag-region />
             <div className={styles.dragRegion} data-tauri-drag-region />
             <div className={styles.appTitle} data-tauri-drag-region>
               {title}

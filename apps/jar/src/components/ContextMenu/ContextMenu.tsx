@@ -32,6 +32,11 @@ export function ContextMenu({ model, position, onClose, onItemClick }: ContextMe
     let { x, y } = position;
     if (x + rect.width > viewport.width) x = viewport.width - rect.width - 8;
     if (y + rect.height > viewport.height) y = viewport.height - rect.height - 8;
+    // Right-click near the left/top edge of Jar's small satellite windows can
+    // otherwise still overflow the opposite side once the width/height clamp
+    // above pushes it negative — clamp back to a minimum inset too.
+    x = Math.max(8, x);
+    y = Math.max(8, y);
 
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
