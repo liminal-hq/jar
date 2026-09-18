@@ -41,9 +41,9 @@ export function TankWindow() {
   // are IPC round-trips (async from JS even though the underlying GTK
   // resize is a synchronous, blocking call once it reaches the Rust main
   // thread), so a second click before the first one's resize has
-  // actually settled can read the window mid-transition. Confirmed live:
-  // two `openDrawer` calls racing this way stacked +180px on top of an
-  // already-widened window instead of the intended single 420 → 600.
+  // actually settled can read the window mid-transition — two racing
+  // `openDrawer` calls would each add another +180px on top of an
+  // already-widened window instead of a single 420 → 600.
   const resizingRef = useRef(false);
   const mouseOverlayEnabled = useMouseOverlayEnabled();
   const settings = useJarStore((s) => s.settings);
@@ -76,12 +76,12 @@ export function TankWindow() {
   }, [critters, hydrated, settings.mode]);
 
   // Growing/shrinking the window itself, not moving a second window, is
-  // deliberate: Wayland lets a client resize its own window freely, but
-  // (confirmed live, not just documentation) silently refuses a client's
-  // request to reposition an *existing* window after creation — a
-  // hover-positioned floating drawer window is a dead end here. Resizing
-  // the tank window right and pinning its own content width instead sits
-  // entirely inside what Wayland actually allows a client to do.
+  // deliberate: Wayland silently refuses a client's request to
+  // reposition an *existing* window after creation, so a
+  // separately-positioned floating drawer window is a dead end here.
+  // Resizing the tank window right and pinning its own content width
+  // instead sits entirely inside what Wayland actually allows a client
+  // to do.
   const openDrawer = async () => {
     if (drawerOpen || resizingRef.current) return;
     resizingRef.current = true;
@@ -115,17 +115,17 @@ export function TankWindow() {
     }
   };
 
-  // Hover-based open/close is a dead end: confirmed live, with a debug
-  // overlay (`MouseDebugOverlay`, toggled from the Dev settings window)
-  // logging every raw mouse event, that WebKitGTK never dispatches *any*
-  // boundary event — no mouseenter/mouseleave, no mouseover/mouseout,
-  // not even a window blur — when the cursor crosses the *outer window
-  // edge* in either direction; the event log just goes silent for
-  // however long the cursor is elsewhere and resumes with a plain
-  // mousemove, no bracketing event at all. (Crossing an *internal* DOM
+  // Hover-based open/close is a dead end: WebKitGTK never dispatches
+  // *any* boundary event — no mouseenter/mouseleave, no
+  // mouseover/mouseout, not even a window blur — when the cursor crosses
+  // the tank window's own outer edge, in either direction, so nothing
+  // built on that signal (a hover handler, `:hover` polling,
+  // `onFocusChanged`) can ever fire for it. Crossing an *internal* DOM
   // boundary, e.g. canvas into the drawer area, fires all of those
-  // correctly — it's specifically the window's own edge that's silent.)
-  // A click is always delivered correctly regardless, so open/close is a
+  // correctly — it's specifically the window's own edge that's silent.
+  // (`MouseDebugOverlay`, toggled from the Dev settings window, logs raw
+  // mouse events live for diagnosing this class of platform quirk.) A
+  // click is always delivered correctly regardless, so open/close is a
   // deliberate click on the tank instead of a passive hover.
   const toggleDrawer = () => {
     if (drawerOpen) void closeDrawer();
@@ -140,12 +140,12 @@ export function TankWindow() {
   // whether that's because the cursor actually left or the user's just
   // done interacting and parked it somewhere.
   //
-  // Deliberately doesn't also use `onFocusChanged`/`isFocused()` the way
-  // emoji-nook's popup dismissal does: confirmed live that this
-  // frameless/always-on-top tank window doesn't reliably report itself
-  // as OS-focused at all, click or not — wiring a close to that fired
-  // immediately after every open, racing openDrawer's own not-yet-settled
-  // resize and shrinking the window well past its actual closed width.
+  // Deliberately doesn't also close on `onFocusChanged`/`isFocused()`:
+  // this frameless/always-on-top tank window doesn't reliably report
+  // itself as OS-focused at all, click or not, so wiring a close to that
+  // fires immediately after every open — racing openDrawer's own
+  // not-yet-settled resize and shrinking the window well past its actual
+  // closed width.
   useEffect(() => {
     if (!drawerOpen) return;
     let idleTimeout: ReturnType<typeof setTimeout>;

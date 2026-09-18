@@ -1,12 +1,10 @@
 // Dev-only debug overlay, toggled from the Dev settings window
-// (`domain/devSettings.ts`) — built to diagnose the drawer's mouse/hover
-// reliability bug (confirmed live: WebKitGTK never fires any boundary
-// event, not even a window blur, when the cursor crosses the *outer
-// window edge*, only internal DOM ones), kept around since it's a handy
-// general-purpose tool for the same class of platform quirk elsewhere.
-// Shows every raw mouse event this webview receives (type + coordinates
-// + time since the last one) plus a live poll of the bezel's `:hover`
-// state.
+// (`domain/devSettings.ts`) — a general-purpose tool for diagnosing
+// WebKitGTK's silent mouse/focus events at a window's own outer edge
+// (see `TankWindow.tsx`'s `toggleDrawer`), useful for the same class of
+// platform quirk wherever else it turns up. Shows every raw mouse event
+// this webview receives (type + coordinates + time since the last one)
+// plus a live poll of the bezel's `:hover` state.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
