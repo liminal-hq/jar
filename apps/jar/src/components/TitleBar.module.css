@@ -1,0 +1,188 @@
+/* (c) Copyright 2026 Scott Morris */
+/* SPDX-License-Identifier: Apache-2.0 OR MIT */
+
+.titleBar {
+  height: 32px;
+  flex-shrink: 0;
+  background: var(--jar-bg, #fbfaf6);
+  color: var(--jar-ink, #2b2a33);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.titleBar.isMac,
+.titleBar.isLinux,
+.titleBar.isWin {
+  padding-left: 10px;
+}
+
+.appTitle {
+  flex-shrink: 0;
+  /* Belt-and-suspenders alongside the data-tauri-drag-region attribute on
+   * this same element: WebKitGTK's drag-region detection can be unreliable
+   * for elements inside flex layouts (confirmed the hard way in Threshold's
+   * ringing.css), so pair the JS-injected listener with the native
+   * property it's actually built on. */
+  -webkit-app-region: drag;
+}
+
+.appTitle.left {
+  margin-right: auto;
+}
+
+.dragRegion {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.controlsPlaceholder {
+  width: 70px;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.windowControls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  /* Buttons must stay clickable, not swallowed into the drag region they
+   * sit beside. */
+  -webkit-app-region: no-drag;
+}
+
+.windowControls.mac {
+  gap: 8px;
+}
+
+.controlButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  padding: 0;
+}
+
+/* Mac traffic lights */
+.controlButton.macClose,
+.controlButton.macMinimize,
+.controlButton.macMaximize {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  padding: 0;
+  border: none;
+}
+.controlButton.macClose {
+  background-color: #ff5f56;
+}
+.controlButton.macMinimize {
+  background-color: #ffbd2e;
+}
+.controlButton.macMaximize {
+  background-color: #27c93f;
+}
+.controlButton.macClose:hover {
+  background-color: #e0443e;
+}
+.controlButton.macMinimize:hover {
+  background-color: #dea123;
+}
+.controlButton.macMaximize:hover {
+  background-color: #1aab29;
+}
+
+/* Windows controls */
+.controlButton.winMinimize,
+.controlButton.winMaximize,
+.controlButton.winClose {
+  width: 46px;
+  height: 100%;
+  opacity: 0.8;
+  border-radius: 0;
+}
+.controlButton.winMinimize:hover,
+.controlButton.winMaximize:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+.controlButton.winClose:hover {
+  background-color: #e81123;
+  color: #fff;
+}
+
+/* Linux controls (Adwaita-style) */
+.windowControls.linux {
+  gap: 6px;
+  padding-right: 8px;
+}
+.controlButton.linuxMinimize,
+.controlButton.linuxMaximize,
+.controlButton.linuxClose {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: transparent;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.controlButton.linuxMinimize:hover,
+.controlButton.linuxMaximize:hover,
+.controlButton.linuxClose:hover {
+  background-color: rgba(128, 128, 128, 0.15);
+}
+.controlButton.linuxClose:hover {
+  background-color: rgba(232, 17, 35, 0.8);
+  color: #fff;
+}
+
+/* SPEC.md §4's per-theme title-bar treatments — keyed off the
+ * data-dialog-theme attribute theme/theme.ts sets on <html>, since these
+ * aren't expressible as a single --jar-* token value. */
+
+/* Classic 98: blue gradient title bar, square buttons. */
+html[data-dialog-theme='Classic98'] .titleBar {
+  background: linear-gradient(90deg, #0a1f8f, #2d3e8f 60%, #6c7fd6);
+  color: #fff;
+  border-bottom-color: #101010;
+}
+html[data-dialog-theme='Classic98'] .controlButton.winMinimize,
+html[data-dialog-theme='Classic98'] .controlButton.winMaximize,
+html[data-dialog-theme='Classic98'] .controlButton.winClose,
+html[data-dialog-theme='Classic98'] .controlButton.linuxMinimize,
+html[data-dialog-theme='Classic98'] .controlButton.linuxMaximize,
+html[data-dialog-theme='Classic98'] .controlButton.linuxClose {
+  border-radius: 0;
+  background-color: #c9c6bd;
+  border: 1px outset #c9c6bd;
+  color: #101010;
+}
+
+/* Paper notebook: italic titles, dashed close button. */
+html[data-dialog-theme='PaperNotebook'] .appTitle {
+  font-style: italic;
+}
+html[data-dialog-theme='PaperNotebook'] .controlButton.winClose,
+html[data-dialog-theme='PaperNotebook'] .controlButton.linuxClose {
+  border: 1px dashed currentColor;
+  border-radius: 4px;
+  background: transparent;
+}
+
+/* Handheld LCD: dark title strip. */
+html[data-dialog-theme='HandheldLcd'] .titleBar {
+  background: #0f380f;
+  color: #9bbc0f;
+  border-bottom-color: #0f380f;
+}

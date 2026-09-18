@@ -33,7 +33,7 @@ export function FamilyTreeWindow() {
   const totalEver = Object.keys(critters).length;
 
   return (
-    <DialogShell title={`${totalEver} ever`}>
+    <DialogShell windowTitle="Family tree" title={`${totalEver} ever`}>
       {byGeneration.map(([gen, members]) => (
         <div key={gen} style={{ marginBottom: 12 }}>
           <h3 style={{ margin: '4px 0' }}>Gen {gen}</h3>

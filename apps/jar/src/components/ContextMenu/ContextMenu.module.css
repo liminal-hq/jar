@@ -1,0 +1,106 @@
+/* (c) Copyright 2026 Scott Morris */
+/* SPDX-License-Identifier: Apache-2.0 OR MIT */
+
+.contextMenu {
+  position: fixed;
+  background: var(--jar-bg, #fbfaf6);
+  color: var(--jar-ink, #2b2a33);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  min-width: 180px;
+  max-width: 280px;
+  z-index: 10000;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+.menuSection {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.menuSection + .menuSection {
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.menuSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.65;
+  padding: 4px 12px;
+  margin-bottom: 2px;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  outline: none;
+}
+
+.menuItem:hover:not(.disabled) {
+  background: var(--jar-accent, #3a8dde);
+  color: var(--jar-bg, #fbfaf6);
+}
+
+.menuItem:hover:not(.disabled) .menuItemIcon {
+  color: inherit;
+}
+
+.menuItem.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.menuItemIcon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.65;
+}
+
+.menuItemIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.menuItemLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.menuItemShortcut {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.65;
+  margin-left: 12px;
+}
+
+.menuSeparator {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.12);
+  margin: 4px 0;
+}
