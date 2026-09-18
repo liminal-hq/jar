@@ -50,6 +50,14 @@ export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<voi
     x: tankPosition.x + tankSize.width + 16,
     y: tankPosition.y,
     resizable: true,
+    // With no native chrome, the close button is TitleBar's own — shrinking
+    // a window below its control group's footprint would clip it out of
+    // reach (DialogShell's wrapper is overflow: hidden for the rounded
+    // corners above), trapping the window closeable only via its
+    // right-click menu. This floor is comfortably wider than the longest
+    // title ("Critter card"/"Family tree") plus a full Linux control group.
+    minWidth: 240,
+    minHeight: 200,
     // OS chrome is replaced entirely by `components/TitleBar`, themed per
     // SPEC.md §4 — `spec.title` above still sets the OS-level window title
     // (taskbar/alt-tab), independent of what TitleBar renders in-content.
