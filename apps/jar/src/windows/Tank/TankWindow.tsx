@@ -212,7 +212,11 @@ export function TankWindow() {
       {mouseOverlayEnabled && <MouseDebugOverlay />}
       <div
         className={styles.tankInterior}
-        style={drawerOpen && tankWidth !== null ? { flex: `0 0 ${tankWidth}px` } : undefined}
+        style={
+          drawerOpen && !drawerOverlay && tankWidth !== null
+            ? { flex: `0 0 ${tankWidth}px` }
+            : undefined
+        }
         onClick={toggleDrawer}
       >
         <TankScene />
