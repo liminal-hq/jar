@@ -14,6 +14,7 @@ import * as THREE from 'three';
 
 import { useJarStore } from '../../domain/jarClient';
 import { AquariumEnvironment } from '../environment/AquariumEnvironment';
+import { CrtEffect } from '../effects/CrtEffect';
 import { Bubbles } from '../particles/Bubbles';
 import { SteeringSystem } from '../steering/SteeringSystem';
 import { CrittersLayer } from './CrittersLayer';
@@ -59,6 +60,7 @@ export function TankScene() {
         </SteeringSystem>
       </Physics>
       {settings.ambient_particles_on && settings.mode === 'Fish' && <Bubbles />}
+      {settings.frame === 'NeonCrt' && <CrtEffect />}
     </Canvas>
   );
 }

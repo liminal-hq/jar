@@ -208,7 +208,7 @@ export function TankWindow() {
   const handleDrawerNavigate = () => closeDrawer();
 
   return (
-    <div className={styles.bezel} data-tauri-drag-region>
+    <div className={styles.bezel} data-frame={settings.frame} data-tauri-drag-region>
       {mouseOverlayEnabled && <MouseDebugOverlay />}
       <div
         className={styles.tankInterior}
@@ -218,6 +218,7 @@ export function TankWindow() {
             : undefined
         }
         onClick={toggleDrawer}
+        data-tauri-drag-region
       >
         <TankScene />
         <ToastLayer />
