@@ -6,7 +6,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import { currentMonitor, getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Drawer } from '../../components/Drawer';
@@ -41,6 +41,13 @@ export function TankWindow() {
   // drawer was closed is picked up correctly instead of pinning to a
   // stale width.
   const [tankWidth, setTankWidth] = useState<number | null>(null);
+  // True when the window can't grow far enough right to fit the drawer
+  // (maximized, or already against the monitor's work-area edge) — the
+  // drawer then renders as an in-window overlay over part of the tank
+  // instead of a strip exposed by resizing, so Setup/Exit stay reachable
+  // rather than landing off-screen. `openDrawer` decides this per open;
+  // `closeDrawer` reads it back to skip the resize it never did.
+  const [drawerOverlay, setDrawerOverlay] = useState(false);
   // Guards against overlapping open/close calls: `setSize`/`outerSize`
   // are IPC round-trips (async from JS even though the underlying GTK
   // resize is a synchronous, blocking call once it reaches the Rust main
@@ -91,9 +98,26 @@ export function TankWindow() {
     resizingRef.current = true;
     try {
       const win = getCurrentWindow();
-      const [scale, size] = await Promise.all([win.scaleFactor(), win.outerSize()]);
+      const [scale, position, size, monitor] = await Promise.all([
+        win.scaleFactor(),
+        win.outerPosition(),
+        win.outerSize(),
+        currentMonitor(),
+      ]);
       const width = size.width / scale;
       const height = size.height / scale;
+      // Physical pixels throughout: `position`/`size`/`workArea` are all
+      // physical already, so only `DRAWER_WIDTH` (a logical constant) needs
+      // converting before comparing.
+      const fitsOnScreen =
+        monitor === null ||
+        position.x + size.width + DRAWER_WIDTH * scale <=
+          monitor.workArea.position.x + monitor.workArea.size.width;
+      if (!fitsOnScreen) {
+        setDrawerOverlay(true);
+        setDrawerOpen(true);
+        return;
+      }
       setTankWidth(width);
       setDrawerOpen(true);
       await win.setSize(new LogicalSize(width + DRAWER_WIDTH, height));
@@ -103,13 +127,23 @@ export function TankWindow() {
   };
 
   const closeDrawer = async () => {
-    if (!drawerOpen || tankWidth === null || resizingRef.current) return;
+    if (!drawerOpen || resizingRef.current) return;
     resizingRef.current = true;
     try {
+      if (drawerOverlay) {
+        setDrawerOpen(false);
+        setDrawerOverlay(false);
+        return;
+      }
+      if (tankWidth === null) return;
       const win = getCurrentWindow();
       const [scale, size] = await Promise.all([win.scaleFactor(), win.outerSize()]);
-      setDrawerOpen(false);
+      // Shrink the window *before* clearing `drawerOpen`: the pinned tank
+      // width (see `tankWidth` above) stays in effect for the whole resize,
+      // so the canvas never stretches into the strip the window is in the
+      // middle of giving back.
       await win.setSize(new LogicalSize(tankWidth, size.height / scale));
+      setDrawerOpen(false);
     } finally {
       resizingRef.current = false;
     }
@@ -187,7 +221,7 @@ export function TankWindow() {
       </div>
 
       {drawerOpen && (
-        <div className={styles.drawerArea}>
+        <div className={drawerOverlay ? styles.drawerOverlay : styles.drawerArea}>
           <Drawer onNavigate={handleDrawerNavigate} />
         </div>
       )}

@@ -24,6 +24,27 @@
   overflow: hidden;
   box-sizing: border-box;
   padding: 8px;
+  /* Tucks 18px behind the tank's right edge (SCREENS.md W1: "overlaps the
+   * bezel by ~18 px so it reads as attached") — later in DOM order than
+   * `.tankInterior`, so normal paint order already draws it on top without
+   * needing z-index. */
+  margin-left: -18px;
+  display: flex;
+  align-items: stretch;
+}
+
+.drawerOverlay {
+  /* Fallback when the window can't grow far enough right to fit the drawer
+   * (TankWindow.tsx's `openDrawer`) — floats over the tank interior itself
+   * instead of expanding into a strip the compositor doesn't have room to
+   * grant, so Setup/Exit stay reachable regardless of screen position. */
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 180px; /* mirrors TankWindow.tsx's DRAWER_WIDTH */
+  box-sizing: border-box;
+  padding: 8px;
   display: flex;
   align-items: stretch;
 }
