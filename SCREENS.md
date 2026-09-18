@@ -4,7 +4,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 
 ## W1 · Tank (main)
 
-- No OS chrome. The chosen frame is the only bezel and runs edge to edge.
+- No OS chrome. Currently no separate frame bezel either — the glass tank enclosure itself (see `docs/architecture/3d-engine.md` §8.1) is the window's whole visual boundary, edge to edge, translucent through to the desktop behind it. The six frame treatments (`SPEC.md` §4) are built and Setup-selectable but not applied to the tank window while this is revisited.
 - Contents: backdrop (aquarium or terrarium), critters, bubbles/mist, night tint, status chip (bottom-left: `4 fish · 22:14 · asleep`), event toasts (top-centre, 4 s).
 - Click the tank → the **drawer** slides out from behind it, growing the window to the right. It overlaps the bezel by ~18 px so it reads as attached. When there isn't 180px of room to the right (the window is against the monitor's work-area edge, or maximized), it instead floats as an in-window overlay over part of the tank rather than resizing off-screen — the window can't reposition itself leftward on Wayland, so there's no other side to flip to. Clicking the tank again, or leaving the drawer idle, closes it.
   - Drawer buttons (top → bottom): Light · Bubbles (aquarium) / Mist (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup · Exit (saves the jar, quits the app — essential on GNOME where there is no tray).
