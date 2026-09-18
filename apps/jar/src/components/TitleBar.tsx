@@ -20,13 +20,12 @@
 // `data-tauri-drag-region` the bar itself relies on for a direct drag.
 //
 // `data-tauri-drag-region` doesn't propagate to children or cascade from
-// an ancestor — it's on the outer bar *and* the inner spacer/title
-// elements, matching Spindle Lab's `Topbar` (Cadence/Threshold only put it
-// on the inner elements, leaving the space around them, e.g. behind the
-// platform-mirroring `.controlsPlaceholder`, dead — confirmed live: a drag
-// starting there just didn't move the window). The window control buttons
-// still work nested inside it: a click that never moves the pointer
-// resolves as a click, not a drag, under normal window-manager semantics.
+// an ancestor, so it's set on the outer bar as well as the inner
+// spacer/title elements — otherwise the space around them (e.g. behind
+// the platform-mirroring `.controlsPlaceholder`) isn't draggable. The
+// window control buttons still work nested inside it: a click that never
+// moves the pointer resolves as a click, not a drag, under normal
+// window-manager semantics.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT

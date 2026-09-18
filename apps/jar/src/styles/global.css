@@ -13,11 +13,10 @@ body,
 }
 
 body {
-  /* No arbitrary text selection, matching a native app's default (and
-   * Cadence's own global.css) — Jar's windows are toy-like chrome, not
-   * documents. Confirmed live this needs the -webkit- prefix too:
-   * unprefixed alone still let WebKitGTK select the title bar's text
-   * instead of starting a window drag some of the time. */
+  /* No arbitrary text selection — Jar's windows are toy-like chrome, not
+   * documents. Needs the -webkit- prefix too: WebKitGTK ignores the
+   * unprefixed property and lets a drag starting on text select it
+   * instead of moving the window. */
   user-select: none;
   -webkit-user-select: none;
 }

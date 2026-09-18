@@ -10,10 +10,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* Both properties set globally (global.css, matching Cadence's own
-   * convention) — WebKitGTK needs the -webkit- prefix too, confirmed live:
-   * dragging the title text itself selected it instead some of the time,
-   * competing with the drag gesture. */
+  /* Set globally in global.css, not here — WebKitGTK needs the
+   * -webkit- prefix too, or dragging the title text can select it
+   * instead of moving the window. */
   user-select: none;
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
