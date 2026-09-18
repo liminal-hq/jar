@@ -18,12 +18,18 @@ interface SatelliteWindowSpec {
   height: number;
 }
 
-const SPECS: Record<'critter-card' | 'family-tree' | 'setup', SatelliteWindowSpec> = {
+const SPECS: Record<
+  'critter-card' | 'family-tree' | 'setup' | 'dev-settings',
+  SatelliteWindowSpec
+> = {
   'critter-card': { label: 'critter-card', title: 'Critter card', width: 280, height: 360 },
   'family-tree': { label: 'family-tree', title: 'Family tree', width: 360, height: 420 },
   // Tall enough for every row incl. the variant chip row (SPEC.md §4) and
   // TitleBar's 32px without scrolling — re-check if Setup grows more rows.
   setup: { label: 'setup', title: 'Setup', width: 320, height: 640 },
+  // Dev-only (`Drawer.tsx` only shows the button that opens this in dev
+  // builds) — not part of SPEC.md/SCREENS.md.
+  'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 280, height: 200 },
 };
 
 /** Focuses the window if it's already open, otherwise creates it
@@ -39,16 +45,24 @@ export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<voi
   }
 
   const tank = getCurrentWindow();
-  const tankPosition = await tank.outerPosition();
-  const tankSize = await tank.outerSize();
+  // `outerPosition()`/`outerSize()` return physical pixels, but a
+  // `WebviewWindow`'s own `x`/`y` constructor options are logical — dividing
+  // by the tank's own scale factor here is what keeps a satellite window
+  // actually landing beside the tank rather than drifting off on any
+  // display that isn't exactly 1x.
+  const [scale, tankPosition, tankSize] = await Promise.all([
+    tank.scaleFactor(),
+    tank.outerPosition(),
+    tank.outerSize(),
+  ]);
 
   const win = new WebviewWindow(spec.label, {
     url: 'index.html',
     title: spec.title,
     width: spec.width,
     height: spec.height,
-    x: tankPosition.x + tankSize.width + 16,
-    y: tankPosition.y,
+    x: tankPosition.x / scale + tankSize.width / scale + 16,
+    y: tankPosition.y / scale,
     resizable: true,
     // With no native chrome, the close button is TitleBar's own — shrinking
     // a window below its control group's footprint would clip it out of

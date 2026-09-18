@@ -6,7 +6,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 
 - No OS chrome. The chosen frame is the only bezel and runs edge to edge.
 - Contents: backdrop (aquarium or terrarium), critters, bubbles/mist, night tint, status chip (bottom-left: `4 fish · 22:14 · asleep`), event toasts (top-centre, 4 s).
-- Hover → the **drawer** slides out from behind the tank to one side (right by default; flips to the side with screen room). It overlaps the bezel by ~18 px so it reads as attached.
+- Click the tank → the **drawer** slides out from behind it, growing the window to the right. It overlaps the bezel by ~18 px so it reads as attached. When there isn't 180px of room to the right (the window is against the monitor's work-area edge, or maximized), it instead floats as an in-window overlay over part of the tank rather than resizing off-screen — the window can't reposition itself leftward on Wayland, so there's no other side to flip to. Clicking the tank again, or leaving the drawer idle, closes it.
   - Drawer buttons (top → bottom): Light · Bubbles (aquarium) / Mist (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup · Exit (saves the jar, quits the app — essential on GNOME where there is no tray).
   - Drawer styling follows the **dialog theme**: Modern borrows the frame's colours (wood → dark wood, neon frame → magenta); Classic 98 → grey bevel panel with pushed-in buttons; Neon terminal → dark panel, magenta outline text.
 
