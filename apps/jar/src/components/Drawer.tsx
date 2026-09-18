@@ -1,16 +1,26 @@
-// The tank window's drawer (SCREENS.md W1): "Light · Bubbles (aquarium) /
-// Mist (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup ·
-// Exit (saves the jar, quits the app — essential on GNOME where there is
-// no tray)." Styling per theme is not wired up yet — see `theme/theme.ts`
-// and `windows/Tank/TankWindow.module.css`.
+// The drawer (SCREENS.md W1): "Light · Bubbles (aquarium) / Mist
+// (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup · Exit
+// (saves the jar, quits the app — essential on GNOME where there is no
+// tray)." Mounted by `TankWindow.tsx` into the strip exposed when it grows
+// the tank window rightward on hover — see that file for why it's a resize
+// of the tank's own window rather than a second floating window.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+import type { CSSProperties } from 'react';
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { jar, useJarStore } from '../domain/jarClient';
 import { openSatelliteWindow } from '../domain/windows';
+
+const buttonStyle: CSSProperties = {
+  width: '100%',
+  textAlign: 'left',
+  font: 'inherit',
+  color: 'inherit',
+};
 
 export function Drawer() {
   const settings = useJarStore((s) => s.settings);
@@ -33,25 +43,37 @@ export function Drawer() {
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
+        font: '13px "Nunito", sans-serif',
         background: 'var(--jar-bg, #fbfaf6)',
         color: 'var(--jar-ink, #2b2a33)',
         borderRadius: 'var(--jar-radius, 12px)',
         boxShadow: 'var(--jar-shadow, 0 4px 12px rgba(0,0,0,0.2))',
-        padding: 6,
+        padding: 8,
+        boxSizing: 'border-box',
       }}
     >
-      <button onClick={toggleLight}>{settings.light_on ? 'Light: on' : 'Light: off'}</button>
-      <button onClick={toggleAmbient}>
+      <button style={buttonStyle} onClick={toggleLight}>
+        {settings.light_on ? 'Light: on' : 'Light: off'}
+      </button>
+      <button style={buttonStyle} onClick={toggleAmbient}>
         {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}:{' '}
         {settings.ambient_particles_on ? 'on' : 'off'}
       </button>
-      <button onClick={toggleSound}>{settings.sound_on ? 'Sound: on' : 'Sound: off'}</button>
-      <button onClick={toggleMode}>
+      <button style={buttonStyle} onClick={toggleSound}>
+        {settings.sound_on ? 'Sound: on' : 'Sound: off'}
+      </button>
+      <button style={buttonStyle} onClick={toggleMode}>
         {settings.mode === 'Fish' ? 'Switch to gecko' : 'Switch to fish'}
       </button>
-      <button onClick={() => openSatelliteWindow('family-tree')}>Tree</button>
-      <button onClick={() => openSatelliteWindow('setup')}>Setup</button>
-      <button onClick={exit}>Exit</button>
+      <button style={buttonStyle} onClick={() => openSatelliteWindow('family-tree')}>
+        Tree
+      </button>
+      <button style={buttonStyle} onClick={() => openSatelliteWindow('setup')}>
+        Setup
+      </button>
+      <button style={buttonStyle} onClick={exit}>
+        Exit
+      </button>
     </div>
   );
 }

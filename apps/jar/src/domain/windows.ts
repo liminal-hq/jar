@@ -39,16 +39,24 @@ export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<voi
   }
 
   const tank = getCurrentWindow();
-  const tankPosition = await tank.outerPosition();
-  const tankSize = await tank.outerSize();
+  // `outerPosition()`/`outerSize()` return physical pixels, but a
+  // `WebviewWindow`'s own `x`/`y` constructor options are logical — dividing
+  // by the tank's own scale factor here is what keeps a satellite window
+  // actually landing beside the tank rather than drifting off on any
+  // display that isn't exactly 1x.
+  const [scale, tankPosition, tankSize] = await Promise.all([
+    tank.scaleFactor(),
+    tank.outerPosition(),
+    tank.outerSize(),
+  ]);
 
   const win = new WebviewWindow(spec.label, {
     url: 'index.html',
     title: spec.title,
     width: spec.width,
     height: spec.height,
-    x: tankPosition.x + tankSize.width + 16,
-    y: tankPosition.y,
+    x: tankPosition.x / scale + tankSize.width / scale + 16,
+    y: tankPosition.y / scale,
     resizable: true,
     // With no native chrome, the close button is TitleBar's own — shrinking
     // a window below its control group's footprint would clip it out of
