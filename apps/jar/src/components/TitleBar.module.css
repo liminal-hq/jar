@@ -10,6 +10,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Both properties set globally (global.css, matching Cadence's own
+   * convention) — WebKitGTK needs the -webkit- prefix too, confirmed live:
+   * dragging the title text itself selected it instead some of the time,
+   * competing with the drag gesture. */
   user-select: none;
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
@@ -25,12 +29,6 @@
 
 .appTitle {
   flex-shrink: 0;
-  /* Belt-and-suspenders alongside the data-tauri-drag-region attribute on
-   * this same element: WebKitGTK's drag-region detection can be unreliable
-   * for elements inside flex layouts (confirmed the hard way in Threshold's
-   * ringing.css), so pair the JS-injected listener with the native
-   * property it's actually built on. */
-  -webkit-app-region: drag;
 }
 
 .appTitle.left {
@@ -40,7 +38,6 @@
 .dragRegion {
   flex: 1;
   height: 100%;
-  -webkit-app-region: drag;
 }
 
 .controlsPlaceholder {
@@ -53,9 +50,6 @@
   display: flex;
   align-items: center;
   height: 100%;
-  /* Buttons must stay clickable, not swallowed into the drag region they
-   * sit beside. */
-  -webkit-app-region: no-drag;
 }
 
 .windowControls.mac {

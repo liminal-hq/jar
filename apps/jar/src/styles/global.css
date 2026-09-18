@@ -12,6 +12,22 @@ body,
   font-family: 'Nunito', sans-serif; /* SPEC.md §4: Nunito only */
 }
 
+body {
+  /* No arbitrary text selection, matching a native app's default (and
+   * Cadence's own global.css) — Jar's windows are toy-like chrome, not
+   * documents. Confirmed live this needs the -webkit- prefix too:
+   * unprefixed alone still let WebKitGTK select the title bar's text
+   * instead of starting a window drag some of the time. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Native form controls don't reliably inherit font-family from the root. */
 button,
 input,
