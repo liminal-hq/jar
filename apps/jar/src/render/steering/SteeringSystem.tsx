@@ -18,10 +18,12 @@
 
 import { useFrame } from '@react-three/fiber';
 import type { RapierRigidBody } from '@react-three/rapier';
-import { createContext, useContext, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type * as YUKA from 'yuka';
 
+import { publishFishPositions } from '../../domain/debugChannel';
+import { useFishPositionOverlayEnabled } from '../../domain/devSettings';
 import { entityManager } from './entityManager';
 
 export interface RegisteredFish {
@@ -51,6 +53,14 @@ const scratchVelocity = new THREE.Vector3();
 const IMPULSE_SCALE = 0.03;
 const MIN_VELOCITY_SQ = 0.0001;
 
+/** The fish-position debug publish goes over a cross-window Tauri event
+ * (`domain/debugChannel.ts` — the Dev settings window that displays it is
+ * a separate JS realm), unlike the in-process pub/sub this used before
+ * moving the display out of an in-tank overlay — worth throttling well
+ * below the render frame rate so it doesn't add a 60Hz IPC cost for a
+ * dev-only readout nobody needs updated that often. */
+const POSITION_PUBLISH_INTERVAL_MS = 200;
+
 interface SteeringSystemProps {
   children: ReactNode;
 }
@@ -58,15 +68,37 @@ interface SteeringSystemProps {
 export function SteeringSystem({ children }: SteeringSystemProps) {
   const registryRef = useRef<Registry>(new Map());
 
-  useFrame((_, delta) => {
+  // A ref, not read directly in `useFrame` — the toggle can flip mid-session
+  // (Dev settings window, any window) and this component doesn't otherwise
+  // re-render on its own frame loop, so `useFrame`'s closure needs a live
+  // value to check rather than one captured at mount.
+  const positionOverlayEnabled = useFishPositionOverlayEnabled();
+  const positionOverlayEnabledRef = useRef(positionOverlayEnabled);
+  useEffect(() => {
+    positionOverlayEnabledRef.current = positionOverlayEnabled;
+  }, [positionOverlayEnabled]);
+  const lastPublishRef = useRef(0);
+
+  useFrame((state, delta) => {
     const registry = registryRef.current;
 
-    for (const fish of registry.values()) {
+    const publishPositions =
+      positionOverlayEnabledRef.current &&
+      state.clock.elapsedTime - lastPublishRef.current >= POSITION_PUBLISH_INTERVAL_MS / 1000;
+    const debugPositions: Record<number, { x: number; y: number; z: number }> | null =
+      publishPositions ? {} : null;
+
+    for (const [id, fish] of registry.entries()) {
       const body = fish.getBody();
       if (!body) continue;
       const t = body.translation();
       fish.vehicle.position.set(t.x, t.y, t.z);
       fish.vehicle.maxSpeed = fish.maxSpeed();
+      if (debugPositions) debugPositions[id] = { x: t.x, y: t.y, z: t.z };
+    }
+    if (debugPositions) {
+      lastPublishRef.current = state.clock.elapsedTime;
+      publishFishPositions(debugPositions);
     }
 
     entityManager.update(delta);

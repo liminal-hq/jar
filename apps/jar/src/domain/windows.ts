@@ -31,8 +31,10 @@ const SPECS: Record<
   // TitleBar's 32px without scrolling — re-check if Setup grows more rows.
   setup: { label: 'setup', title: 'Setup', width: 320, height: 640 },
   // Dev-only (`Drawer.tsx` only shows the button that opens this in dev
-  // builds) — not part of SPEC.md/SCREENS.md.
-  'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 280, height: 200 },
+  // builds) — not part of SPEC.md/SCREENS.md. Tall enough for both
+  // checkboxes plus their scrollable debug panels (`DevSettingsWindow.tsx`)
+  // when both are toggled on, without the window itself needing to grow.
+  'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },
 };
 
 /** Focuses the window if it's already open, otherwise creates it

@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 
 const MOUSE_OVERLAY_KEY = 'jar:dev:mouseOverlay';
+const FISH_POSITION_OVERLAY_KEY = 'jar:dev:fishPositionOverlay';
 
 export function isMouseOverlayEnabled(): boolean {
   return localStorage.getItem(MOUSE_OVERLAY_KEY) === 'true';
@@ -30,6 +31,35 @@ export function useMouseOverlayEnabled(): boolean {
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === null || e.key === MOUSE_OVERLAY_KEY) setEnabled(isMouseOverlayEnabled());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  return enabled;
+}
+
+/** Live per-fish world-coordinate readout (`SteeringSystem.tsx`'s
+ * `useFrame` publishes into `render/steering/fishPositionDebug.ts` only
+ * while this is on, so it costs nothing the rest of the time) — grew out of
+ * repeatedly hand-patching that exact instrumentation back in mid-session
+ * to chase "fish swam through the glass" reports; worth keeping on hand
+ * for the next one instead of re-adding it from scratch each time. */
+export function isFishPositionOverlayEnabled(): boolean {
+  return localStorage.getItem(FISH_POSITION_OVERLAY_KEY) === 'true';
+}
+
+export function setFishPositionOverlayEnabled(enabled: boolean): void {
+  localStorage.setItem(FISH_POSITION_OVERLAY_KEY, String(enabled));
+  window.dispatchEvent(new StorageEvent('storage', { key: FISH_POSITION_OVERLAY_KEY }));
+}
+
+export function useFishPositionOverlayEnabled(): boolean {
+  const [enabled, setEnabled] = useState(isFishPositionOverlayEnabled);
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === FISH_POSITION_OVERLAY_KEY) {
+        setEnabled(isFishPositionOverlayEnabled());
+      }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
