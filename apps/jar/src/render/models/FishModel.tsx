@@ -22,10 +22,12 @@ import {
   BODY_DEPTH,
   createBodyGeometry,
   createVeilGeometry,
+  MALE_TAIL_SCALE,
   MOUTH_HINGE,
   paintBellyGradient,
   PECTORAL_HINGE,
   SHARED_GEOMETRY,
+  SVG_SCALE,
   TAIL_PIVOT,
   wrapInPivot,
 } from './fishGeometry';
@@ -34,13 +36,6 @@ interface FishModelProps {
   critter: Critter;
   vehicle: YUKA.Vehicle;
 }
-
-/** The SVG artwork is authored at a `viewBox="-170 -110 340 220"` scale —
- * this brings it down to roughly the same on-screen size as the model it
- * replaces (whose body sphere had radius 0.18). Combined with
- * `lifeStageScale` on the root group, same single-scale-group pattern the
- * model already used. */
-const SVG_SCALE = 0.004;
 
 /** Eye and spot positions are plain sphere primitives, not extruded SVG
  * shapes (cheap, no reason to route something this simple through
@@ -80,7 +75,7 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
 
   const isMale = critter.sex === 'Male';
   const scale = lifeStageScale(critter.age_sec) * SVG_SCALE;
-  const tailScale = isMale ? 1.2 : 1.0; // §6.7 — modest fin scale-up, males only
+  const tailScale = isMale ? MALE_TAIL_SCALE : 1.0; // §6.7 — modest fin scale-up, males only
   const saturation = isMale ? 0.75 : 0.62; // §6.7 — a few points apart, not a strong split
 
   const bodyColour = useMemo(

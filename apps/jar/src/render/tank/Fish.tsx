@@ -16,6 +16,7 @@ import { lifeStageScale } from '../../domain/simConstants';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
 import { FishModel } from '../models/FishModel';
+import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld } from '../physics/coordinates';
 import { useSteeringRegistry } from '../steering/SteeringSystem';
 import { useFishSteering } from '../steering/useFishSteering';
@@ -26,8 +27,20 @@ import { useFishSteering } from '../steering/useFishSteering';
  * small, and a manual sphere sidesteps `colliders="hull"` entirely: its
  * automatic hull generation was producing a malformed collider from the
  * model's nested tail-pivot group, launching fish out of the tank on their
- * very first physics step. */
-const COLLIDER_RADIUS = 0.32;
+ * very first physics step.
+ *
+ * Sized from the tail tip, not the nose or body — `TAIL_TIP_SVG_DISTANCE`
+ * is always the model's farthest point from its own origin, further out
+ * than the nose in every fin type. A flat radius here (as this used to be)
+ * undersizes it for a male and/or a Veil-tailed fish badly enough that the
+ * tail visibly pokes through the glass or the sand while the RigidBody's
+ * centre, which is all a `BallCollider` actually constrains, stays legally
+ * inside — exactly the "fish swims through the wall" bug this fixes. */
+function colliderRadiusFor(critter: Critter): number {
+  const finType = critter.fin ?? 'Forked';
+  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
+  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale * lifeStageScale(critter.age_sec);
+}
 
 interface FishProps {
   critter: Critter;
@@ -136,7 +149,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       linearDamping={2.5}
       angularDamping={5}
     >
-      <BallCollider args={[COLLIDER_RADIUS * lifeStageScale(critter.age_sec)]} />
+      <BallCollider args={[colliderRadiusFor(critter)]} />
       <group
         onClick={(e) => {
           // Stops propagation to other intersected R3F objects, but not
