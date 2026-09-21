@@ -1,5 +1,5 @@
 // W1 · Tank (SCREENS.md). No OS chrome. The tank window doesn't apply any
-// of the six frame bezel treatments (PR25) — the glass tank enclosure
+// of the six frame bezel treatments — the glass tank enclosure
 // (`AquariumEnvironment.tsx`) is the window's whole visual identity,
 // translucent straight through to the desktop behind it, so a separate
 // opaque frame chrome around it would work against that rather than for

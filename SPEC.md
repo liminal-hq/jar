@@ -35,7 +35,7 @@ Copy rule: sentence case everywhere — no all-caps headings or labels.
 
 Two independent axes, both chosen in Setup and persisted:
 
-**Tank frame** (bezel of W1): Bevelled 98 · Wood stand · Brushed metal · Rounded glass (0 px bezel, truly edge-to-edge) · Neon/CRT (adds scanlines) · Cardboard cutout.
+**Tank frame**: Bevelled 98 · Wood stand · Brushed metal · Rounded glass (0 px bezel, truly edge-to-edge) · Neon/CRT (adds scanlines) · Cardboard cutout. Setup-selectable and persisted, but not currently applied to W1 — the translucent glass tank enclosure (§3, `docs/architecture/3d-engine.md` §8.1) is the window's whole visual boundary while this axis is revisited; see `SCREENS.md`'s W1 entry.
 
 **Dialog theme** (W2, W3, W4 and the drawer):
 

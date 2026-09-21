@@ -240,7 +240,7 @@ spineBones.forEach((bone, i) => {
 
 ## 8. Environment models
 
-The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window chrome around the 3D canvas — it does not change with this spec. The 3D scene is only what's _inside_ the tank viewport.
+The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window chrome around the 3D canvas — it does not change with this spec. The 3D scene is only what's _inside_ the tank viewport. As built, the tank window doesn't apply any frame treatment at all (§8.1, `SCREENS.md`'s W1 entry) — the frame axis is Setup-selectable and persisted but currently inert on W1 while the translucent glass tank is the window's whole visual boundary.
 
 ### 8.1 Aquarium
 
@@ -293,7 +293,7 @@ Replace the 2D version's flat CSS tint overlay with an actual light transition: 
 
 ### 10.3 Frame-driven effects
 
-Only the **Neon/CRT** frame needs a 3D-side change: a scanline + mild chromatic-aberration post-process pass via `@react-three/postprocessing`, applied only to the tank canvas, matching the original `crt` flag's `repeating-linear-gradient` scanline overlay. All other frames (Bevelled 98, Wood, Metal, Glass, Cardboard) require zero changes to the 3D scene — their entire look lives in the bezel chrome around it, per `SPEC.md` §4.
+Only the **Neon/CRT** frame needs a 3D-side change: a scanline + mild chromatic-aberration post-process pass via `@react-three/postprocessing`, applied only to the tank canvas, matching the original `crt` flag's `repeating-linear-gradient` scanline overlay. All other frames (Bevelled 98, Wood, Metal, Glass, Cardboard) require zero changes to the 3D scene — their entire look lives in the bezel chrome around it, per `SPEC.md` §4. This section describes the frame system as designed; per §8's note, none of it is currently applied to the tank window.
 
 ---
 
