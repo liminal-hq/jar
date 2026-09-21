@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Lower-jaw/lip wedge for the mouth-open animation. Single piece, no morphing:
+       rotate the whole path about the hinge (90, 8) — positive (clockwise) rotation
+       in this Y-down SVG space swings the jaw tip down, reading as the mouth opening
+       (open ~20-25 deg; below ~15 it reads as a pout rather than open). Rest
+       (unrotated) pose: the rear half is buried in the chin and the front half
+       traces just outside the chin curve, so closed it merges into the head as a
+       subtle lip; the rounded tip peeks ~4 units past the nose (100,0). Fill
+       matches the BODY tone (not the fin tone) on purpose — the jaw must read as
+       part of the head, closed and open. -->
+  <path id="mouth" fill="#6fa8dc" d="
+    M 88 6
+    C 93 4.5, 98 4.5, 102 5.5
+    C 104 6.8, 104 9.5, 102 11.2
+    C 97.8 13.6, 92.5 14.7, 89.5 13.5
+    C 88.3 12.5, 87.6 8.5, 88 6
+    Z"/>
+</svg>

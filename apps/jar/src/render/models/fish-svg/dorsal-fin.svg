@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Backswept rounded dorsal sail. Base sunk ~4 units into the body along
+       y=-38 from x=36 to x=-20; crest ~y=-72. Placeholder fill. -->
+  <path id="dorsal-fin" fill="#6fa8dc" d="
+    M 36 -38
+    C 30 -52, 18 -66, 2 -71
+    C -6 -73, -14 -72, -20 -66
+    C -26 -58, -24 -46, -20 -38
+    Z"/>
+</svg>

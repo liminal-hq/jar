@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Long veil tail: sweeps back to ~x=-150, trailing edge ripples and drapes
+       below the centreline. Full-width at the root so the tail-pivot swim wave
+       still reads. Root overlaps body from x=-56 (pivot at -60,0). Placeholder fill. -->
+  <path id="tail-veil" fill="#6fa8dc" d="
+    M -56 -12
+    C -82 -22, -114 -28, -136 -24
+    C -146 -21, -151 -14, -150 -6
+    C -149 2, -143 6, -137 10
+    C -131 14, -131 20, -126 26
+    C -121 32, -113 37, -104 39
+    C -92 41, -78 34, -68 24
+    C -63 19, -59 15, -56 12
+    Z"/>
+</svg>
