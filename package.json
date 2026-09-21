@@ -11,6 +11,7 @@
     "dev:lan": "bun run --cwd apps/jar dev:lan",
     "tauri": "bun run --cwd apps/jar tauri",
     "tauri:dev": "bun run --cwd apps/jar tauri:dev",
+    "tauri:dev:remote": "bun run --cwd apps/jar tauri:dev:remote",
     "build": "bun run --cwd apps/jar build",
     "test:js": "vitest run",
     "test:js:ci": "vitest run --reporter=default --reporter=junit --outputFile=test-results/junit.xml",
