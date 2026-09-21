@@ -22,6 +22,16 @@ html[data-maximized='true'] .wrapper {
   border-radius: 0;
 }
 
+/* Windows 11 only: `domain/windows.ts` leaves `shadow: true` on these
+ * windows specifically so DWM gives them native rounded corners there —
+ * applying this file's own CSS radius on top would clip against a second,
+ * not-quite-matching curve instead of one clean one. Windows 10 gets no
+ * such native rounding from the same `shadow: true`, so it keeps the CSS
+ * radius instead of going square. TitleBar sets this attribute. */
+html[data-dwm-rounded-corners='true'] .wrapper {
+  border-radius: 0;
+}
+
 .shell {
   flex: 1;
   min-height: 0;

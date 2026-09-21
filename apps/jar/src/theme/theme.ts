@@ -150,12 +150,35 @@ export const TANK_FRAMES: Record<TankFrame, { bezelWidth: string; bezelColor: st
   CardboardCutout: { bezelWidth: '16px', bezelColor: '#b89666' },
 };
 
+/** Perceived brightness (ITU-R BT.601 luma, not full WCAG relative
+ * luminance — a binary light/dark split doesn't need contrast-ratio
+ * accuracy) of a `#rrggbb` colour. Under 128 reads as dark. */
+function isDarkBackground(hex: string): boolean {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  return 0.299 * r + 0.587 * g + 0.114 * b < 128;
+}
+
+export interface AppliedDialogTheme {
+  /** Whether the resolved background (variant-aware) reads as dark —
+   * callers use this to tell the OS window server the app's actual
+   * light/dark mode (`Window.setTheme()`). Every platform's native,
+   * app-content-blind chrome (window border/shadow colour, native context
+   * menus, etc.) otherwise defaults to light regardless of the selected
+   * theme; on Windows this is `domain/windows.ts`'s `shadow: true` DWM
+   * border staying light-coloured under a dark theme. */
+  isDark: boolean;
+}
+
 /** `variant`, if given, should be one of `variantNamesFor(theme)` — SPEC.md
  * §4's named per-theme accent/palette pick. Falls back to the theme's base
  * tokens when omitted or not found (e.g. before `theme_variants` hydrates). */
-export function applyDialogTheme(theme: DialogTheme, variant?: string): void {
+export function applyDialogTheme(theme: DialogTheme, variant?: string): AppliedDialogTheme {
   const tokens = DIALOG_THEMES[theme];
   const variantTokens = variant ? DIALOG_THEME_VARIANTS[theme][variant] : undefined;
+  const background = variantTokens?.background ?? tokens.background;
   const root = document.documentElement;
   // A selector hook for the theme-specific chrome that isn't expressible as
   // a single custom-property value (SPEC.md §4: Classic 98's title bar,
@@ -163,11 +186,20 @@ export function applyDialogTheme(theme: DialogTheme, variant?: string): void {
   // `components/DialogShell.module.css`.
   root.dataset.dialogTheme = theme;
   const style = root.style;
-  style.setProperty('--jar-bg', variantTokens?.background ?? tokens.background);
+  style.setProperty('--jar-bg', background);
   style.setProperty('--jar-ink', variantTokens?.ink ?? tokens.ink);
   style.setProperty('--jar-radius', tokens.radius);
   style.setProperty('--jar-accent', variantTokens?.accent ?? tokens.accent);
   style.setProperty('--jar-shadow', tokens.shadow);
+  const isDark = isDarkBackground(background);
+  // Native, unstyled form controls (`<select>`, checkboxes, scrollbars) are
+  // drawn by the browser/OS's own widget theming, which `--jar-*` custom
+  // properties never reach — they stay light regardless of the selected
+  // theme until the engine is told the page itself is dark. Identical
+  // effect across WebKitGTK and WebView2, since it's a standard CSS
+  // property, not a platform-specific API.
+  style.setProperty('color-scheme', isDark ? 'dark' : 'light');
+  return { isDark };
 }
 
 export function applyTankFrame(frame: TankFrame): void {

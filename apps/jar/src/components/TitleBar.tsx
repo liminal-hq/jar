@@ -33,7 +33,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { platform } from '@tauri-apps/plugin-os';
+import { platform, version } from '@tauri-apps/plugin-os';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -81,7 +81,22 @@ export function TitleBar({ title }: TitleBarProps) {
 
   useEffect(() => {
     const os = platform();
-    setPlatformType(os === 'macos' ? 'mac' : os === 'linux' ? 'linux' : 'win');
+    const detected = os === 'macos' ? 'mac' : os === 'linux' ? 'linux' : 'win';
+    setPlatformType(detected);
+    document.documentElement.dataset.platform = detected;
+    // A selector hook, matching `applyMaximized`'s `data-maximized` below —
+    // `DialogShell.module.css` uses it to drop its own CSS corner-radius
+    // only here, where `domain/windows.ts`'s `shadow: true` already gives
+    // undecorated windows native DWM rounding (see that file's comment);
+    // layering the CSS radius on top there would clip against a second,
+    // not-quite-matching curve instead of one clean one. Windows 11 kept
+    // Windows 10's `10.0.x` version string, distinguished only by build
+    // number — builds 22000+ are Windows 11, so a plain platform check
+    // would also (wrongly) square off every Windows 10 window's corners,
+    // since DWM only grants that native rounding from build 22000 on.
+    const isWindows11 =
+      detected === 'win' && (parseInt(version().split('.')[2] ?? '', 10) || 0) >= 22000;
+    document.documentElement.dataset.dwmRoundedCorners = String(isWindows11);
 
     const updateState = async () => {
       try {

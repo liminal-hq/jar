@@ -112,6 +112,26 @@ describe('applyDialogTheme', () => {
     expect(root.getPropertyValue('--jar-bg')).toBe(DIALOG_THEMES.Modern.background);
     expect(root.getPropertyValue('--jar-accent')).toBe(DIALOG_THEMES.Modern.accent);
   });
+
+  it('sets the color-scheme property so native form controls follow the theme', () => {
+    applyDialogTheme('Modern');
+    expect(document.documentElement.style.getPropertyValue('color-scheme')).toBe('light');
+
+    applyDialogTheme('NeonTerminal');
+    expect(document.documentElement.style.getPropertyValue('color-scheme')).toBe('dark');
+  });
+
+  it('reports isDark matching each theme base background, for Window.setTheme()', () => {
+    // Modern/Classic98/PaperNotebook/HandheldLcd read light even though
+    // HandheldLcd's title strip is dark — it's the *background* token
+    // (its light LCD-green screen) that drives this, not the accent chrome.
+    expect(applyDialogTheme('Modern').isDark).toBe(false);
+    expect(applyDialogTheme('ModernDark').isDark).toBe(true);
+    expect(applyDialogTheme('Classic98').isDark).toBe(false);
+    expect(applyDialogTheme('PaperNotebook').isDark).toBe(false);
+    expect(applyDialogTheme('HandheldLcd').isDark).toBe(false);
+    expect(applyDialogTheme('NeonTerminal').isDark).toBe(true);
+  });
 });
 
 describe('DIALOG_THEME_VARIANTS', () => {
