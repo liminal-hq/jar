@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:lan": "JAR_LAN_DEV=1 vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev --config src-tauri/tauri.conf.dev.json"
+    "tauri:dev": "tauri dev --config src-tauri/tauri.conf.dev.json",
+    "tauri:dev:remote": "tauri dev --config src-tauri/tauri.conf.remote.json"
   },
   "dependencies": {
     "@fontsource/nunito": "^5.3.0",

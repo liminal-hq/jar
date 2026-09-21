@@ -18,3 +18,12 @@ apps/jar/src-tauri/target/
 
 # App data (local dev jar snapshots)
 *.jar-snapshot
+
+# Machine-specific remote-dev config (LAN IP of whichever desktop is
+# running `dev:lan`) — copy tauri.conf.remote.json.example and fill it in.
+apps/jar/src-tauri/tauri.conf.remote.json
+
+# Cross-compiled Windows dev binary bundle (jar.exe + WebView2Loader.dll),
+# built locally via `cargo xwin` and copied to a Windows machine by hand —
+# not a tracked build output.
+/dist-windows-remote-dev/

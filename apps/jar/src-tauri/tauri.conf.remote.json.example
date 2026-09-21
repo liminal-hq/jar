@@ -1,0 +1,6 @@
+{
+  "build": {
+    "beforeDevCommand": "",
+    "devUrl": "http://REPLACE-WITH-LAN-IP:1420"
+  }
+}
