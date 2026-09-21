@@ -205,6 +205,22 @@ function firstRunSettings(): JarSettings {
   return prefersDark ? { ...DEFAULT_SETTINGS, dialog_theme: 'ModernDark' } : DEFAULT_SETTINGS;
 }
 
+/** How often every window re-fetches the authoritative snapshot and
+ * re-hydrates its store, independent of the `Channel`/rebroadcast event
+ * stream above. That stream is genuinely fire-and-forget on the Rust side
+ * (`plugin.rs`'s tick loop does `let _ = channel.send(event)` — a failed
+ * send is intentionally not surfaced as an error) with no redundancy for a
+ * one-shot event like `Passed`: a single dropped send leaves a critter
+ * `alive: true` in this store forever, since no later `TickUpdate` ever
+ * mentions a dead critter again (`events_for_tick` filters them out) and
+ * nothing else ever corrects it. A live-but-stale critter isn't just a
+ * stats bug — its `<Fish>` keeps mounted, so its Yuka vehicle and Rapier
+ * `RigidBody` keep running steering/physics on a critter the sim itself no
+ * longer tracks, with nothing left to weld it back inside the tank if it
+ * ever drifts out. This interval is the periodic reconciliation that makes
+ * a single dropped event self-heal within one cycle instead of silently. */
+const RECONCILE_INTERVAL_MS = 5000;
+
 let startPromise: Promise<void> | null = null;
 
 /** Idempotent — safe to call from every window's top-level effect. Only
@@ -238,6 +254,17 @@ async function doStart(settings: JarSettings): Promise<void> {
     is_night: boolean;
   };
   useJarStore.getState().hydrate(snapshot);
+
+  setInterval(() => {
+    void (async () => {
+      const resync = (await pluginApi.getSnapshot()) as {
+        critters: Critter[];
+        settings: JarSettings;
+        sim_seconds: number;
+      };
+      useJarStore.getState().hydrate(resync);
+    })();
+  }, RECONCILE_INTERVAL_MS);
 }
 
 /** Typed wrappers over the untyped `tauri-plugin-jar-api` commands — every
