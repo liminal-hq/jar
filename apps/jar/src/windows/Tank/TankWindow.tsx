@@ -1,12 +1,18 @@
-// W1 · Tank (SCREENS.md). No OS chrome — the frame bezel below is the only
-// window decoration, and it doubles as the Tauri drag region. The tank
-// *interior* is a 3D scene (`docs/architecture/3d-engine.md`); only the
-// bezel, drawer, toasts and status chip here are flat HTML/CSS.
+// W1 · Tank (SCREENS.md). No OS chrome. The tank window doesn't apply any
+// of the six frame bezel treatments — the glass tank enclosure
+// (`AquariumEnvironment.tsx`) is the window's whole visual identity,
+// translucent straight through to the desktop behind it, so a separate
+// opaque frame chrome around it would work against that rather than for
+// it. `.bezel` (the outer div below) still doubles as the Tauri drag
+// region. The tank *interior* is a 3D scene
+// (`docs/architecture/3d-engine.md`); only the drawer, toasts and status
+// chip here are flat HTML/CSS.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { currentMonitor, getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Drawer } from '../../components/Drawer';
@@ -15,7 +21,7 @@ import { ToastLayer } from '../../components/Toast';
 import { useMouseOverlayEnabled } from '../../domain/devSettings';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import { TankScene } from '../../render/tank/TankScene';
-import { applyDialogTheme, applyTankFrame } from '../../theme/theme';
+import { applyDialogTheme } from '../../theme/theme';
 import styles from './TankWindow.module.css';
 
 /** How much wider the window grows to fit the drawer open (SCREENS.md W1) —
@@ -67,8 +73,12 @@ export function TankWindow() {
 
   useEffect(() => {
     applyDialogTheme(settings.dialog_theme, settings.theme_variants[settings.dialog_theme]);
-    applyTankFrame(settings.frame);
-  }, [settings.dialog_theme, settings.theme_variants, settings.frame]);
+    // No `applyTankFrame()` call — the tank doesn't apply frame chrome (see
+    // this file's header). Leaving it uncalled matters, not just leaving
+    // the `data-frame` attribute off: it sets `--jar-bezel-width`/
+    // `--jar-bezel-color` as CSS custom properties that `.tankInterior`'s
+    // own base rule reads unconditionally, attribute or not.
+  }, [settings.dialog_theme, settings.theme_variants]);
 
   useEffect(() => {
     // `settings.always_on_top` (SPEC.md §6) is a fact about the window,
@@ -166,6 +176,51 @@ export function TankWindow() {
     else void openDrawer();
   };
 
+  // `data-tauri-drag-region` alone doesn't cover the tank: Tauri's drag
+  // detection checks `event.target` directly with no ancestor lookup, and
+  // the R3F canvas covering the tank's content area never receives that
+  // attribute — `Canvas`'s own props only ever reach its outer wrapper
+  // div, never the `<canvas>` DOM node itself (see its source). Starting
+  // the drag manually from a bubbled `mousedown` on the tank's own div
+  // works regardless of what element inside it was actually hit.
+  //
+  // Deliberately waits for real movement past a small threshold before
+  // calling `startDragging()`, rather than firing on every press: unlike
+  // Tauri's own native `data-tauri-drag-region` handling (evidently
+  // synchronous with the OS's own mousedown), this goes through an async
+  // IPC round-trip — by the time the native window-move grab actually
+  // begins, a plain click may have already released, and GTK can end up
+  // grabbing a pointer that's no longer down, swallowing the click
+  // entirely instead of letting it resolve normally. Confirmed live: an
+  // unconditional call on every mousedown made the drawer stop opening.
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const DRAG_THRESHOLD_PX = 4;
+
+  const handleTankMouseDown = (e: ReactMouseEvent) => {
+    if (e.buttons !== 1) return;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    const handleMove = (moveEvent: MouseEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      const dx = moveEvent.clientX - start.x;
+      const dy = moveEvent.clientY - start.y;
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      dragStartRef.current = null;
+      cleanup();
+      void getCurrentWindow().startDragging();
+    };
+    const handleUp = () => {
+      dragStartRef.current = null;
+      cleanup();
+    };
+    const cleanup = () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  };
+
   // Backstop for closing without another click: `mousemove` fires
   // reliably and continuously the whole time the cursor is genuinely
   // inside the window (there's no event for "the cursor left" — see
@@ -208,7 +263,9 @@ export function TankWindow() {
   const handleDrawerNavigate = () => closeDrawer();
 
   return (
-    <div className={styles.bezel} data-frame={settings.frame} data-tauri-drag-region>
+    // No `data-frame` attribute — see this file's header on why the tank
+    // doesn't apply frame chrome.
+    <div className={styles.bezel} data-tauri-drag-region>
       {mouseOverlayEnabled && <MouseDebugOverlay />}
       <div
         className={styles.tankInterior}
@@ -218,6 +275,7 @@ export function TankWindow() {
             : undefined
         }
         onClick={toggleDrawer}
+        onMouseDown={handleTankMouseDown}
         data-tauri-drag-region
       >
         <TankScene />

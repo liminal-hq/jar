@@ -240,12 +240,12 @@ spineBones.forEach((bone, i) => {
 
 ## 8. Environment models
 
-The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window chrome around the 3D canvas — it does not change with this spec. The 3D scene is only what's _inside_ the tank viewport.
+The **frame bezel** (Bevelled 98 / Wood stand / Brushed metal / Rounded glass / Neon-CRT / Cardboard cutout, `SPEC.md` §4) is HTML/CSS window chrome around the 3D canvas — it does not change with this spec. The 3D scene is only what's _inside_ the tank viewport. As built, the tank window doesn't apply any frame treatment at all (§8.1, `SCREENS.md`'s W1 entry) — the frame axis is Setup-selectable and persisted but currently inert on W1 while the translucent glass tank is the window's whole visual boundary.
 
 ### 8.1 Aquarium
 
-- **Water:** not a real fluid simulation — a depth-tinted fog volume (color gradient matching the original CSS gradient's three stops) plus a slow-scrolling caustic light-mottling texture projected onto the floor and rock from above. A screen-space underwater-wobble post-process is a fine stretch goal, not a baseline requirement.
-- **Glass front pane:** a thin transparent box face at the front of the tank volume (subtle refraction/fresnel via a standard glass-like material) — this is the one place a bit of PBR glass shader is appropriate, since real glass genuinely reads as glass and the flat/toon rule in §6.4 is about creatures, not surfaces.
+- **Water and glass, as built:** a single translucent tinted box (`AquariumEnvironment.tsx`) encloses the whole tank volume — not just a front pane — using plain alpha blending (`meshPhysicalMaterial` with `transparent`/`opacity`, not `transmission`). `transmission` achieves its see-through look by re-rendering the scene's own opaque contents into an offscreen texture and sampling that, which still writes fully-opaque alpha to the canvas; that would defeat the point here, since the actual desktop behind Jar's transparent window needs to show through the tank itself, tinted by the glass, not just around it. Real alpha blending is what punches a genuinely partial-transparency hole in the canvas's output. A soft additive plane near the tank's ceiling stands in for the surface highlight, toggled by the `light` drawer control.
+- **Not yet built:** a depth-tinted fog volume (the original plan's colour-gradient backdrop, now superseded by the alpha-blended box above), a slow-scrolling caustic light-mottling texture on the floor/rock, and the screen-space underwater-wobble stretch goal.
 - **Floor/decor:** sand floor (two-tone, matching the original's two layered ellipses), one rock, three plants. Plant sway: same sine-based technique as fish spine/gecko gait, driven by a bone or vertex-shader bend — same visual effect as the CSS `sway` keyframe it replaces, built with a genuinely different (3D-native) mechanism, not adapted from it.
 - **Airstone position:** fixed point at roughly the same relative location as the original (~66% x, near the rock) — this is the bubble emitter origin (§9.1) and, if the sensor-volume stretch goal (§5.3) is built, the force-field origin too.
 - **Light toggle:** a surface highlight / soft light-shaft effect (a simple additive gradient plane or sprite is enough) toggled by the `light` boolean from the drawer.
@@ -293,7 +293,7 @@ Replace the 2D version's flat CSS tint overlay with an actual light transition: 
 
 ### 10.3 Frame-driven effects
 
-Only the **Neon/CRT** frame needs a 3D-side change: a scanline + mild chromatic-aberration post-process pass via `@react-three/postprocessing`, applied only to the tank canvas, matching the original `crt` flag's `repeating-linear-gradient` scanline overlay. All other frames (Bevelled 98, Wood, Metal, Glass, Cardboard) require zero changes to the 3D scene — their entire look lives in the bezel chrome around it, per `SPEC.md` §4.
+Only the **Neon/CRT** frame needs a 3D-side change: a scanline + mild chromatic-aberration post-process pass via `@react-three/postprocessing`, applied only to the tank canvas, matching the original `crt` flag's `repeating-linear-gradient` scanline overlay. All other frames (Bevelled 98, Wood, Metal, Glass, Cardboard) require zero changes to the 3D scene — their entire look lives in the bezel chrome around it, per `SPEC.md` §4. This section describes the frame system as designed; per §8's note, none of it is currently applied to the tank window.
 
 ---
 
