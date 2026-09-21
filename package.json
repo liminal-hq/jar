@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "bun run --cwd apps/jar dev",
+    "dev:lan": "bun run --cwd apps/jar dev:lan",
     "tauri": "bun run --cwd apps/jar tauri",
     "tauri:dev": "bun run --cwd apps/jar tauri:dev",
     "build": "bun run --cwd apps/jar build",
