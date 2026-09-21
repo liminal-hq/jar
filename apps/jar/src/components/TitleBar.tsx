@@ -81,7 +81,15 @@ export function TitleBar({ title }: TitleBarProps) {
 
   useEffect(() => {
     const os = platform();
-    setPlatformType(os === 'macos' ? 'mac' : os === 'linux' ? 'linux' : 'win');
+    const detected = os === 'macos' ? 'mac' : os === 'linux' ? 'linux' : 'win';
+    setPlatformType(detected);
+    // A selector hook, matching `applyMaximized`'s `data-maximized` below —
+    // `DialogShell.module.css` uses it to drop its own CSS corner-radius on
+    // Windows, where `domain/windows.ts`'s `shadow: true` already gives
+    // undecorated windows native DWM rounding on Windows 11 (see that
+    // file's comment); layering the CSS radius on top there would clip
+    // against a second, not-quite-matching curve instead of one clean one.
+    document.documentElement.dataset.platform = detected;
 
     const updateState = async () => {
       try {

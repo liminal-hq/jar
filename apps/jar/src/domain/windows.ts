@@ -81,6 +81,17 @@ export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<voi
     // just reveals an opaque backdrop colour — the same pattern the tank
     // window already uses for its own bezel.
     transparent: true,
+    // Windows-only (unsupported on Linux per the Tauri docs, so this is a
+    // no-op on the platform these windows were designed and tested on
+    // first): deliberately left on, unlike the tank window's own
+    // `shadow: false` in `tauri.conf.json`. DWM gives an undecorated window
+    // with `shadow: true` both a soft drop shadow and, on Windows 11,
+    // native rounded corners — exactly what these dialog-style windows
+    // want. `DialogShell.module.css` drops its own CSS corner-radius on
+    // Windows (`html[data-platform='win']`) so that native rounding is the
+    // only rounding, rather than two slightly-mismatched radii clipping
+    // against each other.
+    shadow: true,
   });
 
   win.once('tauri://error', (e) => {

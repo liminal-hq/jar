@@ -72,12 +72,21 @@ export function TankWindow() {
   }, []);
 
   useEffect(() => {
-    applyDialogTheme(settings.dialog_theme, settings.theme_variants[settings.dialog_theme]);
+    const { isDark } = applyDialogTheme(
+      settings.dialog_theme,
+      settings.theme_variants[settings.dialog_theme],
+    );
     // No `applyTankFrame()` call — the tank doesn't apply frame chrome (see
     // this file's header). Leaving it uncalled matters, not just leaving
     // the `data-frame` attribute off: it sets `--jar-bezel-width`/
     // `--jar-bezel-color` as CSS custom properties that `.tankInterior`'s
     // own base rule reads unconditionally, attribute or not.
+    //
+    // `setTheme` still matters here despite `shadow: false` leaving no DWM
+    // border to colour (`tauri.conf.json`) — it's what tells the OS window
+    // server the app's actual light/dark mode at all, for whatever
+    // app-content-blind chrome each platform draws from it.
+    void getCurrentWindow().setTheme(isDark ? 'dark' : 'light');
   }, [settings.dialog_theme, settings.theme_variants]);
 
   useEffect(() => {

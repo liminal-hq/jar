@@ -11,6 +11,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
@@ -33,7 +34,13 @@ export function DialogShell({ windowTitle, title, children }: DialogShellProps) 
   const variant = useJarStore((s) => s.settings.theme_variants[s.settings.dialog_theme]);
 
   useEffect(() => {
-    applyDialogTheme(theme, variant);
+    const { isDark } = applyDialogTheme(theme, variant);
+    // Tells the OS window server the app's actual light/dark mode — every
+    // platform's native, app-content-blind chrome (context menus, and on
+    // Windows the DWM border/shadow colour `domain/windows.ts`'s
+    // `shadow: true` gives these windows) otherwise defaults to light
+    // regardless of the app's own selected theme.
+    void getCurrentWindow().setTheme(isDark ? 'dark' : 'light');
   }, [theme, variant]);
 
   return (
