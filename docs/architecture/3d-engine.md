@@ -146,7 +146,7 @@ Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Veh
 
 ### 5.2 Per-critter body
 
-- Dynamic `RigidBody`, `colliders="hull"` (or a hand-placed capsule for fish, box/capsule chain for gecko legs if a full articulated gecko body is eventually wanted — a single hull collider is sufficient for v1).
+- Dynamic `RigidBody`. Fish use a hand-placed `BallCollider` sized to the model's rough visual bounds, not `colliders="hull"` — auto-hull generation misreads `FishModel`'s nested tail-pivot `<group>` transform and produces a malformed, overlapping collider that Rapier's solver resolves with a violent corrective impulse on the very first physics step, ejecting the fish from the tank (see `Fish.tsx`'s `COLLIDER_RADIUS` comment). Gecko can use a box/capsule chain for its legs if a full articulated body is eventually wanted — a single hand-placed collider is sufficient for v1.
 - `linearDamping` ~2–3, `angularDamping` ~5 as starting points — this is the "how heavy/sluggish does swimming feel" dial; tune by eye once a fish is actually on screen, don't over-fit these numbers in the abstract.
 - Every render frame: apply the steering layer's desired velocity as an impulse (not a position snap), and set rotation from the heading computed off that same velocity vector. See the worked example already established for this project — `gravityScale={0}`, damped impulse, quaternion-from-heading — that pattern is the reference implementation; don't re-derive it differently per critter type.
 

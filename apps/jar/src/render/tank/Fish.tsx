@@ -8,16 +8,26 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';
-import { RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import { useEffect, useMemo, useRef } from 'react';
 import * as YUKA from 'yuka';
 
+import { lifeStageScale } from '../../domain/simConstants';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
 import { FishModel } from '../models/FishModel';
 import { simPercentToWorld } from '../physics/coordinates';
 import { useSteeringRegistry } from '../steering/SteeringSystem';
 import { useFishSteering } from '../steering/useFishSteering';
+
+/** A loose bounding sphere around `FishModel`'s combined body/tail/eye
+ * geometry at scale 1, hand-picked rather than derived from the mesh —
+ * collision doesn't need to trace the model precisely for a creature this
+ * small, and a manual sphere sidesteps `colliders="hull"` entirely: its
+ * automatic hull generation was producing a malformed collider from the
+ * model's nested tail-pivot group, launching fish out of the tank on their
+ * very first physics step. */
+const COLLIDER_RADIUS = 0.32;
 
 interface FishProps {
   critter: Critter;
@@ -121,11 +131,12 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     <RigidBody
       ref={rigidBodyRef}
       position={[spawnPosition.x, spawnPosition.y, spawnPosition.z]}
-      colliders="hull"
+      colliders={false}
       gravityScale={0}
       linearDamping={2.5}
       angularDamping={5}
     >
+      <BallCollider args={[COLLIDER_RADIUS * lifeStageScale(critter.age_sec)]} />
       <group
         onClick={(e) => {
           // Stops propagation to other intersected R3F objects, but not
