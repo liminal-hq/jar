@@ -6,6 +6,12 @@
 // simulation state, and every window (not just the tank) needs to react to
 // it — the family tree's node click does the same thing a tank click does.
 //
+// A freshly-created critter-card window also gets the id via its own URL
+// (`openSatelliteWindow`'s `initialQuery`) — the `emit()` below still fires
+// unconditionally so an *already-open* card retargets, but a new window's
+// listener isn't guaranteed to be registered yet by the time that emit
+// reaches it, so the URL is what the first selection actually relies on.
+//
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
@@ -17,7 +23,7 @@ import { openSatelliteWindow } from './windows';
 const SELECTION_EVENT = 'jar://critter-selected';
 
 export async function selectCritter(id: CritterId): Promise<void> {
-  await openSatelliteWindow('critter-card');
+  await openSatelliteWindow('critter-card', `critterId=${id}`);
   await emit(SELECTION_EVENT, id);
 }
 

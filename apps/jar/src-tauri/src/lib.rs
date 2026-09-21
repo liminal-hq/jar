@@ -10,12 +10,25 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+/// On-demand satellite windows (`domain/windows.ts`'s `SPECS`) — excluded
+/// from `tauri-plugin-window-state` below. They're meant to spawn fresh
+/// every time, sized to their own `SPECS` entry and positioned beside the
+/// tank (`openSatelliteWindow`'s own placement logic) — not wherever they
+/// happened to be sized/positioned the last time one was open. Only `tank`
+/// (statically declared, genuinely wants to reopen where you left it)
+/// should persist geometry across restarts.
+const EPHEMERAL_WINDOW_LABELS: &[&str] = &["critter-card", "family-tree", "setup", "dev-settings"];
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(EPHEMERAL_WINDOW_LABELS)
+                .build(),
+        )
         .plugin(tauri_plugin_jar::init());
 
     // Debug-only automation bridge for driving/screenshotting the running

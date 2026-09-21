@@ -35,6 +35,10 @@ import {
 interface FishModelProps {
   critter: Critter;
   vehicle: YUKA.Vehicle;
+  /** Holds the model at its rest pose instead of animating — for a passed
+   * critter's memorial preview (`CritterPreview.tsx`), where a stopped fish
+   * reads as "this is a picture of them," not "they're still swimming." */
+  still?: boolean;
 }
 
 /** Eye and spot positions are plain sphere primitives, not extruded SVG
@@ -61,7 +65,7 @@ const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside a hand-picked ~20–25° sw
 const BODY_BANK_AMPLITUDE = 0.05;
 const BODY_BOB_AMPLITUDE = 0.02;
 
-export function FishModel({ critter, vehicle }: FishModelProps) {
+export function FishModel({ critter, vehicle, still = false }: FishModelProps) {
   const rootRef = useRef<THREE.Group>(null);
   const tailPivotRef = useRef<THREE.Group>(null);
   const pectoralPivotRef = useRef<THREE.Group>(null);
@@ -180,6 +184,8 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
   }, [bodyGeometry, veilGeometry, pectoralMaterial, mouthMaterial]);
 
   useFrame((state, delta) => {
+    if (still) return;
+
     const speed = vehicle.getSpeed();
     const direction =
       vehicle.velocity.squaredLength() > 0.0001
