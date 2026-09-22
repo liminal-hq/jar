@@ -44,6 +44,24 @@ export function maxSpeedFor(energyPercent: number): number {
   return BASE_MAX_SPEED + (energyPercent / 100) * ENERGY_MAX_SPEED_BONUS;
 }
 
+/** Small, slow ripple on top of a fish's speed ceiling — without it, Yuka's
+ * own `vehicle.update()` hard-clamps velocity to `maxSpeed` every frame, so
+ * a fish mid-wander sits pinned at *exactly* the same number second after
+ * second (confirmed live via the fish monitor's speed readout reading a
+ * flat ~1.98-2.00 continuously). This is independent of, and stacks with,
+ * a chase burst's much larger mode-gated multiplier
+ * (`chaseParams.ts`'s `burstMultiplierFor`) — that's a deliberate, sizeable
+ * "going for something" moment; this is just ordinary texture so a normal
+ * cruise doesn't read as capped at a flat number either. */
+export const BREATHING_AMPLITUDE = 0.06;
+/** ~7.9s period (`2π / rate`) — slow enough to read as organic variance,
+ * not a jitter. */
+export const BREATHING_ANGULAR_RATE = 0.8;
+
+export function breathingMultiplier(elapsedSec: number, phaseSeed: number): number {
+  return 1 + BREATHING_AMPLITUDE * Math.sin(elapsedSec * BREATHING_ANGULAR_RATE + phaseSeed);
+}
+
 export function steeringParamsFor(
   personality: Personality,
   livingPopulation: number,

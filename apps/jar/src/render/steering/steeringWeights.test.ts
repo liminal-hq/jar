@@ -21,22 +21,35 @@ describe('MODE_WEIGHTS', () => {
     expect(MODE_WEIGHTS.active.arrive).toBe(0);
     expect(MODE_WEIGHTS.paused.arrive).toBe(0);
     expect(MODE_WEIGHTS.settled.arrive).toBe(0);
+    expect(MODE_WEIGHTS.chasing.arrive).toBe(0);
+  });
+
+  it('only chasing targets pursuit', () => {
+    expect(MODE_WEIGHTS.chasing.pursuit).toBe(1);
+    expect(MODE_WEIGHTS.active.pursuit).toBe(0);
+    expect(MODE_WEIGHTS.paused.pursuit).toBe(0);
+    expect(MODE_WEIGHTS.settling.pursuit).toBe(0);
+    expect(MODE_WEIGHTS.settled.pursuit).toBe(0);
   });
 
   it('paused keeps separation on but turns wander off, unlike active', () => {
-    expect(MODE_WEIGHTS.paused).toEqual({ wander: 0, separation: 1, arrive: 0 });
-    expect(MODE_WEIGHTS.active).toEqual({ wander: 1, separation: 1, arrive: 0 });
+    expect(MODE_WEIGHTS.paused).toEqual({ wander: 0, separation: 1, arrive: 0, pursuit: 0 });
+    expect(MODE_WEIGHTS.active).toEqual({ wander: 1, separation: 1, arrive: 0, pursuit: 0 });
+  });
+
+  it('chasing keeps separation on but turns wander off, same shape as paused otherwise', () => {
+    expect(MODE_WEIGHTS.chasing).toEqual({ wander: 0, separation: 1, arrive: 0, pursuit: 1 });
   });
 
   it('settled wants every ramped behavior off', () => {
-    expect(MODE_WEIGHTS.settled).toEqual({ wander: 0, separation: 0, arrive: 0 });
+    expect(MODE_WEIGHTS.settled).toEqual({ wander: 0, separation: 0, arrive: 0, pursuit: 0 });
   });
 });
 
 describe('rampWeights', () => {
   it('moves partway toward the target on a normal frame, never overshooting', () => {
-    const current = { wander: 0, separation: 0, arrive: 0 };
-    const target = MODE_WEIGHTS.settling; // { wander: 0, separation: 0, arrive: 1 }
+    const current = { wander: 0, separation: 0, arrive: 0, pursuit: 0 };
+    const target = MODE_WEIGHTS.settling; // { wander: 0, separation: 0, arrive: 1, pursuit: 0 }
     const next = rampWeights(current, target, 0.016);
     expect(next.arrive).toBeGreaterThan(0);
     expect(next.arrive).toBeLessThan(1);
@@ -45,7 +58,7 @@ describe('rampWeights', () => {
   });
 
   it('never mutates the current or target objects', () => {
-    const current = { wander: 0, separation: 1, arrive: 0 };
+    const current = { wander: 0, separation: 1, arrive: 0, pursuit: 0 };
     const currentCopy = { ...current };
     const target = MODE_WEIGHTS.settled;
     const targetCopy = { ...target };
@@ -55,7 +68,7 @@ describe('rampWeights', () => {
   });
 
   it('converges to (within floating point) the target after many small steps', () => {
-    let current = { wander: 1, separation: 1, arrive: 0 };
+    let current = { wander: 1, separation: 1, arrive: 0, pursuit: 0 };
     const target = MODE_WEIGHTS.settling;
     for (let i = 0; i < 300; i++) {
       current = rampWeights(current, target, 0.016);
@@ -69,26 +82,46 @@ describe('rampWeights', () => {
 
   it('is framerate-independent: many small steps land near one big step covering the same total time', () => {
     const target = MODE_WEIGHTS.settling;
-    let stepped = { wander: 0, separation: 0, arrive: 0 };
+    let stepped = { wander: 0, separation: 0, arrive: 0, pursuit: 0 };
     const smallDelta = 0.01;
     for (let i = 0; i < 20; i++) {
       stepped = rampWeights(stepped, target, smallDelta);
     }
-    const jumped = rampWeights({ wander: 0, separation: 0, arrive: 0 }, target, 20 * smallDelta);
+    const jumped = rampWeights(
+      { wander: 0, separation: 0, arrive: 0, pursuit: 0 },
+      target,
+      20 * smallDelta,
+    );
     expect(stepped.arrive).toBeCloseTo(jumped.arrive, 2);
   });
 
   it('does not move at all with a zero delta', () => {
-    const current = { wander: 0.4, separation: 0.6, arrive: 0.1 };
+    const current = { wander: 0.4, separation: 0.6, arrive: 0.1, pursuit: 0.2 };
     const next = rampWeights(current, MODE_WEIGHTS.active, 0);
     expect(next).toEqual(current);
   });
 
   it('ramps symmetrically back down when the target reverses mid-flight', () => {
-    let current = rampWeights({ wander: 1, separation: 1, arrive: 0 }, MODE_WEIGHTS.settling, 0.3);
+    let current = rampWeights(
+      { wander: 1, separation: 1, arrive: 0, pursuit: 0 },
+      MODE_WEIGHTS.settling,
+      0.3,
+    );
     expect(current.arrive).toBeGreaterThan(0);
     const arriveAfterRampingUp = current.arrive;
     current = rampWeights(current, MODE_WEIGHTS.active, 0.3);
     expect(current.arrive).toBeLessThan(arriveAfterRampingUp);
+  });
+
+  it('ramps pursuit up when chasing starts and back down when it ends', () => {
+    let current = rampWeights(
+      { wander: 1, separation: 1, arrive: 0, pursuit: 0 },
+      MODE_WEIGHTS.chasing,
+      0.3,
+    );
+    expect(current.pursuit).toBeGreaterThan(0);
+    const pursuitAfterRampingUp = current.pursuit;
+    current = rampWeights(current, MODE_WEIGHTS.active, 0.3);
+    expect(current.pursuit).toBeLessThan(pursuitAfterRampingUp);
   });
 });

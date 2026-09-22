@@ -16,13 +16,25 @@ import * as YUKA from 'yuka';
 import { useDayNightOverride } from '../../domain/devSettings';
 import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
+import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { selectCritter } from '../../domain/selection';
 import { lifeStageScale } from '../../domain/simConstants';
 import { FishModel } from '../models/FishModel';
 import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
+import {
+  burstChanceFor,
+  burstMultiplierFor,
+  CHASE_CAUGHT_DISTANCE,
+  CHASE_MAX_SEC,
+  chaseChanceFor,
+  rampBurstMultiplier,
+  SPONTANEOUS_BURST_SEC,
+} from '../steering/chaseParams';
+import { selectChaseTarget, type ChaseCandidate } from '../steering/chaseTarget';
 import type { FishMotionMode } from '../steering/motionState';
 import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
+import { breathingMultiplier } from '../steering/steeringParams';
 import { useFishSteering } from '../steering/useFishSteering';
 
 /** A loose bounding sphere around `FishModel`'s combined body/tail/eye
@@ -166,6 +178,41 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     steering.setMode(mode);
   };
 
+  // Chase-burst state (`docs/architecture/3d-engine.md` §4.1's chase-bursts
+  // paragraph) — `chaseTargetIdRef` is the fish currently being chased (if
+  // any), `lastChasedIdRef` is who it chased last (so `selectChaseTarget`
+  // doesn't immediately ping-pong back onto the same fish), and
+  // `burstMulRef` is the current multiplier on top of `maxSpeedFor(energy)`.
+  const chaseTargetIdRef = useRef<CritterId | null>(null);
+  const lastChasedIdRef = useRef<CritterId | null>(null);
+  const chaseElapsedRef = useRef(0);
+  const burstMulRef = useRef(1);
+  // The ceiling multiplier the *current* burst (chase or spontaneous) is
+  // ramping toward — rolled fresh by `startChase`/`startSpontaneousBurst`
+  // each time one starts (`burstMultiplierFor` is random per call), not a
+  // fixed per-fish value.
+  const burstMulTargetRef = useRef(1);
+  // A short, untargeted burst of speed during ordinary active wandering —
+  // independent of `modeRef`/chasing entirely (no steering-behavior change,
+  // just a temporary lift on the same speed ceiling), so a fish can burst
+  // while still just wandering, not only while pursuing a tankmate.
+  const spontaneousBurstActiveRef = useRef(false);
+  const spontaneousBurstElapsedRef = useRef(0);
+
+  // A slow, per-fish ripple on the speed ceiling so an ordinary cruise
+  // doesn't read as pinned at a flat number (`steeringParams.ts`'s
+  // `breathingMultiplier`) — independent of, and stacks with, `burstMulRef`.
+  const breathPhaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
+  const clockElapsedRef = useRef(0);
+
+  // Shared by the registry's `maxSpeed()` closure below and `FishModel`'s
+  // `getSpeedCeiling` prop — the one place the raised-during-a-chase speed
+  // ceiling flows from.
+  const getSpeedCeiling = () =>
+    steering.maxSpeedFor(critter.energy) *
+    burstMulRef.current *
+    breathingMultiplier(clockElapsedRef.current, breathPhaseSeed);
+
   useEffect(() => {
     // Seed both heading quaternions from the body's actual spawn rotation
     // (rather than identity) so a freshly-spawned fish doesn't visibly snap
@@ -181,7 +228,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     registry.set(critter.id, {
       vehicle: steering.vehicle,
       getBody: () => rigidBodyRef.current,
-      maxSpeed: () => steering.maxSpeedFor(critter.energy),
+      maxSpeed: getSpeedCeiling,
       getMode: () => modeRef.current,
       currentHeading,
       targetHeading: currentHeading.clone(),
@@ -222,13 +269,55 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // `SteeringSystem`'s own, since neither passes a render-priority argument
   // (see that file's header for why that distinction matters with R3F v8).
   const settleElapsedRef = useRef(0);
-  useFrame((_, delta) => {
-    // Fades wander/separation/arrive toward whatever `setMode` last
+  useFrame((state, delta) => {
+    clockElapsedRef.current = state.clock.elapsedTime;
+
+    // Fades wander/separation/arrive/pursuit toward whatever `setMode` last
     // targeted, every frame and every mode — not just while settling. See
     // `useFishSteering.ts`'s `BEHAVIOR_WEIGHT_RAMP_RATE` comment for why an
     // instant behavior-set flip was the actual cause of fish visibly
     // "shaking" for a moment at every night settle/wake transition.
     steering.rampWeights(delta);
+
+    // Same ramp treatment for the speed ceiling itself — an instant drop
+    // back to normal while still moving at burst speed would shear velocity
+    // in one frame (`chaseParams.ts`'s `BURST_RAMP_DOWN_RATE` comment). A
+    // burst is "active" — i.e. `burstMulRef` has somewhere to ramp toward —
+    // whenever either trigger says so; chasing always wins the target value
+    // (set fresh in `startChase`) since it's the more deliberate of the two.
+    const burstActive = modeRef.current === 'chasing' || spontaneousBurstActiveRef.current;
+    burstMulRef.current = rampBurstMultiplier(
+      burstMulRef.current,
+      burstActive ? burstMulTargetRef.current : 1,
+      delta,
+    );
+
+    if (spontaneousBurstActiveRef.current && modeRef.current !== 'chasing') {
+      spontaneousBurstElapsedRef.current += delta;
+      if (spontaneousBurstElapsedRef.current > SPONTANEOUS_BURST_SEC) {
+        spontaneousBurstActiveRef.current = false;
+      }
+    }
+
+    if (modeRef.current === 'chasing') {
+      chaseElapsedRef.current += delta;
+      const target =
+        chaseTargetIdRef.current !== null ? registry.get(chaseTargetIdRef.current) : undefined;
+      const caught =
+        target !== undefined &&
+        steering.vehicle.position.distanceTo(target.vehicle.position) < CHASE_CAUGHT_DISTANCE;
+      const targetInvalid = target === undefined || target.getMode() !== 'active';
+      if (caught || targetInvalid || chaseElapsedRef.current > CHASE_MAX_SEC) {
+        // The evader is deliberately left assigned — `pursuit.weight` is
+        // still fading toward 0 over the same ramp, and an inert pursuit
+        // behavior with a stale evader is harmless; it's just overwritten
+        // the next time this fish starts a chase.
+        lastChasedIdRef.current = chaseTargetIdRef.current;
+        chaseTargetIdRef.current = null;
+        setMode('active');
+      }
+      return;
+    }
 
     if (modeRef.current !== 'settling') return;
     settleElapsedRef.current += delta;
@@ -239,6 +328,42 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     }
   });
 
+  // Builds the candidate list for `selectChaseTarget` from every other
+  // registered fish and, if one qualifies, starts the chase — assigning the
+  // pursuit evader and mode together so a fish is never briefly `chasing`
+  // with no target. Returns whether a chase actually started, so the roll
+  // below can fall through to the arrive roll when nobody qualified.
+  const startChase = (): boolean => {
+    const candidates: ChaseCandidate[] = [];
+    for (const [id, registered] of registry) {
+      if (id === critter.id) continue;
+      candidates.push({
+        id,
+        distance: steering.vehicle.position.distanceTo(registered.vehicle.position),
+        mode: registered.getMode(),
+      });
+    }
+    const targetId = selectChaseTarget(candidates, lastChasedIdRef.current);
+    if (targetId === null) return false;
+    const target = registry.get(targetId);
+    if (!target) return false;
+
+    steering.pursuit.evader = target.vehicle;
+    chaseTargetIdRef.current = targetId;
+    chaseElapsedRef.current = 0;
+    burstMulTargetRef.current = burstMultiplierFor(critter.personality);
+    setMode('chasing');
+    return true;
+  };
+
+  /** A short, untargeted burst of speed — no steering-behavior change,
+   * just a temporary lift on the same ceiling `startChase` raises. */
+  const startSpontaneousBurst = () => {
+    burstMulTargetRef.current = burstMultiplierFor(critter.personality);
+    spontaneousBurstActiveRef.current = true;
+    spontaneousBurstElapsedRef.current = 0;
+  };
+
   useEffect(() => {
     let cancelled = false;
     let pauseTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -247,8 +372,8 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       timeoutId = setTimeout(() => {
         if (cancelled) return;
         // Only roll while genuinely idle-and-active during the day — a
-        // fish already settling/settled/paused (or mid-night) shouldn't
-        // have this roll layer a second transition on top.
+        // fish already settling/settled/paused/chasing (or mid-night)
+        // shouldn't have this roll layer a second transition on top.
         if (!nightRef.current && modeRef.current === 'active') {
           if (Math.random() < steering.params.pauseChance) {
             setMode('paused');
@@ -256,9 +381,20 @@ export function Fish({ critter, livingPopulation }: FishProps) {
             pauseTimeoutId = setTimeout(() => {
               if (!cancelled && modeRef.current === 'paused') setMode('active');
             }, pauseDuration);
-          } else if (Math.random() < ARRIVE_CHANCE) {
-            settleElapsedRef.current = 0;
-            setMode('settling');
+          } else {
+            // A chase roll that finds no eligible target falls through to
+            // the spontaneous-burst roll, which itself falls through to the
+            // arrive roll — same turn, in order.
+            const chased =
+              Math.random() < chaseChanceFor(critter.personality, critter.mood) && startChase();
+            if (!chased) {
+              if (Math.random() < burstChanceFor(critter.personality, critter.mood)) {
+                startSpontaneousBurst();
+              } else if (Math.random() < ARRIVE_CHANCE) {
+                settleElapsedRef.current = 0;
+                setMode('settling');
+              }
+            }
           }
         }
         scheduleNext();
@@ -312,6 +448,11 @@ export function Fish({ critter, livingPopulation }: FishProps) {
           critter={critter}
           vehicle={steering.vehicle}
           getMode={() => modeRef.current}
+          getSpeed={() => {
+            const linvel = rigidBodyRef.current?.linvel();
+            return linvel ? Math.hypot(linvel.x, linvel.y, linvel.z) : steering.vehicle.getSpeed();
+          }}
+          getSpeedCeiling={getSpeedCeiling}
           onDebugFrame={(anim) => {
             debugAnimRef.current = anim;
           }}

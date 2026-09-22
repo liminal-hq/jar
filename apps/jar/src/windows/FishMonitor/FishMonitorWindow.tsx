@@ -30,6 +30,7 @@ const MODE_COLOUR: Record<string, string> = {
   paused: '#d29922',
   settling: '#58a6ff',
   settled: '#8b949e',
+  chasing: '#f85149',
 };
 
 /** Maps a fish's position on some horizontal/vertical world-axis pair onto

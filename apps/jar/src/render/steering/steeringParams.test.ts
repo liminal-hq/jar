@@ -1,11 +1,12 @@
-// Tests for animationMulFor's per-personality and per-mood-band multipliers.
+// Tests for animationMulFor's per-personality and per-mood-band multipliers,
+// and breathingMultiplier's slow speed-ceiling ripple.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { describe, expect, it } from 'vitest';
 
-import { animationMulFor } from './steeringParams';
+import { animationMulFor, BREATHING_AMPLITUDE, breathingMultiplier } from './steeringParams';
 
 const NEUTRAL_MOOD = 66;
 
@@ -49,5 +50,25 @@ describe('animationMulFor', () => {
   it('treats the mood thresholds as exclusive of the neutral band', () => {
     expect(animationMulFor('Shy', 33)).toEqual({ freqMul: 1, ampMul: 1 }); // not < 33
     expect(animationMulFor('Shy', 85)).toEqual({ freqMul: 1, ampMul: 1 }); // not > 85
+  });
+});
+
+describe('breathingMultiplier', () => {
+  it('stays within [1 - amplitude, 1 + amplitude] across a full cycle', () => {
+    for (let elapsed = 0; elapsed < 20; elapsed += 0.5) {
+      const m = breathingMultiplier(elapsed, 0);
+      expect(m).toBeGreaterThanOrEqual(1 - BREATHING_AMPLITUDE - 1e-9);
+      expect(m).toBeLessThanOrEqual(1 + BREATHING_AMPLITUDE + 1e-9);
+    }
+  });
+
+  it('is 1 at elapsed=0 with no phase seed', () => {
+    expect(breathingMultiplier(0, 0)).toBeCloseTo(1, 5);
+  });
+
+  it('a nonzero phase seed shifts the ripple, giving different fish different values at the same instant', () => {
+    const a = breathingMultiplier(1, 0);
+    const b = breathingMultiplier(1, Math.PI / 2);
+    expect(a).not.toBeCloseTo(b, 5);
   });
 });

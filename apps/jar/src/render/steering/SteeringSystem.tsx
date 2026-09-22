@@ -32,7 +32,7 @@ import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
 import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
 import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
-import type { FishMotionMode } from './motionState';
+import { isSelfPropelledMode, type FishMotionMode } from './motionState';
 
 /** Extra per-fish detail only `FishModel.tsx` knows (its own animation
  * state) — optional because the standalone critter-card preview drives a
@@ -90,8 +90,20 @@ const scratchLinvel = new THREE.Vector3();
  * the body was already doing, piling up against walls and releasing as a
  * burst. This is framerate-independent (the `* delta`), self-caps at
  * `vehicle.maxSpeed` (Yuka already clamps `desired`), and cooperates with
- * `linearDamping` instead of fighting it. */
-const VELOCITY_GAIN = 0.6;
+ * `linearDamping` instead of fighting it.
+ *
+ * This is a first-order lag — `1/VELOCITY_GAIN` is the time constant to
+ * close ~63% of the gap. At 0.6 that's ~1.7s, which barely mattered while
+ * `desired` itself stayed roughly steady between wander-cycle updates, but
+ * a moving ceiling (`steeringParams.ts`'s `breathingMultiplier`, a burst
+ * ramp) keeps the *target* itself in motion too, so the body chronically
+ * trails it — read live as "tail beating hard, barely accelerating." 2.2
+ * (~0.45s) keeps this smooth (still a lag, not a snap — no risk of
+ * reintroducing the unbounded-force class of stutter the weight-ramp
+ * system exists to prevent, since `desired` itself is already smooth) while
+ * making an actual speed change — cruise or burst — read on the body
+ * promptly enough to match what the tail is already doing. */
+const VELOCITY_GAIN = 2.2;
 const MIN_VELOCITY_SQ = 0.0001;
 
 /** The fish-position debug publish goes over a cross-window Tauri event
@@ -107,14 +119,15 @@ const POSITION_PUBLISH_INTERVAL_MS = 200;
  * teleporting its orientation). */
 const HEADING_SLERP_RATE = 6;
 
-/** Yuka never damps a vehicle's own velocity on its own — deactivating a
- * fish's steering behaviors (`useFishSteering.ts`'s `setMode`) leaves
- * `vehicle.velocity` frozen at whatever it last was, forever, unless
- * something actively decays it. This is that decay for any fish not in
- * `active` mode; the velocity-matching impulse above then brakes the body
- * to match as the decayed target chases toward zero, cooperating with
- * `linearDamping` rather than leaving the body's own momentum to bleed off
- * unassisted. */
+/** Yuka never damps a vehicle's own velocity on its own — ramping a fish's
+ * steering weights toward zero (`useFishSteering.ts`'s `setMode`/`rampWeights`)
+ * leaves `vehicle.velocity` frozen at whatever it last was, forever, unless
+ * something actively decays it. This is that decay for any fish that isn't
+ * self-propelled right now (`motionState.ts`'s `isSelfPropelledMode` —
+ * `active` and `chasing` are exempt); the velocity-matching impulse above
+ * then brakes the body to match as the decayed target chases toward zero,
+ * cooperating with `linearDamping` rather than leaving the body's own
+ * momentum to bleed off unassisted. */
 const NON_ACTIVE_VELOCITY_DECAY_RATE = 4;
 
 /** How often the fish monitor snapshot publishes — a live table doesn't
@@ -180,7 +193,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       const body = fish.getBody();
       if (!body) continue;
 
-      if (fish.getMode() !== 'active') {
+      if (!isSelfPropelledMode(fish.getMode())) {
         fish.vehicle.velocity.multiplyScalar(Math.exp(-NON_ACTIVE_VELOCITY_DECAY_RATE * delta));
       }
 
@@ -218,11 +231,18 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
         for (const [id, fish] of registry) {
           const anim = fish.getDebugAnim?.() ?? null;
           scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
+          // The fish's *actual* physical speed, not Yuka's internal steering
+          // target (`fish.vehicle.getSpeed()`) — see `FishModel.tsx`'s
+          // `getSpeed` doc comment for why those two can diverge. A monitor
+          // meant for tuning against real numbers should show the real
+          // number.
+          const linvel = fish.getBody()?.linvel();
+          const speed = linvel ? Math.hypot(linvel.x, linvel.y, linvel.z) : fish.vehicle.getSpeed();
           entries.push({
             id,
             mode: fish.getMode(),
             pos: [fish.vehicle.position.x, fish.vehicle.position.y, fish.vehicle.position.z],
-            speed: fish.vehicle.getSpeed(),
+            speed,
             yawDeg: (scratchYawEuler.y * 180) / Math.PI,
             // `heading.ts` builds the euler as `(-pitch, yaw, 0, 'YXZ')`.
             pitchDeg: (-scratchYawEuler.x * 180) / Math.PI,
