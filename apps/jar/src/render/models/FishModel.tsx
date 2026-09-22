@@ -133,6 +133,13 @@ const EXCITED_AMPLITUDE = 0.16;
 const TURN_RATE_AMPLITUDE_SCALE = 0.045;
 const TURN_RATE_AMPLITUDE_CAP = 1.5;
 
+/** A turn's amplitude boost above pairs with a *reduction* in frequency —
+ * the same stroke-length/cadence trade a swimmer makes: a bigger sweep
+ * covered at the same beat rate has a faster-moving tail tip and reads as
+ * "swishing faster," when the intent is just "swishing wider." At
+ * `TURN_RATE_AMPLITUDE_CAP` this trims frequency by ~18%. */
+const TURN_RATE_FREQUENCY_DAMP_SCALE = 0.12;
+
 /** How much a burst's `burstOverdrive` term (`chaseParams.ts`) can further
  * scale frequency/amplitude on top of everything above — halved from an
  * earlier pass for the same "less flutter, more swim" reason. */
@@ -370,6 +377,7 @@ export function FishModel({
     );
     const overdrive = burstOverdrive(speed, baseCeiling);
     const { freqMul, ampMul } = animationMulFor(critter.personality, critter.mood);
+    const cappedTurnRate = Math.min(turnRate, TURN_RATE_AMPLITUDE_CAP);
     const activeFrequency =
       THREE.MathUtils.lerp(
         CALM_FREQUENCY_BASE + CALM_FREQUENCY_SPEED_SCALE * speedNorm,
@@ -377,10 +385,11 @@ export function FishModel({
         excite,
       ) *
       freqMul *
-      (1 + OVERDRIVE_FREQUENCY_SCALE * overdrive);
+      (1 + OVERDRIVE_FREQUENCY_SCALE * overdrive) *
+      (1 - TURN_RATE_FREQUENCY_DAMP_SCALE * cappedTurnRate);
     const activeAmplitude =
       (THREE.MathUtils.lerp(CALM_AMPLITUDE, EXCITED_AMPLITUDE, excite) +
-        Math.min(turnRate, TURN_RATE_AMPLITUDE_CAP) * TURN_RATE_AMPLITUDE_SCALE) *
+        cappedTurnRate * TURN_RATE_AMPLITUDE_SCALE) *
       ampMul *
       (1 + OVERDRIVE_AMPLITUDE_SCALE * overdrive);
 
