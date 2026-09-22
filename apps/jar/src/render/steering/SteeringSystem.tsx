@@ -44,6 +44,11 @@ export interface FishDebugAnim {
   turnRate: number;
   isResting: boolean;
   activeAmplitude: number;
+  /** The tail beat's current accumulated phase (`FishModel.tsx`'s
+   * `phaseRef`) — not just monitor telemetry, this also feeds `Fish.tsx`'s
+   * `getThrustEnvelope` (`thrustEnvelope.ts`), which gates the physics
+   * impulse below to the same beat. */
+  phase: number;
 }
 
 export interface RegisteredFish {
@@ -73,6 +78,11 @@ export interface RegisteredFish {
    * grows. Lets another fish's chase-catch check (`Fish.tsx`) account for
    * this fish's actual current collider size, not just its own. */
   getColliderRadius: () => number;
+  /** `thrustMultiplierFor` (`thrustEnvelope.ts`) evaluated at this fish's
+   * current tail phase — gates the impulse below so thrust arrives on the
+   * power stroke and the fish coasts between beats, rather than tracking
+   * its desired velocity continuously. */
+  getThrustEnvelope: () => number;
 }
 
 type Registry = Map<number, RegisteredFish>;
@@ -214,7 +224,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
         scratchImpulse
           .copy(scratchVelocity)
           .sub(scratchLinvel)
-          .multiplyScalar(VELOCITY_GAIN * delta);
+          .multiplyScalar(VELOCITY_GAIN * delta * fish.getThrustEnvelope());
         body.applyImpulse(scratchImpulse, true);
 
         const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;

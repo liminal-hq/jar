@@ -37,6 +37,7 @@ import { selectChaseTarget, type ChaseCandidate } from '../steering/chaseTarget'
 import type { FishMotionMode } from '../steering/motionState';
 import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
 import { breathingMultiplier } from '../steering/steeringParams';
+import { thrustMultiplierFor } from '../steering/thrustEnvelope';
 import { useFishSteering } from '../steering/useFishSteering';
 
 /** A loose bounding sphere around `FishModel`'s combined body/tail/eye
@@ -266,6 +267,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       getDebugAnim: () => debugAnimRef.current,
       hue: critter.hue,
       getColliderRadius: () => colliderRadiusFor(critter),
+      getThrustEnvelope: () => thrustMultiplierFor(debugAnimRef.current?.phase ?? 0),
     });
     return () => {
       registry.delete(critter.id);
