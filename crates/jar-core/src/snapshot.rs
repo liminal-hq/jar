@@ -58,18 +58,13 @@ const CURRENT_VERSION: u16 = 6;
 //
 // v5 (2026-09-22): `JarSettings` gained `light_intensity: u8` (the
 // castle's ground uplight fixture, `Castle.tsx`'s `GroundUplight` —
-// Setup's own "Castle light" slider). Originally landed as an in-place
-// amendment to the still-unreleased v3 shape rather than a real version
-// bump, on the reasoning that nothing had shipped v3 yet — that reasoning
-// broke the moment this dev build's own autosave had already written a
-// real v3 snapshot to disk earlier the same session testing this same PR,
-// which then failed to decode against the changed struct ("Hit the end
-// of buffer, expected more data") the next time the app started. A real
-// version bump is required the instant a shape change might have an
-// on-disk file to contend with, in-flight PR or not. `SettingsV4`/
-// `SnapshotV4` below are now the frozen pre-v5 shape; `migrate_v4`
-// defaults `light_intensity` to `100` (the fixture's own designed
-// default) for anything saved before this field existed.
+// Setup's own "Castle light" slider). `postcard` is not self-describing, so
+// any shape change needs a real version bump the moment an on-disk snapshot
+// in the old shape might exist — there is no such thing as a shape that is
+// safe to amend in place just because it hasn't shipped yet. `SettingsV4`/
+// `SnapshotV4` below are now the frozen pre-v5 shape; `migrate_v4` defaults
+// `light_intensity` to `100` (the fixture's own designed default) for
+// anything saved before this field existed.
 //
 // v6 (2026-09-22): `JarSettings` gained `bubble_intensity: u8`
 // (`Bubbles.tsx`'s particle count — Setup's own "Bubble intensity"
