@@ -122,13 +122,16 @@ const EXCITED_FREQUENCY_SPEED_SCALE = 2.5;
 const CALM_AMPLITUDE = 0.08;
 const EXCITED_AMPLITUDE = 0.16;
 
-/** How much a turn adds to tail amplitude — kept modest relative to
- * `CALM_AMPLITUDE`/`EXCITED_AMPLITUDE` above (a comparable-magnitude boost,
- * not a multiple of it), so a turn reads as a bigger tail sweep, not the
- * whole fish vibrating. The old `turnRate * 0.25` with no practical cap
- * could add up to 3-7x the base amplitude on an ordinary turn. */
-const TURN_RATE_AMPLITUDE_SCALE = 0.08;
-const TURN_RATE_AMPLITUDE_CAP = 2;
+/** How much a turn adds to tail amplitude — kept well under
+ * `CALM_AMPLITUDE`/`EXCITED_AMPLITUDE` above (a fraction of the base range,
+ * not a comparable addition to it), so a turn reads as a slightly bigger
+ * tail sweep, not a faster/more frantic one. A live pass at `0.08`/cap `2`
+ * (max +0.16, matching the *entire* base range) still read as swishing too
+ * fast through a turn — halved again here. The old `turnRate * 0.25` with
+ * no practical cap could add up to 3-7x the base amplitude on an ordinary
+ * turn. */
+const TURN_RATE_AMPLITUDE_SCALE = 0.045;
+const TURN_RATE_AMPLITUDE_CAP = 1.5;
 
 /** How much a burst's `burstOverdrive` term (`chaseParams.ts`) can further
  * scale frequency/amplitude on top of everything above — halved from an
