@@ -191,6 +191,16 @@ pub fn set_light_intensity(plugin: State<'_, JarPlugin>, intensity: u8) -> Resul
     Ok(())
 }
 
+#[command]
+pub fn set_bubble_intensity(plugin: State<'_, JarPlugin>, intensity: u8) -> Result<()> {
+    let settings = with_jar(&plugin, |jar| {
+        jar.settings.bubble_intensity = intensity.min(200);
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
+}
+
 /// A point-in-time read of the full jar state — used when a UI window
 /// (re)opens and needs to hydrate before the next `TickUpdate` arrives,
 /// distinct from the periodic on-disk autosave. `SnapshotView` itself lives

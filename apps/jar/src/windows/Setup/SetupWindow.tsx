@@ -206,6 +206,21 @@ export function SetupWindow() {
           />{' '}
           {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}
         </label>
+        {/* Fish-mode only — terrarium's "Mist" doesn't exist yet, so this
+            slider (Bubbles.tsx's own particle count) has nothing to affect
+            in Gecko mode. */}
+        {settings.ambient_particles_on && settings.mode === 'Fish' && (
+          <label>
+            Bubble intensity: {settings.bubble_intensity}%
+            <input
+              type="range"
+              min={0}
+              max={200}
+              value={settings.bubble_intensity}
+              onChange={(e) => void jar.setBubbleIntensity(Number(e.target.value))}
+            />
+          </label>
+        )}
         <label>
           <input
             type="checkbox"

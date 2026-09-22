@@ -23,7 +23,7 @@ const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
 /// every time the current snapshot body changes shape.
-const CURRENT_VERSION: u16 = 5;
+const CURRENT_VERSION: u16 = 6;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
@@ -70,6 +70,13 @@ const CURRENT_VERSION: u16 = 5;
 // `SnapshotV4` below are now the frozen pre-v5 shape; `migrate_v4`
 // defaults `light_intensity` to `100` (the fixture's own designed
 // default) for anything saved before this field existed.
+//
+// v6 (2026-09-22): `JarSettings` gained `bubble_intensity: u8`
+// (`Bubbles.tsx`'s particle count — Setup's own "Bubble intensity"
+// slider), a real version bump from the start this time. `SettingsV5`/
+// `SnapshotV5` below are now the frozen pre-v6 shape; `migrate_v5`
+// defaults `bubble_intensity` to `100` for anything saved before this
+// field existed.
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -182,8 +189,33 @@ struct SnapshotV4 {
     settings: SettingsV4,
 }
 
+/// The pre-v6 `JarSettings` shape — see the v6 comment above. Not the live
+/// `jar_protocol::JarSettings`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct SettingsV5 {
+    mode: Species,
+    frame: TankFrame,
+    dialog_theme: DialogTheme,
+    theme_variants: BTreeMap<DialogTheme, String>,
+    light_on: bool,
+    light_colour: LightColour,
+    light_intensity: u8,
+    ambient_particles_on: bool,
+    sound_on: bool,
+    simulation_speed: u8,
+    always_on_top: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV5 {
+    critters: Vec<Critter>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: SettingsV5,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV6 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -207,7 +239,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV5 {
+    let body = SnapshotV6 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -325,7 +357,7 @@ fn migrate_v4(v4: SnapshotV4) -> SnapshotV5 {
         critters: v4.critters,
         sim_seconds: v4.sim_seconds,
         speed: v4.speed,
-        settings: JarSettings {
+        settings: SettingsV5 {
             mode: v4.settings.mode,
             frame: v4.settings.frame,
             dialog_theme: v4.settings.dialog_theme,
@@ -341,6 +373,30 @@ fn migrate_v4(v4: SnapshotV4) -> SnapshotV5 {
     }
 }
 
+/// Defaults `bubble_intensity` to `100` (the current default bubble
+/// count) — nothing saved before v6 ever had this field.
+fn migrate_v5(v5: SnapshotV5) -> SnapshotV6 {
+    SnapshotV6 {
+        critters: v5.critters,
+        sim_seconds: v5.sim_seconds,
+        speed: v5.speed,
+        settings: JarSettings {
+            mode: v5.settings.mode,
+            frame: v5.settings.frame,
+            dialog_theme: v5.settings.dialog_theme,
+            theme_variants: v5.settings.theme_variants,
+            light_on: v5.settings.light_on,
+            light_colour: v5.settings.light_colour,
+            light_intensity: v5.settings.light_intensity,
+            ambient_particles_on: v5.settings.ambient_particles_on,
+            bubble_intensity: 100,
+            sound_on: v5.settings.sound_on,
+            simulation_speed: v5.settings.simulation_speed,
+            always_on_top: v5.settings.always_on_top,
+        },
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
@@ -348,24 +404,28 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
         return Err(SnapshotError::BadMagic);
     }
 
-    let body: SnapshotV5 = match header.version {
+    let body: SnapshotV6 = match header.version {
         1 => {
             let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v4(migrate_v3(migrate_v2(migrate_v1(v1))))
+            migrate_v5(migrate_v4(migrate_v3(migrate_v2(migrate_v1(v1)))))
         }
         2 => {
             let v2: SnapshotV2 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v4(migrate_v3(migrate_v2(v2)))
+            migrate_v5(migrate_v4(migrate_v3(migrate_v2(v2))))
         }
         3 => {
             let v3: SnapshotV3 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v4(migrate_v3(v3))
+            migrate_v5(migrate_v4(migrate_v3(v3)))
         }
         4 => {
             let v4: SnapshotV4 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v4(v4)
+            migrate_v5(migrate_v4(v4))
         }
-        5 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        5 => {
+            let v5: SnapshotV5 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v5(v5)
+        }
+        6 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
         other => return Err(SnapshotError::UnsupportedVersion(other)),
     };
 
@@ -652,5 +712,44 @@ mod tests {
         assert_eq!(restored.settings.simulation_speed, 20);
         assert_eq!(restored.clock.sim_seconds, 3.0);
         assert_eq!(restored.clock.speed, 4);
+    }
+
+    #[test]
+    fn decode_defaults_bubble_intensity_on_a_v5_snapshot_that_never_had_one() {
+        let v5 = SnapshotV5 {
+            critters: Vec::new(),
+            sim_seconds: 8.0,
+            speed: 6,
+            settings: SettingsV5 {
+                mode: Species::Fish,
+                frame: TankFrame::WoodStand,
+                dialog_theme: DialogTheme::PaperNotebook,
+                theme_variants: default_theme_variants(),
+                light_on: false,
+                light_colour: LightColour::Party,
+                light_intensity: 150, // a real prior pick, not the default
+                ambient_particles_on: true,
+                sound_on: true,
+                simulation_speed: 30,
+                always_on_top: true,
+            },
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 5,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v5).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        assert_eq!(restored.settings.bubble_intensity, 100);
+        // v5's own real picks survive, not just the new field's default.
+        assert_eq!(restored.settings.light_intensity, 150);
+        assert_eq!(restored.settings.light_colour, LightColour::Party);
+        assert_eq!(restored.settings.frame, TankFrame::WoodStand);
+        assert_eq!(restored.settings.simulation_speed, 30);
+        assert_eq!(restored.clock.sim_seconds, 8.0);
+        assert_eq!(restored.clock.speed, 6);
     }
 }

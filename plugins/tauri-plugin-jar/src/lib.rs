@@ -155,6 +155,7 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             commands::set_frame,
             commands::set_light_colour,
             commands::set_light_intensity,
+            commands::set_bubble_intensity,
             commands::get_snapshot,
             commands::load_snapshot,
         ])

@@ -21,7 +21,14 @@ theme_variants: { [key in DialogTheme]?: string }, light_on: boolean, light_colo
  * which drive the tank-wide LED strip; this one only tunes the
  * castle's own always-on accent light.
  */
-light_intensity: number, ambient_particles_on: boolean, sound_on: boolean, 
+light_intensity: number, ambient_particles_on: boolean, 
+/**
+ * Percentage scale (0-200, 100 = the current default bubble count)
+ * applied to `Bubbles.tsx`'s particle count — a separate knob from
+ * `ambient_particles_on`, which is the on/off toggle this only takes
+ * effect underneath.
+ */
+bubble_intensity: number, sound_on: boolean, 
 /**
  * 1-60, Real time = 1 (SPEC.md §5).
  */

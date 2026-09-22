@@ -76,6 +76,11 @@ pub struct JarSettings {
     /// castle's own always-on accent light.
     pub light_intensity: u8,
     pub ambient_particles_on: bool, // "Bubbles" (aquarium) / "Mist" (terrarium)
+    /// Percentage scale (0-200, 100 = the current default bubble count)
+    /// applied to `Bubbles.tsx`'s particle count — a separate knob from
+    /// `ambient_particles_on`, which is the on/off toggle this only takes
+    /// effect underneath.
+    pub bubble_intensity: u8,
     pub sound_on: bool,
     /// 1-60, Real time = 1 (SPEC.md §5).
     pub simulation_speed: u8,
@@ -142,6 +147,7 @@ impl Default for JarSettings {
             light_colour: LightColour::Daylight,
             light_intensity: 100,
             ambient_particles_on: true,
+            bubble_intensity: 100,
             sound_on: false,
             simulation_speed: 1,
             always_on_top: false,
@@ -167,6 +173,7 @@ mod tests {
         assert!(settings.light_on);
         assert_eq!(settings.light_colour, LightColour::Daylight);
         assert_eq!(settings.light_intensity, 100);
+        assert_eq!(settings.bubble_intensity, 100);
         assert!(settings.ambient_particles_on);
         assert!(!settings.sound_on);
         assert_eq!(settings.simulation_speed, 1);

@@ -69,6 +69,7 @@ export const DEFAULT_SETTINGS: JarSettings = {
   light_colour: 'Daylight',
   light_intensity: 100,
   ambient_particles_on: true,
+  bubble_intensity: 100,
   sound_on: false,
   simulation_speed: 1,
   always_on_top: false,
@@ -255,4 +256,5 @@ export const jar = {
   setFrame: (frame: TankFrame) => pluginApi.setFrame(frame),
   setLightColour: (colour: LightColour) => pluginApi.setLightColour(colour),
   setLightIntensity: (intensity: number) => pluginApi.setLightIntensity(intensity),
+  setBubbleIntensity: (intensity: number) => pluginApi.setBubbleIntensity(intensity),
 };

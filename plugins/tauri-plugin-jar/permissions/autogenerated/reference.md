@@ -15,6 +15,7 @@ Default permissions for the jar simulation plugin. Grants every command the app 
 - `allow-set-frame`
 - `allow-set-light-colour`
 - `allow-set-light-intensity`
+- `allow-set-bubble-intensity`
 - `allow-get-snapshot`
 - `allow-load-snapshot`
 
@@ -127,6 +128,32 @@ Enables the rename_critter command without any pre-configured scope.
 <td>
 
 Denies the rename_critter command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:allow-set-bubble-intensity`
+
+</td>
+<td>
+
+Enables the set_bubble_intensity command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-set-bubble-intensity`
+
+</td>
+<td>
+
+Denies the set_bubble_intensity command without any pre-configured scope.
 
 </td>
 </tr>

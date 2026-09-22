@@ -80,7 +80,9 @@ export function TankScene() {
           <CrittersLayer />
         </SteeringSystem>
       </Physics>
-      {settings.ambient_particles_on && settings.mode === 'Fish' && <Bubbles />}
+      {settings.ambient_particles_on && settings.mode === 'Fish' && (
+        <Bubbles intensityPercent={settings.bubble_intensity} />
+      )}
       {settings.frame === 'NeonCrt' && <CrtEffect />}
     </Canvas>
   );

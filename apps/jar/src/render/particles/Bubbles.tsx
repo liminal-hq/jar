@@ -12,12 +12,18 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
 import { TANK_HEIGHT, TANK_WIDTH } from '../physics/coordinates';
 
-const BUBBLE_COUNT = 30; // §9.1: ~20-40 concurrent bubbles
+// Allocated once at the top of the 0-200% intensity range (Setup's own
+// "Bubble intensity" slider) — 100% lands on §9.1's original ~20-40
+// concurrent-bubble figure via MAX_BUBBLE_COUNT/2, 200% reaches the full
+// allocated buffer. `geometry.setDrawRange` (not a resize) is what
+// actually varies the visible count per frame, so the setting can change
+// live without reallocating or remounting this component.
+const MAX_BUBBLE_COUNT = 60;
 const RISE_SPEED = 0.35;
 const DRIFT_STRENGTH = 0.12;
 const AIRSTONE_X = TANK_WIDTH * (0.66 - 0.5); // §8.1: "~66% x, near the rock"
@@ -29,15 +35,15 @@ interface BubbleState {
   seed: number;
 }
 
-export function Bubbles() {
+export function Bubbles({ intensityPercent }: { intensityPercent: number }) {
   const pointsRef = useRef<THREE.Points>(null);
 
   const { geometry, states } = useMemo(() => {
     const geom = new THREE.BufferGeometry();
-    const positions = new Float32Array(BUBBLE_COUNT * 3);
+    const positions = new Float32Array(MAX_BUBBLE_COUNT * 3);
     const bubbleStates: BubbleState[] = [];
 
-    for (let i = 0; i < BUBBLE_COUNT; i++) {
+    for (let i = 0; i < MAX_BUBBLE_COUNT; i++) {
       const lifetime = 3 + Math.random() * 2;
       bubbleStates.push({ age: Math.random() * lifetime, lifetime, seed: Math.random() * 1000 });
       positions[i * 3] = AIRSTONE_X;
@@ -49,11 +55,22 @@ export function Bubbles() {
     return { geometry: geom, states: bubbleStates };
   }, []);
 
+  // §9.1's original ~20-40 concurrent bubbles sits at 100% (half of
+  // MAX_BUBBLE_COUNT); `setDrawRange` alone hides the inactive tail of the
+  // buffer — no reallocation, so this can change live off the slider
+  // without remounting the whole particle system.
+  const activeCount = Math.round(
+    THREE.MathUtils.clamp((MAX_BUBBLE_COUNT * intensityPercent) / 200, 0, MAX_BUBBLE_COUNT),
+  );
+  useEffect(() => {
+    geometry.setDrawRange(0, activeCount);
+  }, [geometry, activeCount]);
+
   useFrame((state, delta) => {
     const positionAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
     const t = state.clock.elapsedTime;
 
-    for (let i = 0; i < BUBBLE_COUNT; i++) {
+    for (let i = 0; i < activeCount; i++) {
       const bubble = states[i];
       if (!bubble) continue;
       bubble.age += delta;

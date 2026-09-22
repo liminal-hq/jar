@@ -263,6 +263,7 @@ Neither bubbles nor mist are physics bodies (§5.3) — cheap, capped-count visu
 - Fade in over the first ~15% of lifetime, fade out near the top; slight per-particle size/opacity jitter for visual variety.
 - Emitter origin: the airstone position (§8.1).
 - Cap: ~20–40 concurrent bubbles is plenty at this window size — no benefit to more, real cost to more.
+- **Bubble intensity:** `JarSettings.bubble_intensity` (Setup slider, 0-200%, persisted, shown only while `ambient_particles_on` is on) scales how many of `Bubbles.tsx`'s pre-allocated `MAX_BUBBLE_COUNT` (60) particles are actually drawn via `geometry.setDrawRange` — 100% lands on this section's own ~20-40 figure (half of the buffer), 200% reaches the full allocation. No reallocation on change, so the slider updates live.
 
 ### 9.2 Mist (terrarium, `mist` toggle — same drawer slot as bubbles per
 
