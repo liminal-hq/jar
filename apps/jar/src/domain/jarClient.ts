@@ -134,6 +134,7 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
               mood: stats.mood,
               energy: stats.energy,
               age_sec: stats.age_sec,
+              life_stage: stats.life_stage,
               alive: stats.alive,
             };
           }

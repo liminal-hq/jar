@@ -52,6 +52,7 @@ fn stats_of(c: &Critter) -> CritterStats {
         mood: c.mood,
         energy: c.energy,
         age_sec: c.age_sec,
+        life_stage: c.life_stage,
         alive: c.alive,
     }
 }

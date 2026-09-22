@@ -83,6 +83,7 @@ pub struct Critter {
     pub mood: f32,                  // 0–100
     pub energy: f32,                // 0–100
     pub age_sec: f32,
+    pub life_stage: LifeStage,      // Fry | Juvenile | Adult | Elder — derived from age_sec, kept fresh every tick
     pub life: f32,                  // rolled lifespan, 26–36 jar-days
     pub gen: u32,
     pub parents: Option<[CritterId; 2]>,
@@ -92,6 +93,8 @@ pub struct Critter {
     pub favourite_spot: FavouriteSpot,  // {x, y, z} percents — rolled once at spawn
 }
 ```
+
+**`life_stage`:** a sim fact like `mood`/`energy`/`alive`, not a frontend-derived presentation value — `jar-core::tick::life_stage(age_sec)` is the one place the SPEC.md §5 age thresholds are implemented, and the aging pass in `tick()` refreshes `critter.life_stage` in the same step it increments `age_sec`, so the two are never out of sync. The frontend reads it directly off `Critter`/`CritterStats` rather than re-deriving it from a raw `age_sec`, same reasoning as `SimEvent::TickUpdate`'s `is_night` above.
 
 **Naming note:** `trait` is a reserved word in Rust (trait definitions). The personality gene is named `personality` here rather than `trait` — small, easy to get bitten by if translating `SPEC.md`'s vocabulary literally, worth flagging explicitly so the implementing agent doesn't have to discover it via a compile error.
 

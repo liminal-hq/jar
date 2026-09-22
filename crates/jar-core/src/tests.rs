@@ -6,11 +6,11 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{JarSettings, Species};
+use jar_protocol::{JarSettings, LifeStage, Species};
 
 use crate::rng::JarRng;
 use crate::state::JarState;
-use crate::tick::{life_stage, tick, LifeStage};
+use crate::tick::{life_stage, tick};
 
 #[test]
 fn a_fresh_original_starts_as_a_fry() {

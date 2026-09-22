@@ -8,8 +8,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use jar_protocol::{
-    default_theme_variants, known_theme_variant_names, Critter, DialogTheme, JarSettings, Species,
-    TankFrame,
+    default_theme_variants, known_theme_variant_names, Critter, CritterId, DialogTheme,
+    FavouriteSpot, FinType, JarSettings, Personality, Sex, Species, TankFrame,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -21,7 +21,7 @@ const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
 /// every time the current snapshot body changes shape.
-const CURRENT_VERSION: u16 = 2;
+const CURRENT_VERSION: u16 = 3;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
@@ -35,6 +35,16 @@ const CURRENT_VERSION: u16 = 2;
 // `SnapshotV1` below are frozen copies of the pre-v2 shape, kept only so
 // `migrate_v1` can decode them and carry the single old variant forward
 // into its theme's new map slot.
+//
+// v3 (2026-09-22): `Critter` gained `life_stage: LifeStage`, pushed as a
+// real sim fact (`jar-protocol::LifeStage`) instead of the frontend
+// re-deriving it from `age_sec`. `SnapshotV1`/`SnapshotV2` had both been
+// embedding the *live* `Critter` type directly rather than a frozen copy —
+// harmless as long as `Critter`'s shape never changed, which stopped being
+// true the moment this field was added. `CritterV2` below is `Critter`'s
+// shape as it stood for both v1 and v2 (it never changed between them);
+// `migrate_v2` backfills `life_stage` by recomputing it from each
+// critter's own `age_sec`, same as `jar-core::tick::life_stage` does live.
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -57,9 +67,34 @@ struct SettingsV1 {
     always_on_top: bool,
 }
 
+/// `Critter`'s shape as it stood through v1 and v2 — see the v3 comment
+/// above for why this needs to be frozen now, not just `JarSettings`. Not
+/// the live `jar_protocol::Critter`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct CritterV2 {
+    id: CritterId,
+    species: Species,
+    name: String,
+    hue: u16,
+    fin: Option<FinType>,
+    spots: bool,
+    sex: Sex,
+    personality: Personality,
+    mood: f32,
+    energy: f32,
+    age_sec: f32,
+    life: f32,
+    gen: u32,
+    parents: Option<[CritterId; 2]>,
+    alive: bool,
+    born: f64,
+    died: Option<f64>,
+    favourite_spot: FavouriteSpot,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV1 {
-    critters: Vec<Critter>,
+    critters: Vec<CritterV2>,
     sim_seconds: f64,
     speed: u8,
     settings: SettingsV1,
@@ -67,6 +102,14 @@ struct SnapshotV1 {
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotV2 {
+    critters: Vec<CritterV2>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: JarSettings,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV3 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -90,7 +133,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV2 {
+    let body = SnapshotV3 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -140,6 +183,43 @@ fn migrate_v1(v1: SnapshotV1) -> SnapshotV2 {
     }
 }
 
+/// Backfills `life_stage` on every critter by recomputing it from its own
+/// `age_sec` — the same rule `jar-core::tick::life_stage` applies live, so
+/// a critter migrated on load reads identically to one that had been
+/// ticking the whole time.
+fn migrate_v2(v2: SnapshotV2) -> SnapshotV3 {
+    SnapshotV3 {
+        critters: v2
+            .critters
+            .into_iter()
+            .map(|c| Critter {
+                id: c.id,
+                species: c.species,
+                name: c.name,
+                hue: c.hue,
+                fin: c.fin,
+                spots: c.spots,
+                sex: c.sex,
+                personality: c.personality,
+                mood: c.mood,
+                energy: c.energy,
+                age_sec: c.age_sec,
+                life_stage: crate::tick::life_stage(c.age_sec),
+                life: c.life,
+                gen: c.gen,
+                parents: c.parents,
+                alive: c.alive,
+                born: c.born,
+                died: c.died,
+                favourite_spot: c.favourite_spot,
+            })
+            .collect(),
+        sim_seconds: v2.sim_seconds,
+        speed: v2.speed,
+        settings: v2.settings,
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
@@ -147,12 +227,16 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
         return Err(SnapshotError::BadMagic);
     }
 
-    let body: SnapshotV2 = match header.version {
+    let body: SnapshotV3 = match header.version {
         1 => {
             let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v1(v1)
+            migrate_v2(migrate_v1(v1))
         }
-        2 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        2 => {
+            let v2: SnapshotV2 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v2(v2)
+        }
+        3 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
         other => return Err(SnapshotError::UnsupportedVersion(other)),
     };
 
@@ -301,5 +385,59 @@ mod tests {
                 .get(&DialogTheme::NeonTerminal),
             Some(&"Magenta".to_string())
         );
+    }
+
+    #[test]
+    fn decode_migrates_a_v2_snapshot_by_backfilling_life_stage() {
+        // A v2 snapshot's critters have no `life_stage` field at all (it
+        // didn't exist yet) — migration has to recompute it from `age_sec`,
+        // not just default it to something arbitrary.
+        let adult = CritterV2 {
+            id: CritterId(1),
+            species: Species::Fish,
+            name: "Pickle".to_string(),
+            hue: 200,
+            fin: Some(FinType::Veil),
+            spots: false,
+            sex: Sex::Male,
+            personality: Personality::Bold,
+            mood: 70.0,
+            energy: 80.0,
+            age_sec: 700.0, // well past ADULT_AT_DAYS (5 jar-days = 600s)
+            life: 3000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 50.0,
+                y: 50.0,
+                z: 50.0,
+            },
+        };
+        let v2 = SnapshotV2 {
+            critters: vec![adult],
+            sim_seconds: 700.0,
+            speed: 1,
+            settings: JarSettings::default(),
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 2,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v2).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        assert_eq!(restored.critters.len(), 1);
+        assert_eq!(
+            restored.critters[0].life_stage,
+            jar_protocol::LifeStage::Adult
+        );
+        // Everything else carried across untouched.
+        assert_eq!(restored.critters[0].name, "Pickle");
+        assert_eq!(restored.critters[0].age_sec, 700.0);
     }
 }

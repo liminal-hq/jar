@@ -171,7 +171,7 @@ Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Veh
 
 ### 6.3 Life-stage scaling
 
-Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). A single uniform scale on `FishModel`'s root `<group>` (`lifeStageScale(critter.age_sec)`, composed with the SVG-to-world unit conversion below) is what's actually applied; proportion changes (bigger eyes on fry, etc.) remain a nice stretch, not built.
+Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). A single uniform scale on `FishModel`'s root `<group>` (`lifeStageScale(critter.life_stage)`, composed with the SVG-to-world unit conversion below) is what's actually applied; proportion changes (bigger eyes on fry, etc.) remain a nice stretch, not built. `life_stage` itself is a sim fact pushed from `jar-core` (`docs/architecture/rust-core.md` §3.1), not derived from `age_sec` client-side.
 
 ### 6.4 Materials — flat, not PBR
 

@@ -50,6 +50,7 @@ function makeCritter(overrides: Partial<Critter> = {}): Critter {
     mood: 66,
     energy: 100,
     age_sec: 0,
+    life_stage: 'Fry',
     life: 3120,
     gen: 1,
     parents: null,
@@ -115,7 +116,7 @@ describe('applyEvent — TickUpdate', () => {
 
     useJarStore.getState().applyEvent({
       type: 'TickUpdate',
-      critters: [{ id: 1, mood: 40, energy: 55, age_sec: 12, alive: true }],
+      critters: [{ id: 1, mood: 40, energy: 55, age_sec: 12, life_stage: 'Juvenile', alive: true }],
       is_night: false,
     });
 
@@ -124,6 +125,7 @@ describe('applyEvent — TickUpdate', () => {
     expect(updated.mood).toBe(40);
     expect(updated.energy).toBe(55);
     expect(updated.age_sec).toBe(12);
+    expect(updated.life_stage).toBe('Juvenile');
     expect(updated.alive).toBe(true);
     // Untouched: everything steering/physics or genetics own.
     expect(updated.name).toBe(original.name);
@@ -137,7 +139,7 @@ describe('applyEvent — TickUpdate', () => {
   it('ignores stats for a critter id not yet in the store (a Born not yet processed)', () => {
     useJarStore.getState().applyEvent({
       type: 'TickUpdate',
-      critters: [{ id: 999, mood: 10, energy: 10, age_sec: 1, alive: true }],
+      critters: [{ id: 999, mood: 10, energy: 10, age_sec: 1, life_stage: 'Fry', alive: true }],
       is_night: false,
     });
 

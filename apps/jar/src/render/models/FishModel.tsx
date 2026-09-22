@@ -148,7 +148,7 @@ export function FishModel({
   const nextMicroFlickRef = useRef<number | null>(null);
 
   const isMale = critter.sex === 'Male';
-  const scale = lifeStageScale(critter.age_sec) * SVG_SCALE;
+  const scale = lifeStageScale(critter.life_stage) * SVG_SCALE;
   const tailScale = isMale ? MALE_TAIL_SCALE : 1.0; // §6.7 — modest fin scale-up, males only
   const saturation = isMale ? 0.75 : 0.62; // §6.7 — a few points apart, not a strong split
 

@@ -6,7 +6,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{CritterId, Personality, Sex, Species};
+use jar_protocol::{CritterId, LifeStage, Personality, Sex, Species};
 
 use crate::genetics::{self, Parent};
 use crate::rng::JarRng;
@@ -17,14 +17,10 @@ const JUVENILE_AT_DAYS: f32 = 2.0;
 const ADULT_AT_DAYS: f32 = 5.0;
 const ELDER_AT_DAYS: f32 = 22.0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LifeStage {
-    Fry,
-    Juvenile,
-    Adult,
-    Elder,
-}
-
+/// The classification rule behind `jar_protocol::LifeStage` — the type
+/// itself lives in `jar-protocol` (it crosses the wire on every `Critter`/
+/// `CritterStats`), but the rule that derives it from `age_sec` is
+/// simulation logic, so it stays here.
 pub fn life_stage(age_sec: f32) -> LifeStage {
     let age_days = age_sec / crate::clock::SECONDS_PER_JAR_DAY as f32;
     if age_days < JUVENILE_AT_DAYS {
@@ -57,6 +53,7 @@ pub fn tick(state: &mut JarState, rng: &mut JarRng, local_hour: u8) -> TickOutco
     // 1. Aging + passing.
     for critter in state.critters.iter_mut().filter(|c| c.alive) {
         critter.age_sec += 1.0;
+        critter.life_stage = life_stage(critter.age_sec);
         if critter.age_sec >= critter.life {
             critter.alive = false;
             critter.died = Some(state.clock.sim_seconds);
@@ -273,6 +270,7 @@ mod tests {
             mood: 66.0,
             energy,
             age_sec,
+            life_stage: life_stage(age_sec),
             life: 100_000.0,
             gen: 1,
             parents: None,

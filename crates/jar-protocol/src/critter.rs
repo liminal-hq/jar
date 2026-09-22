@@ -65,6 +65,20 @@ pub struct FavouriteSpot {
     pub z: f32,
 }
 
+/// Discrete age bracket derived from `age_sec` (SPEC.md §5's thresholds,
+/// `jar-core::tick::life_stage` owns the actual classification rule) — a
+/// sim fact like `mood`/`energy`/`alive`, so it's computed once here and
+/// carried on `Critter`/`CritterStats` rather than the frontend
+/// re-implementing the same age-threshold logic from a raw `age_sec`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum LifeStage {
+    Fry,
+    Juvenile,
+    Adult,
+    Elder,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Critter {
@@ -79,6 +93,7 @@ pub struct Critter {
     pub mood: f32,   // 0-100
     pub energy: f32, // 0-100
     pub age_sec: f32,
+    pub life_stage: LifeStage,
     pub life: f32, // rolled lifespan, 26-36 jar-days, expressed in sim-seconds
     pub gen: u32,
     pub parents: Option<[CritterId; 2]>,
@@ -99,5 +114,6 @@ pub struct CritterStats {
     pub mood: f32,
     pub energy: f32,
     pub age_sec: f32,
+    pub life_stage: LifeStage,
     pub alive: bool,
 }

@@ -43,7 +43,9 @@ import { useFishSteering } from '../steering/useFishSteering';
 function colliderRadiusFor(critter: Critter): number {
   const finType = critter.fin ?? 'Forked';
   const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
-  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale * lifeStageScale(critter.age_sec);
+  return (
+    TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale * lifeStageScale(critter.life_stage)
+  );
 }
 
 /** Same tail-tip sizing as `colliderRadiusFor`, but always at this fish's
