@@ -109,7 +109,7 @@ describe('CastleAvoidanceBehaviour', () => {
     // comment for the arithmetic.
     const bigFishMargin = 0.9;
     const colliderRadius = 0.3;
-    const behaviour = new CastleAvoidanceBehaviour(bigFishMargin, colliderRadius);
+    const behaviour = new CastleAvoidanceBehaviour(bigFishMargin, () => colliderRadius);
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(CASTLE_POSITION.x, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
     const force = new YUKA.Vector3(1, 1, 1); // non-zero, to prove calculate() resets it
@@ -124,7 +124,7 @@ describe('CastleAvoidanceBehaviour', () => {
   it('still pushes a large fish away from a tower, well outside the doorway corridor', () => {
     const bigFishMargin = 0.9;
     const colliderRadius = 0.3;
-    const behaviour = new CastleAvoidanceBehaviour(bigFishMargin, colliderRadius);
+    const behaviour = new CastleAvoidanceBehaviour(bigFishMargin, () => colliderRadius);
     const vehicle = new YUKA.Vehicle();
     // Just past a tower's real surface, same x as the tower itself.
     vehicle.position.set(CASTLE_POSITION.x + 1.8, CASTLE_POSITION.y + 0.4, CASTLE_POSITION.z);
@@ -143,7 +143,7 @@ describe('CastleAvoidanceBehaviour', () => {
     // clip the wall while avoidance sat fully off.
     const margin = 0.9; // comfortably reaches the flanking wall from x=0.3
     const colliderRadius = 0.5;
-    const behaviour = new CastleAvoidanceBehaviour(margin, colliderRadius);
+    const behaviour = new CastleAvoidanceBehaviour(margin, () => colliderRadius);
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(CASTLE_POSITION.x + 0.3, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
     const force = new YUKA.Vector3();
@@ -156,7 +156,7 @@ describe('CastleAvoidanceBehaviour', () => {
   it('still exempts the same off-centre position for a small enough fish', () => {
     const margin = 0.3;
     const colliderRadius = 0.1; // shrinks the corridor only to ±0.55 — 0.3 stays inside
-    const behaviour = new CastleAvoidanceBehaviour(margin, colliderRadius);
+    const behaviour = new CastleAvoidanceBehaviour(margin, () => colliderRadius);
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(CASTLE_POSITION.x + 0.3, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
     const force = new YUKA.Vector3();
@@ -175,7 +175,7 @@ describe('CastleAvoidanceBehaviour', () => {
     // staying on here is the documented trade-off, not a regression.
     const margin = 1.0;
     const colliderRadius = 0.8; // exceeds CASTLE_DOOR_HALF_WIDTH (0.65)
-    const behaviour = new CastleAvoidanceBehaviour(margin, colliderRadius);
+    const behaviour = new CastleAvoidanceBehaviour(margin, () => colliderRadius);
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(CASTLE_POSITION.x, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
     const force = new YUKA.Vector3();
@@ -183,5 +183,36 @@ describe('CastleAvoidanceBehaviour', () => {
     behaviour.calculate(vehicle, force);
 
     expect(force.length()).toBeGreaterThan(0);
+  });
+
+  it('exempts a fry whose current collider is small, even though its adult-sized margin alone would not fit', () => {
+    // The regression: `margin` is always this fish's *eventual adult*
+    // radius plus a buffer (`useFishSteering.ts`) — for a still-growing
+    // fry that's comfortably larger than the doorway's own half-width
+    // (0.65), which would zero out the exemption if it were (wrongly)
+    // used to size the corridor too. The getter reports this fry's real,
+    // much smaller *current* radius instead, so the exemption still
+    // applies to the body that's actually there right now.
+    const adultMargin = 0.9; // exceeds CASTLE_DOOR_HALF_WIDTH on its own
+    const fryColliderRadius = 0.15;
+    let currentRadius = fryColliderRadius;
+    const behaviour = new CastleAvoidanceBehaviour(adultMargin, () => currentRadius);
+    const vehicle = new YUKA.Vehicle();
+    vehicle.position.set(CASTLE_POSITION.x, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
+
+    const forceAsFry = new YUKA.Vector3();
+    behaviour.calculate(vehicle, forceAsFry);
+    expect(forceAsFry.x).toBe(0);
+    expect(forceAsFry.y).toBe(0);
+    expect(forceAsFry.z).toBe(0);
+
+    // Once grown, the same behaviour instance (constructed once per fish,
+    // per `useFishSteering.ts`) picks up the larger adult radius on its
+    // own — the getter is read fresh every `calculate()` call, not cached
+    // at construction.
+    currentRadius = 0.8;
+    const forceAsAdult = new YUKA.Vector3();
+    behaviour.calculate(vehicle, forceAsAdult);
+    expect(forceAsAdult.length()).toBeGreaterThan(0);
   });
 });

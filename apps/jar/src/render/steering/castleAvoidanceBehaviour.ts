@@ -82,15 +82,20 @@ export function isInsideBox(
 
 export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
   /** `margin`: same derivation contract as `TankContainmentBehaviour` — the
-   * caller (`useFishSteering.ts`) passes this fish's own collider radius
-   * plus a buffer, so the turn away happens before the body itself is
-   * close enough to actually touch the castle. `colliderRadius`: the same
-   * fish's real physical radius alone, with no anticipatory buffer — used
-   * only to size the doorway exemption below, where the full `margin`
-   * would be too strict a fit for the opening's own real width. */
+   * caller (`useFishSteering.ts`) passes this fish's own *eventual adult*
+   * collider radius plus a buffer, so the turn away happens before the
+   * body itself is close enough to actually touch the castle, even once
+   * this fish is fully grown. `getColliderRadius`: a getter (not a fixed
+   * value) for the same fish's real physical radius alone, with no
+   * anticipatory buffer *and no adult-size assumption* — read fresh each
+   * frame to size the doorway exemption below, since a fry's actual
+   * collider is genuinely smaller than its adult one and can fit through
+   * a gap its future self won't; using the fixed adult radius here would
+   * needlessly deny the exemption to every fish that hasn't finished
+   * growing yet. */
   constructor(
     private readonly margin: number,
-    private readonly colliderRadius: number,
+    private readonly getColliderRadius: () => number,
   ) {
     super();
   }
@@ -121,9 +126,10 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
       y: CASTLE_POSITION.y + CASTLE_DOORWAY_CORRIDOR.position.y,
       z: CASTLE_POSITION.z + CASTLE_DOORWAY_CORRIDOR.position.z,
     };
+    const colliderRadius = this.getColliderRadius();
     const corridorHalfExtents = {
-      x: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.x - this.colliderRadius),
-      y: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.y - this.colliderRadius),
+      x: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.x - colliderRadius),
+      y: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.y - colliderRadius),
       z: CASTLE_DOORWAY_CORRIDOR.halfExtents.z,
     };
     if (isInsideBox(position, corridorCenter, corridorHalfExtents)) {

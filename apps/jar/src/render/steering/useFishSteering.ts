@@ -53,6 +53,7 @@ export function useFishSteering(
   livingPopulation: number,
   favouriteSpotWorld: YUKA.Vector3,
   maxColliderRadius: number,
+  getColliderRadius: () => number,
 ) {
   const params = useMemo(
     () => steeringParamsFor(personality, livingPopulation),
@@ -76,7 +77,7 @@ export function useFishSteering(
     const containment = new TankContainmentBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
     const castleAvoidance = new CastleAvoidanceBehaviour(
       maxColliderRadius + CONTAINMENT_BUFFER,
-      maxColliderRadius,
+      getColliderRadius,
     );
 
     // Added after `containment` deliberately — Yuka's priority-budget
