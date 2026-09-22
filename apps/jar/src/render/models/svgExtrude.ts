@@ -15,12 +15,33 @@ export function shapesFromSvg(svg: string): THREE.Shape[] {
   return svgLoader.parse(svg).paths.flatMap((p) => p.toShapes(true));
 }
 
+/** A Y-mirror (`scale(1,-1,1)`) transforms an existing normal attribute via
+ * the matrix's normal matrix, same as it transforms positions — but a
+ * mirror is a reflection (negative determinant), and a reflection inverts
+ * handedness: the transformed normals end up geometrically inward-facing
+ * relative to the now-mirrored triangle winding, not outward, unless the
+ * winding itself is also reversed to match. Three.js's `BufferGeometry`
+ * transform methods only ever touch attribute *values*, never index
+ * *topology*, so nothing does that second half automatically — this does
+ * it by hand, swapping two indices per triangle. */
+function reverseWinding(geometry: THREE.BufferGeometry): void {
+  const index = geometry.index;
+  if (!index) return;
+  const array = index.array;
+  for (let i = 0; i + 2 < array.length; i += 3) {
+    const b = array[i + 1]!;
+    array[i + 1] = array[i + 2]!;
+    array[i + 2] = b;
+  }
+  index.needsUpdate = true;
+}
+
 /** SVG's Y grows downward, three.js's Y grows upward — the standard flip
- * mirrors the geometry, which also reverses its face winding. Rather than
- * rebuild the index buffer to un-reverse it, every piece built from this
- * renders both faces (`side: THREE.DoubleSide`) — three.js's shader already
- * flips the shading normal per back-facing fragment, so lighting reads
- * correctly without touching winding by hand. */
+ * mirrors the geometry, and `reverseWinding` un-reverses the winding that
+ * mirror flips, so the resulting normal is genuinely outward-facing from
+ * every angle rather than only *looking* right from whichever direction
+ * the camera happens to view it from — see `reverseWinding`'s own doc
+ * comment for why a plain mirror alone isn't enough. */
 export function extrude(shapes: THREE.Shape[], depth: number, bevel = 0.6): THREE.BufferGeometry {
   const geometry = new THREE.ExtrudeGeometry(shapes, {
     depth,
@@ -32,5 +53,6 @@ export function extrude(shapes: THREE.Shape[], depth: number, bevel = 0.6): THRE
   });
   geometry.translate(0, 0, -depth / 2);
   geometry.scale(1, -1, 1);
+  reverseWinding(geometry);
   return geometry;
 }

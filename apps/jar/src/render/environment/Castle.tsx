@@ -169,8 +169,15 @@ const LIGHT_PROP_POSITION: [number, number, number] = [-0.55, 0.03, 0.85];
 // x=-0.7, not -0.35 — the doorway itself is clear space out to
 // ±CASTLE_DOOR_HALF_WIDTH (0.5), so a target inside that span aims into
 // the opening rather than the wall beside it; -0.7 lands on the actual
-// left wall segment, above the lamp.
-const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 1.4, 0.29];
+// left wall segment, above the lamp. y=0.75, not up near the crown
+// (1.4) — a target that high put the brightest part of the cone right
+// at the merlon/crown edge, and what read as "the wall lighting up" in
+// screenshots turned out to be a specular glint off the nearby round
+// window/arrow-slit props (roughness 0.4, glossy enough to catch a
+// highlight from a weak light that barely dents a diffuse flat
+// surface), not real diffuse light on the wall itself. 0.75 sits in a
+// plain flat stretch of wall with no round prop nearby to fake it.
+const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 0.75, 0.29];
 
 /** A ground-level flood uplight, genuinely originating from `LightProp`'s
  * lens and aimed up the wall — not a light floating in space with no
@@ -179,11 +186,33 @@ const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 1.4, 0.29];
  * object, not a vector; set imperatively once both light and target refs
  * exist. Wide angle/penumbra and a real intensity bump (a first pass at
  * 4 barely registered once the tank-wide LED strip's own ambient wash
- * was in place) — a "flood," not a tight pin-spot. */
+ * was in place) — a "flood," not a tight pin-spot.
+ *
+ * Known limitation, not yet root-caused: at a bright test colour/
+ * intensity, this light visibly lit the keep's simple (non-extruded)
+ * adornments — the `Window` sphere, the `ArrowSlit` boxes — but the
+ * extruded keep/merlon body itself (`svgExtrude.ts`'s `extrude()`, shared
+ * with `FishModel.tsx`) barely picked up any of it, even aimed at a plain
+ * flat stretch of wall. `extrude()`'s own header comment has the working
+ * theory (a `DoubleSide`/`gl_FrontFacing` normal-flip trick that's only
+ * camera-relative, not genuinely angle-independent) and why a same-session
+ * attempt to fix it there broke rendering outright and was reverted. Left
+ * at a modest, plausible-looking intensity rather than tuned against a
+ * render path known not to respond correctly. */
 function GroundUplight() {
-  const { quaternion, lensPosition } = useMemo(
-    () => aimFixture(LIGHT_PROP_POSITION, LIGHT_PROP_TARGET, LAMP_BARREL_LENGTH),
-    [],
+  // Not memoized: `aimFixture` is a handful of vector ops on module-level
+  // constants, called once per render of a component that itself only
+  // renders once — too cheap to be worth `useMemo`, and memoizing it with
+  // an empty dependency array bit us live during tuning: editing
+  // `LIGHT_PROP_POSITION`/`LIGHT_PROP_TARGET` silently didn't recompute
+  // this under Fast Refresh (the memo survives HMR since the component
+  // instance itself isn't remounted), making several rounds of on-screen
+  // verification compare against a stale aim without either of us
+  // realizing it.
+  const { quaternion, lensPosition } = aimFixture(
+    LIGHT_PROP_POSITION,
+    LIGHT_PROP_TARGET,
+    LAMP_BARREL_LENGTH,
   );
   const lightRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
@@ -207,7 +236,7 @@ function GroundUplight() {
         ref={lightRef}
         position={[lensPosition.x, lensPosition.y, lensPosition.z]}
         color="#ffe9bd"
-        intensity={9}
+        intensity={25}
         angle={0.7}
         penumbra={0.5}
         distance={3}
