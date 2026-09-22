@@ -67,7 +67,7 @@ The discrete rules below (aging, mood/energy, breeding, genetics, passing, namin
 - **Life stages** by age: fry/hatchling < 2 d · juvenile < 5 d · adult < 22 d · elder. Lifespan 26–36 d, rolled per critter.
 - **Passing**: gentle. Toast "X has passed on, gently." Critter leaves the tank and stays in the tree as a memorial; card shows a memorial note.
 - **Breeding**: only awake adults, only under the cap (fish 10, gecko 4), and only between one male and one female (see Genetics — sex isn't inherited, so a given generation's male/female split is whatever it randomly rolls). Chance per tick ∝ number of eligible opposite-sex adult pairs. Child spawns at parent A's position. Toast "A & B had a fry: Name".
-- **Genetics**: hue = parents' mean ± 18°; tail type (fan / forked / veil) from one parent; spots inherit with 70% chance if either parent has them. Sex (male/female) is rolled 50/50 independently at birth — not inherited from either parent. Originals roll fresh.
+- **Genetics**: hue = parents' mean ± 18°; tail type (fan / forked / veil) from one parent; spots inherit with 70% chance if either parent has them; personality inherits from one parent 70% of the time (fresh roll from the full pool otherwise). Sex (male/female) is rolled 50/50 independently at birth — not inherited from either parent. Originals roll fresh.
 - **Stats** (per critter):
   - Mood 0–100. Drifts toward a target: base 66, +4 light on / −6 off, shy −3×population, curious +2×population, greedy −5, low energy −15. Dramatic critters get 4× noise.
   - Energy 0–100. Drains slowly by day, refills asleep. Low energy slows movement and drops mood.

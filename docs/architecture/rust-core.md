@@ -134,7 +134,7 @@ Pure Rust, no I/O, no `tauri`/`wasm-bindgen` — testable in complete isolation,
 
 ### 4.2 `genetics.rs`
 
-The `make()`-equivalent: hue averaging ±18° / fresh roll for originals, fin inheritance (fish only), spot inheritance (70% chance if either parent has them), sex roll (50/50, independent of parentage — `SPEC.md` §5's amended genetics rule), favourite-spot roll, naming. Exactly the rules already specified; this module is where they're implemented once, correctly, rather than re-derived.
+The `make()`-equivalent: hue averaging ±18° / fresh roll for originals, fin inheritance (fish only), spot inheritance (70% chance if either parent has them), personality inheritance (70% chance from one parent, fresh roll from the full pool otherwise — `SPEC.md` §5's amended genetics rule), sex roll (50/50, independent of parentage — `SPEC.md` §5's amended genetics rule), favourite-spot roll, naming. Exactly the rules already specified; this module is where they're implemented once, correctly, rather than re-derived.
 
 ### 4.3 `clock.rs`
 

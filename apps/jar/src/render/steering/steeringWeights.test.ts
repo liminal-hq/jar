@@ -1,3 +1,5 @@
+// Tests for the per-mode behavior-weight table and the rampWeights approach function.
+//
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
