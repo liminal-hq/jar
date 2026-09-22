@@ -13,10 +13,26 @@ import * as YUKA from 'yuka';
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
 import { entityManager } from './entityManager';
-import { steeringParamsFor } from './steeringParams';
+import type { FishMotionMode } from './motionState';
+import { maxSpeedFor, steeringParamsFor } from './steeringParams';
+import { TankContainmentBehaviour } from './tankContainmentBehaviour';
 
-const BASE_MAX_SPEED = 1.0;
-const ENERGY_MAX_SPEED_BONUS = 1.0;
+/** Yuka's `WanderBehavior` projects its wander target this many units
+ * directly in front of the vehicle before adding the `radius`/`jitter`
+ * noise — that projection distance, not the circle radius, is what
+ * dominates the steering force's magnitude. Left unset, it defaults to 5:
+ * bigger than the entire tank (6x4x3, `coordinates.ts`), which made wander
+ * an effective beeline toward/through a wall rather than a gentle local
+ * drift. 1.6 keeps the widest single-update turn (with
+ * `BASE_WANDER_RADIUS`, `steeringParams.ts`) to roughly `atan(0.8/1.6) ≈
+ * 27°`. */
+const WANDER_DISTANCE = 1.6;
+
+/** Yuka's own default (100) is effectively unclamped at this tank's scale —
+ * bounding it keeps the worst-case combined wander+separation+containment
+ * force from producing a visible snap in one step; the orientation slerp
+ * (`SteeringSystem.tsx`) then smooths whatever's left. */
+const MAX_STEERING_FORCE = 3;
 
 export function useFishSteering(
   personality: Personality,
@@ -32,21 +48,25 @@ export function useFishSteering(
     const vehicle = new YUKA.Vehicle();
     vehicle.updateNeighborhood = true;
     vehicle.neighborhoodRadius = params.separationRadius;
+    vehicle.maxForce = MAX_STEERING_FORCE;
 
     const wander = new YUKA.WanderBehavior();
     wander.radius = params.wanderRadius;
     wander.jitter = params.wanderJitter;
+    wander.distance = WANDER_DISTANCE;
 
     const separation = new YUKA.SeparationBehavior();
+    const containment = new TankContainmentBehaviour();
 
     const arrive = new YUKA.ArriveBehavior(favouriteSpotWorld, 3, 0.3);
     arrive.active = false;
 
     vehicle.steering.add(wander);
     vehicle.steering.add(separation);
+    vehicle.steering.add(containment);
     vehicle.steering.add(arrive);
 
-    return { vehicle, wander, separation, arrive };
+    return { vehicle, wander, separation, containment, arrive };
     // Created once per mounted fish instance; personality/params changes
     // mid-life aren't expected (a critter's personality never changes
     // after spawn per SPEC.md §5), so this intentionally doesn't react to
@@ -61,13 +81,37 @@ export function useFishSteering(
     };
   }, [rig.vehicle]);
 
-  const setArriving = (arriving: boolean) => {
-    rig.arrive.active = arriving;
-    rig.wander.active = !arriving;
+  // `containment` is never toggled here — it stays active in every mode,
+  // paused/settled fish included, since even a resting fish shouldn't be
+  // able to drift into the glass.
+  const setMode = (mode: FishMotionMode) => {
+    switch (mode) {
+      case 'active':
+        rig.wander.active = true;
+        rig.separation.active = true;
+        rig.arrive.active = false;
+        break;
+      case 'paused':
+        // Separation stays on — a paused fish still yields space rather
+        // than becoming an obstacle for its neighbours.
+        rig.wander.active = false;
+        rig.separation.active = true;
+        rig.arrive.active = false;
+        break;
+      case 'settling':
+        // §4.1: night cancels active steering except arrival — no wander,
+        // no separation, until settled.
+        rig.wander.active = false;
+        rig.separation.active = false;
+        rig.arrive.active = true;
+        break;
+      case 'settled':
+        rig.wander.active = false;
+        rig.separation.active = false;
+        rig.arrive.active = false;
+        break;
+    }
   };
 
-  const maxSpeedFor = (energyPercent: number) =>
-    BASE_MAX_SPEED + (energyPercent / 100) * ENERGY_MAX_SPEED_BONUS;
-
-  return { ...rig, params, setArriving, maxSpeedFor };
+  return { ...rig, params, setMode, maxSpeedFor };
 }

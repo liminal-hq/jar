@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { lifeStageOf, lifeStageScale, SECONDS_PER_JAR_DAY } from './simConstants';
+import { isNight, lifeStageOf, lifeStageScale, SECONDS_PER_JAR_DAY } from './simConstants';
 
 describe('lifeStageOf', () => {
   it('is Fry from birth up to (not including) 2 jar-days', () => {
@@ -45,5 +45,31 @@ describe('lifeStageScale', () => {
   it('leaves adults and elders at full scale', () => {
     expect(lifeStageScale(600)).toBe(1.0);
     expect(lifeStageScale(2640)).toBe(1.0);
+  });
+});
+
+describe('isNight', () => {
+  // Boundary values mirrored exactly from `clock.rs`'s own
+  // `is_night_at_the_day_start_boundary` / `is_night_at_the_night_start_boundary`
+  // / `is_night_wraps_across_midnight` tests.
+  it('is night just before the day-start boundary (7:00, 35/120 of a jar-day)', () => {
+    expect(isNight(34)).toBe(true);
+  });
+
+  it('becomes day at exactly the day-start boundary', () => {
+    expect(isNight(35)).toBe(false);
+  });
+
+  it('is day just before the night-start boundary (21:00, 105/120 of a jar-day)', () => {
+    expect(isNight(104)).toBe(false);
+  });
+
+  it('becomes night at exactly the night-start boundary', () => {
+    expect(isNight(105)).toBe(true);
+  });
+
+  it('wraps correctly across midnight (jar-day boundary at multiples of 120)', () => {
+    expect(isNight(0)).toBe(true);
+    expect(isNight(120)).toBe(true); // one full jar-day later
   });
 });

@@ -10,14 +10,17 @@
 import { useFrame } from '@react-three/fiber';
 import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import { useEffect, useMemo, useRef } from 'react';
+import * as THREE from 'three';
 import * as YUKA from 'yuka';
 
-import { lifeStageScale } from '../../domain/simConstants';
+import { isNight, lifeStageScale } from '../../domain/simConstants';
+import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
 import { FishModel } from '../models/FishModel';
 import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
+import type { FishMotionMode } from '../steering/motionState';
 import { useSteeringRegistry } from '../steering/SteeringSystem';
 import { useFishSteering } from '../steering/useFishSteering';
 
@@ -61,14 +64,23 @@ interface FishProps {
 }
 
 /** SPEC.md §5 / `docs/architecture/3d-engine.md` §4.1: ~30% of the time a
- * wander cycle resolves, redirect to the favourite spot instead. Simplified
- * here as a periodic roll (every 8-15s) rather than hooking Yuka's
- * per-cycle wander-circle-update event directly. */
-const ARRIVE_ROLL_MIN_MS = 8000;
-const ARRIVE_ROLL_MAX_MS = 7000;
+ * wander cycle resolves, redirect to the favourite spot instead (or, per
+ * `params.pauseChance`, take a brief rest instead) — a periodic roll (every
+ * 8-15s) rather than hooking Yuka's per-cycle wander-circle-update event
+ * directly. */
+const ROLL_MIN_MS = 8000;
+const ROLL_MAX_MS = 7000;
 const ARRIVE_CHANCE = 0.3;
 const ARRIVE_TOLERANCE = 0.3;
 const ARRIVE_TIMEOUT_SEC = 20;
+/** Night settling gets a much longer leash than the daytime "visit the
+ * favourite spot" roll — a fish caught mid-tank when night falls (rather
+ * than mid-cycle at a random moment) may have further to travel, and
+ * there's no rush; it should still eventually give up and settle wherever
+ * it ends up rather than swim forever. */
+const NIGHT_SETTLE_TIMEOUT_SEC = 30;
+const PAUSE_MIN_MS = 2000;
+const PAUSE_MAX_MS = 3000;
 
 export function Fish({ critter, livingPopulation }: FishProps) {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
@@ -113,11 +125,37 @@ export function Fish({ critter, livingPopulation }: FishProps) {
 
   const steering = useFishSteering(critter.personality, livingPopulation, favouriteSpotWorld);
 
+  const night = useJarStore((s) => isNight(s.simSeconds));
+  const nightRef = useRef(night);
   useEffect(() => {
+    nightRef.current = night;
+  }, [night]);
+
+  const modeRef = useRef<FishMotionMode>('active');
+  const setMode = (mode: FishMotionMode) => {
+    modeRef.current = mode;
+    steering.setMode(mode);
+  };
+
+  useEffect(() => {
+    // Seed both heading quaternions from the body's actual spawn rotation
+    // (rather than identity) so a freshly-spawned fish doesn't visibly snap
+    // to its first commanded heading — it slerps from wherever it already
+    // faces, same as it will for every turn after.
+    const spawnRotation = rigidBodyRef.current?.rotation() ?? { x: 0, y: 0, z: 0, w: 1 };
+    const currentHeading = new THREE.Quaternion(
+      spawnRotation.x,
+      spawnRotation.y,
+      spawnRotation.z,
+      spawnRotation.w,
+    );
     registry.set(critter.id, {
       vehicle: steering.vehicle,
       getBody: () => rigidBodyRef.current,
       maxSpeed: () => steering.maxSpeedFor(critter.energy),
+      getMode: () => modeRef.current,
+      currentHeading,
+      targetHeading: currentHeading.clone(),
     });
     return () => {
       registry.delete(critter.id);
@@ -128,19 +166,61 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registry, critter.id, steering]);
 
-  const arrivingRef = useRef(false);
-  const arriveElapsedRef = useRef(0);
+  // Night falling/lifting overrides whatever the daytime roll below was
+  // doing — settle in (arrive-only, per §4.1) when night starts, resume
+  // when day returns (but only if we're not already back to `active` on
+  // our own, e.g. a night that fell and lifted between two daytime rolls
+  // without this fish ever having reached `settling`/`settled`).
+  useEffect(() => {
+    if (night) {
+      settleElapsedRef.current = 0;
+      setMode('settling');
+    } else if (modeRef.current === 'settling' || modeRef.current === 'settled') {
+      setMode('active');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [night]);
+
+  // Drives both the daytime "visit the favourite spot" roll and night
+  // settling to their conclusion: ends `settling` once close enough to the
+  // favourite spot, or after a timeout so a fish can never get stuck
+  // swimming toward it forever. Night settling gets a longer timeout and
+  // lands on `settled` (stays until day); a daytime visit lands back on
+  // `active`. Ordinary default-priority `useFrame` — safe alongside
+  // `SteeringSystem`'s own, since neither passes a render-priority argument
+  // (see that file's header for why that distinction matters with R3F v8).
+  const settleElapsedRef = useRef(0);
+  useFrame((_, delta) => {
+    if (modeRef.current !== 'settling') return;
+    settleElapsedRef.current += delta;
+    const distance = steering.vehicle.position.distanceTo(favouriteSpotWorld);
+    const timeout = nightRef.current ? NIGHT_SETTLE_TIMEOUT_SEC : ARRIVE_TIMEOUT_SEC;
+    if (distance < ARRIVE_TOLERANCE || settleElapsedRef.current > timeout) {
+      setMode(nightRef.current ? 'settled' : 'active');
+    }
+  });
 
   useEffect(() => {
     let cancelled = false;
+    let pauseTimeoutId: ReturnType<typeof setTimeout> | undefined;
     const scheduleNext = () => {
-      const delay = ARRIVE_ROLL_MIN_MS + Math.random() * ARRIVE_ROLL_MAX_MS;
+      const delay = ROLL_MIN_MS + Math.random() * ROLL_MAX_MS;
       timeoutId = setTimeout(() => {
         if (cancelled) return;
-        if (!arrivingRef.current && Math.random() < ARRIVE_CHANCE) {
-          arrivingRef.current = true;
-          arriveElapsedRef.current = 0;
-          steering.setArriving(true);
+        // Only roll while genuinely idle-and-active during the day — a
+        // fish already settling/settled/paused (or mid-night) shouldn't
+        // have this roll layer a second transition on top.
+        if (!nightRef.current && modeRef.current === 'active') {
+          if (Math.random() < steering.params.pauseChance) {
+            setMode('paused');
+            const pauseDuration = PAUSE_MIN_MS + Math.random() * PAUSE_MAX_MS;
+            pauseTimeoutId = setTimeout(() => {
+              if (!cancelled && modeRef.current === 'paused') setMode('active');
+            }, pauseDuration);
+          } else if (Math.random() < ARRIVE_CHANCE) {
+            settleElapsedRef.current = 0;
+            setMode('settling');
+          }
         }
         scheduleNext();
       }, delay);
@@ -149,23 +229,10 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     return () => {
       cancelled = true;
       clearTimeout(timeoutId);
+      clearTimeout(pauseTimeoutId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steering]);
-
-  // Ends arrive-mode once close enough to the favourite spot, or after a
-  // timeout so a fish can never get stuck "arriving" forever. Ordinary
-  // default-priority `useFrame` — safe alongside `SteeringSystem`'s own,
-  // since neither passes a render-priority argument (see that file's
-  // header for why that distinction matters with R3F v8).
-  useFrame((_, delta) => {
-    if (!arrivingRef.current) return;
-    arriveElapsedRef.current += delta;
-    const distance = steering.vehicle.position.distanceTo(favouriteSpotWorld);
-    if (distance < ARRIVE_TOLERANCE || arriveElapsedRef.current > ARRIVE_TIMEOUT_SEC) {
-      arrivingRef.current = false;
-      steering.setArriving(false);
-    }
-  });
 
   return (
     <RigidBody
@@ -174,10 +241,24 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       colliders={false}
       gravityScale={0}
       linearDamping={2.5}
-      angularDamping={5}
+      // Rotation is exclusively script-authored (`SteeringSystem.tsx`'s
+      // `setRotation` every frame) — locking all three axes here stops
+      // wall/fish collisions from injecting spin between those writes.
+      // `angularDamping` doesn't apply now: it only damps physics-driven
+      // spin, and there is none once rotation is locked.
+      enabledRotations={[false, false, false]}
     >
       <BallCollider args={[colliderRadiusFor(critter)]} />
       <group
+        // `SteeringSystem.tsx` computes the RigidBody's heading assuming
+        // local +Z is forward (`docs/architecture/3d-engine.md` §6.2's own
+        // "must line up exactly... or every fish will swim backwards"
+        // warning) — but the vector-fish model is authored facing +X
+        // (`fish-svg/body.svg`'s header comment). This fixed −90° yaw is
+        // the one-time correction: it rotates the model's local +X nose
+        // onto the RigidBody's own +Z, so the two conventions agree
+        // without touching every mesh inside `FishModel`.
+        rotation={[0, -Math.PI / 2, 0]}
         onClick={(e) => {
           // Stops propagation to other intersected R3F objects, but not
           // the underlying native DOM click — that would still bubble to
@@ -188,7 +269,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
           void selectCritter(critter.id);
         }}
       >
-        <FishModel critter={critter} vehicle={steering.vehicle} />
+        <FishModel critter={critter} vehicle={steering.vehicle} getMode={() => modeRef.current} />
       </group>
     </RigidBody>
   );

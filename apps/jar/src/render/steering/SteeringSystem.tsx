@@ -25,11 +25,19 @@ import type * as YUKA from 'yuka';
 import { publishFishPositions } from '../../domain/debugChannel';
 import { useFishPositionOverlayEnabled } from '../../domain/devSettings';
 import { entityManager } from './entityManager';
+import { computeTargetHeading } from './heading';
+import type { FishMotionMode } from './motionState';
 
 export interface RegisteredFish {
   vehicle: YUKA.Vehicle;
   getBody: () => RapierRigidBody | null;
   maxSpeed: () => number;
+  getMode: () => FishMotionMode;
+  /** Slerped toward `targetHeading` each frame rather than snapped, so
+   * turns visibly "swim through" instead of teleporting — seeded from the
+   * body's actual rotation at registration time (`Fish.tsx`). */
+  currentHeading: THREE.Quaternion;
+  targetHeading: THREE.Quaternion;
 }
 
 type Registry = Map<number, RegisteredFish>;
@@ -43,14 +51,17 @@ export function useSteeringRegistry(): Registry {
 }
 
 const scratchImpulse = new THREE.Vector3();
-const scratchHeading = new THREE.Quaternion();
-const scratchForward = new THREE.Vector3(0, 0, 1);
 const scratchVelocity = new THREE.Vector3();
+const scratchLinvel = new THREE.Vector3();
 
-/** Tuning constant translating a Yuka desired-velocity magnitude into an
- * impulse strength — a starting point to tune by eye once real models are
- * on screen (`docs/architecture/3d-engine.md` §5.2), not a derived value. */
-const IMPULSE_SCALE = 0.03;
+/** Converts a (desired − actual) velocity error into an impulse —
+ * velocity-matching rather than the flat open-loop `desired * scale` this
+ * replaced, which injected fresh momentum every frame regardless of what
+ * the body was already doing, piling up against walls and releasing as a
+ * burst. This is framerate-independent (the `* delta`), self-caps at
+ * `vehicle.maxSpeed` (Yuka already clamps `desired`), and cooperates with
+ * `linearDamping` instead of fighting it. */
+const VELOCITY_GAIN = 0.6;
 const MIN_VELOCITY_SQ = 0.0001;
 
 /** The fish-position debug publish goes over a cross-window Tauri event
@@ -59,6 +70,22 @@ const MIN_VELOCITY_SQ = 0.0001;
  * rate: a 60Hz IPC cost for a dev-only readout nobody needs updated that
  * often isn't worth paying. */
 const POSITION_PUBLISH_INTERVAL_MS = 200;
+
+/** Framerate-independent slerp rate toward the target heading — a ~0.17s
+ * time constant (a fish completes most of a turn in well under half a
+ * second: responsive, but visibly curving through the turn rather than
+ * teleporting its orientation). */
+const HEADING_SLERP_RATE = 6;
+
+/** Yuka never damps a vehicle's own velocity on its own — deactivating a
+ * fish's steering behaviors (`useFishSteering.ts`'s `setMode`) leaves
+ * `vehicle.velocity` frozen at whatever it last was, forever, unless
+ * something actively decays it. This is that decay for any fish not in
+ * `active` mode; the velocity-matching impulse above then brakes the body
+ * to match as the decayed target chases toward zero, cooperating with
+ * `linearDamping` rather than leaving the body's own momentum to bleed off
+ * unassisted. */
+const NON_ACTIVE_VELOCITY_DECAY_RATE = 4;
 
 interface SteeringSystemProps {
   children: ReactNode;
@@ -106,18 +133,32 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       const body = fish.getBody();
       if (!body) continue;
 
+      if (fish.getMode() !== 'active') {
+        fish.vehicle.velocity.multiplyScalar(Math.exp(-NON_ACTIVE_VELOCITY_DECAY_RATE * delta));
+      }
+
       scratchVelocity.set(
         fish.vehicle.velocity.x,
         fish.vehicle.velocity.y,
         fish.vehicle.velocity.z,
       );
-      if (scratchVelocity.lengthSq() < MIN_VELOCITY_SQ) continue;
 
-      scratchImpulse.copy(scratchVelocity).multiplyScalar(IMPULSE_SCALE);
-      body.applyImpulse(scratchImpulse, true);
+      if (scratchVelocity.lengthSq() >= MIN_VELOCITY_SQ) {
+        const lv = body.linvel();
+        scratchLinvel.set(lv.x, lv.y, lv.z);
+        scratchImpulse
+          .copy(scratchVelocity)
+          .sub(scratchLinvel)
+          .multiplyScalar(VELOCITY_GAIN * delta);
+        body.applyImpulse(scratchImpulse, true);
 
-      scratchHeading.setFromUnitVectors(scratchForward, scratchVelocity.clone().normalize());
-      body.setRotation(scratchHeading, true);
+        const target = computeTargetHeading(scratchVelocity);
+        if (target) fish.targetHeading.copy(target);
+      }
+
+      const slerpFactor = 1 - Math.exp(-HEADING_SLERP_RATE * delta);
+      fish.currentHeading.slerp(fish.targetHeading, slerpFactor);
+      body.setRotation(fish.currentHeading, true);
     }
   });
 

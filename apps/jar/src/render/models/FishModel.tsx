@@ -18,6 +18,8 @@ import type * as YUKA from 'yuka';
 
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { lifeStageScale } from '../../domain/simConstants';
+import type { FishMotionMode } from '../steering/motionState';
+import { animationMulFor, maxSpeedFor } from '../steering/steeringParams';
 import {
   BODY_DEPTH,
   createBodyGeometry,
@@ -39,6 +41,12 @@ interface FishModelProps {
    * critter's memorial preview (`CritterPreview.tsx`), where a stopped fish
    * reads as "this is a picture of them," not "they're still swimming." */
   still?: boolean;
+  /** The fish's current steering mode (`Fish.tsx`), read imperatively each
+   * frame rather than as a reactive prop — mode changes shouldn't force a
+   * re-render, only change what the existing `useFrame` loop does. Absent
+   * for the standalone critter-card preview (`CritterPreview.tsx`), which
+   * has no steering mode of its own — treated as always `'active'` there. */
+  getMode?: () => FishMotionMode;
 }
 
 /** Eye and spot positions are plain sphere primitives, not extruded SVG
@@ -55,8 +63,38 @@ const SPOTS: Array<{ x: number; y: number; r: number }> = [
   { x: 45, y: -8, r: 4 },
 ];
 
-const TAIL_FREQUENCY_BASE = 4;
-const TAIL_FREQUENCY_SPEED = 2;
+/** Below this speed (fraction of the fish's own `maxSpeedFor(energy)`
+ * ceiling — a tired fish still "works hard" near its own cap, not an
+ * absolute number), the tail-beat blends from a leisurely cruise toward a
+ * quicker, wider "excited" beat — `THREE.MathUtils.smoothstep` between the
+ * two, not a hard cutover. */
+const EXCITE_SPEED_NORM_LOW = 0.45;
+const EXCITE_SPEED_NORM_HIGH = 0.7;
+
+/** Real "not swimming" state, not just a quiet moment — speed has to stay
+ * below `REST_ENTER_SPEED` for a full `REST_ENTER_DWELL_SEC` before rest
+ * kicks in (no per-frame flicker at the boundary), and has to climb back
+ * past the higher `REST_EXIT_SPEED` (not just re-cross the same line) to
+ * leave it — both well below cruise speed. `paused`/`settled` modes
+ * (`Fish.tsx`) force rest immediately, no dwell needed. */
+const REST_ENTER_SPEED = 0.05;
+const REST_EXIT_SPEED = 0.12;
+const REST_ENTER_DWELL_SEC = 0.5;
+/** How quickly the tail's amplitude/frequency actually ramp toward their
+ * rest-vs-active target once the rest *state* above has changed — never an
+ * instant cut, "a fully motionless fish is the fastest way to break the
+ * illusion" (§6.6). */
+const REST_BLEND_TIME_CONSTANT_SEC = 0.4;
+const REST_TAIL_FREQUENCY = 1.5;
+const REST_TAIL_AMPLITUDE = 0.02;
+/** A resting fish still occasionally adjusts itself — a brief burst back up
+ * near cruise amplitude, immediately left to decay back toward the rest
+ * target by the same per-frame blend above, so it reads as "the fish just
+ * flicked its tail," not a state-machine glitch. */
+const MICRO_FLICK_AMPLITUDE = 0.12;
+const MICRO_FLICK_MIN_INTERVAL_SEC = 4;
+const MICRO_FLICK_MAX_INTERVAL_SEC = 4;
+
 const VEIL_BEND_AMPLITUDE = 0.5;
 const VEIL_PHASE_LAG = 1.1; // matches docs/architecture/3d-engine.md §6.6's per-segment stagger constant
 const PECTORAL_FLUTTER_AMPLITUDE = 0.18;
@@ -65,7 +103,7 @@ const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside a hand-picked ~20–25° sw
 const BODY_BANK_AMPLITUDE = 0.05;
 const BODY_BOB_AMPLITUDE = 0.02;
 
-export function FishModel({ critter, vehicle, still = false }: FishModelProps) {
+export function FishModel({ critter, vehicle, still = false, getMode }: FishModelProps) {
   const rootRef = useRef<THREE.Group>(null);
   const tailPivotRef = useRef<THREE.Group>(null);
   const pectoralPivotRef = useRef<THREE.Group>(null);
@@ -76,6 +114,14 @@ export function FishModel({ critter, vehicle, still = false }: FishModelProps) {
   // in perfect unison whenever they share a speed (§6.6).
   const phaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
   const prevDirection = useRef(new THREE.Vector3(0, 0, 1));
+
+  // Idle/rest state — see the constants above for the hysteresis and blend
+  // timing this drives.
+  const isRestingRef = useRef(false);
+  const belowRestEnterSinceRef = useRef<number | null>(null);
+  const workingFrequencyRef = useRef(REST_TAIL_FREQUENCY);
+  const workingAmplitudeRef = useRef(REST_TAIL_AMPLITUDE);
+  const nextMicroFlickRef = useRef<number | null>(null);
 
   const isMale = critter.sex === 'Male';
   const scale = lifeStageScale(critter.age_sec) * SVG_SCALE;
@@ -200,8 +246,77 @@ export function FishModel({ critter, vehicle, still = false }: FishModelProps) {
     prevDirection.current.copy(direction);
 
     const t = state.clock.elapsedTime;
-    const frequency = TAIL_FREQUENCY_BASE + speed * TAIL_FREQUENCY_SPEED;
-    const amplitude = speed < 0.05 ? 0.08 : 0.15 + Math.min(turnRate, 3) * 0.3;
+    const mode = getMode ? getMode() : 'active';
+
+    // Rest-state hysteresis: `paused`/`settled` force it immediately;
+    // otherwise a real, sustained lull in speed (not a single quiet frame)
+    // earns it, and only a clearly-faster speed (not just crossing back
+    // over the same line) earns the way out.
+    if (mode === 'paused' || mode === 'settled') {
+      isRestingRef.current = true;
+      belowRestEnterSinceRef.current = null;
+    } else if (isRestingRef.current) {
+      if (speed > REST_EXIT_SPEED) {
+        isRestingRef.current = false;
+        belowRestEnterSinceRef.current = null;
+      }
+    } else if (speed < REST_ENTER_SPEED) {
+      if (belowRestEnterSinceRef.current === null) belowRestEnterSinceRef.current = t;
+      else if (t - belowRestEnterSinceRef.current >= REST_ENTER_DWELL_SEC) {
+        isRestingRef.current = true;
+      }
+    } else {
+      belowRestEnterSinceRef.current = null;
+    }
+
+    // Speed-tiered intensity, normalized by *this fish's own* speed ceiling
+    // rather than an absolute number — a tired fish at its (lower) cap
+    // still visibly "works hard," which is what makes cruise vs excited
+    // read as distinct characters rather than one continuous dial.
+    const speedNorm = THREE.MathUtils.clamp(speed / maxSpeedFor(critter.energy), 0, 1);
+    const excite = THREE.MathUtils.smoothstep(
+      speedNorm,
+      EXCITE_SPEED_NORM_LOW,
+      EXCITE_SPEED_NORM_HIGH,
+    );
+    const { freqMul, ampMul } = animationMulFor(critter.personality, critter.mood);
+    const activeFrequency =
+      THREE.MathUtils.lerp(2.5 + 2.5 * speedNorm, 6 + 4 * speedNorm, excite) * freqMul;
+    const activeAmplitude =
+      (THREE.MathUtils.lerp(0.1, 0.22, excite) + Math.min(turnRate, 3) * 0.25) * ampMul;
+
+    // Micro-flick while resting: an instant bump back toward cruise
+    // amplitude that the blend below immediately starts decaying again —
+    // reads as "the fish just adjusted itself," not a freeze-frame.
+    if (isRestingRef.current) {
+      if (nextMicroFlickRef.current === null) {
+        nextMicroFlickRef.current =
+          t + MICRO_FLICK_MIN_INTERVAL_SEC + Math.random() * MICRO_FLICK_MAX_INTERVAL_SEC;
+      } else if (t >= nextMicroFlickRef.current) {
+        workingAmplitudeRef.current = MICRO_FLICK_AMPLITUDE;
+        nextMicroFlickRef.current =
+          t + MICRO_FLICK_MIN_INTERVAL_SEC + Math.random() * MICRO_FLICK_MAX_INTERVAL_SEC;
+      }
+    } else {
+      nextMicroFlickRef.current = null;
+    }
+
+    const targetFrequency = isRestingRef.current ? REST_TAIL_FREQUENCY : activeFrequency;
+    const targetAmplitude = isRestingRef.current ? REST_TAIL_AMPLITUDE : activeAmplitude;
+    const blend = 1 - Math.exp(-delta / REST_BLEND_TIME_CONSTANT_SEC);
+    workingFrequencyRef.current = THREE.MathUtils.lerp(
+      workingFrequencyRef.current,
+      targetFrequency,
+      blend,
+    );
+    workingAmplitudeRef.current = THREE.MathUtils.lerp(
+      workingAmplitudeRef.current,
+      targetAmplitude,
+      blend,
+    );
+
+    const frequency = workingFrequencyRef.current;
+    const amplitude = workingAmplitudeRef.current;
     const phase = t * frequency + phaseSeed;
 
     if (tailPivotRef.current) {

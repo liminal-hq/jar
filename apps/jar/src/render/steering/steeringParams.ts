@@ -9,9 +9,20 @@
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
 
-export const BASE_WANDER_RADIUS = 1.2;
+// Wander circle sized relative to the tank's own 6x4x3 world-unit volume
+// (`coordinates.ts`) — 0.8 keeps the widest single-update turn (with
+// `WANDER_DISTANCE`, `useFishSteering.ts`) to roughly `atan(0.8/1.6) ≈ 27°`,
+// a meander rather than a beeline. This used to be 1.2 with Yuka's own
+// unset `wander.distance` defaulting to 5 (bigger than the tank itself) —
+// the dominant cause of "wild" swimming; see `useFishSteering.ts`'s own
+// comment on `WANDER_DISTANCE` for the other half of that fix.
+export const BASE_WANDER_RADIUS = 0.8;
 export const BASE_SEPARATION_RADIUS = 0.8;
 export const BASE_WANDER_JITTER = 0.6;
+/** Every personality gets some chance of a brief pause between wander
+ * cycles, not just Sleepy — otherwise the idle/rest animation state
+ * (`FishModel.tsx`) would only ever show up at night. */
+export const BASE_PAUSE_CHANCE = 0.08;
 
 export interface SteeringParams {
   wanderRadius: number;
@@ -22,6 +33,17 @@ export interface SteeringParams {
   pauseChance: number;
 }
 
+const BASE_MAX_SPEED = 1.0;
+const ENERGY_MAX_SPEED_BONUS = 1.0;
+
+/** A fish's speed ceiling, low-energy fish topping out slower — moved here
+ * (not just local to `useFishSteering.ts`) so `FishModel.tsx` can normalize
+ * its own animation intensity against the same ceiling a tired fish is
+ * actually capped at, not an absolute speed. */
+export function maxSpeedFor(energyPercent: number): number {
+  return BASE_MAX_SPEED + (energyPercent / 100) * ENERGY_MAX_SPEED_BONUS;
+}
+
 export function steeringParamsFor(
   personality: Personality,
   livingPopulation: number,
@@ -30,7 +52,7 @@ export function steeringParamsFor(
     wanderRadius: BASE_WANDER_RADIUS,
     separationRadius: BASE_SEPARATION_RADIUS,
     wanderJitter: BASE_WANDER_JITTER,
-    pauseChance: 0,
+    pauseChance: BASE_PAUSE_CHANCE,
   };
 
   switch (personality) {
@@ -57,4 +79,48 @@ export function steeringParamsFor(
   }
 
   return params;
+}
+
+export interface AnimationMultipliers {
+  /** Tail-beat/flutter frequency multiplier. */
+  freqMul: number;
+  /** Tail-beat/flutter amplitude multiplier. */
+  ampMul: number;
+}
+
+const LOW_MOOD_THRESHOLD = 33;
+const HIGH_MOOD_THRESHOLD = 85;
+
+/** Small, tasteful per-personality/mood nudges on top of `FishModel.tsx`'s
+ * speed-tiered animation intensity — same per-personality table style as
+ * `steeringParamsFor` above, kept as a plain pure function (personality +
+ * mood in, multipliers out) so it's trivial to unit test on its own. */
+export function animationMulFor(personality: Personality, mood: number): AnimationMultipliers {
+  let freqMul = 1;
+  let ampMul = 1;
+
+  switch (personality) {
+    case 'Dramatic':
+      ampMul *= 1.25;
+      break;
+    case 'Sleepy':
+      freqMul *= 0.8;
+      break;
+    case 'Bold':
+      freqMul *= 1.1;
+      break;
+    case 'Shy':
+    case 'Curious':
+    case 'Greedy':
+      break;
+  }
+
+  if (mood < LOW_MOOD_THRESHOLD) {
+    freqMul *= 0.85;
+    ampMul *= 0.85;
+  } else if (mood > HIGH_MOOD_THRESHOLD) {
+    ampMul *= 1.1;
+  }
+
+  return { freqMul, ampMul };
 }
