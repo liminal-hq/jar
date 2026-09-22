@@ -2,8 +2,8 @@
 // the tank window's own boundary (`components/MouseDebugCapture.tsx`) and
 // live fish RigidBody positions (`render/steering/SteeringSystem.tsx`) are
 // both captured *in the tank window*, but displayed in a separate
-// `dev-debug` window (`windows/DevDebug/DevDebugWindow.tsx`) rather than an
-// in-tank overlay — a window this small can't afford to have its own
+// `dev-settings` window (`windows/DevSettings/DevSettingsWindow.tsx`) rather
+// than an in-tank overlay — a window this small can't afford to have its own
 // content covered by the very debug text meant to help diagnose it. Plain
 // Tauri app events, the same mechanism `domain/selection.ts` uses for its
 // own cross-window signal — each window is its own JS realm

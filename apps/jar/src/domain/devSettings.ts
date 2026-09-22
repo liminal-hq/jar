@@ -39,11 +39,10 @@ export function useMouseOverlayEnabled(): boolean {
 }
 
 /** Live per-fish world-coordinate readout (`SteeringSystem.tsx`'s
- * `useFrame` publishes into `render/steering/fishPositionDebug.ts` only
- * while this is on, so it costs nothing the rest of the time) — grew out of
- * repeatedly hand-patching that exact instrumentation back in mid-session
- * to chase "fish swam through the glass" reports; worth keeping on hand
- * for the next one instead of re-adding it from scratch each time. */
+ * `useFrame` publishes into `domain/debugChannel.ts` only while this is on,
+ * so it costs nothing the rest of the time) — useful for chasing "fish swam
+ * through the glass" reports without re-adding ad hoc instrumentation each
+ * time. */
 export function isFishPositionOverlayEnabled(): boolean {
   return localStorage.getItem(FISH_POSITION_OVERLAY_KEY) === 'true';
 }

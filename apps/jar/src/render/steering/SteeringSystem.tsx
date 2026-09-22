@@ -54,11 +54,10 @@ const IMPULSE_SCALE = 0.03;
 const MIN_VELOCITY_SQ = 0.0001;
 
 /** The fish-position debug publish goes over a cross-window Tauri event
- * (`domain/debugChannel.ts` — the Dev settings window that displays it is
- * a separate JS realm), unlike the in-process pub/sub this used before
- * moving the display out of an in-tank overlay — worth throttling well
- * below the render frame rate so it doesn't add a 60Hz IPC cost for a
- * dev-only readout nobody needs updated that often. */
+ * (`domain/debugChannel.ts` — the Dev settings window that displays it is a
+ * separate JS realm), so it's worth throttling well below the render frame
+ * rate: a 60Hz IPC cost for a dev-only readout nobody needs updated that
+ * often isn't worth paying. */
 const POSITION_PUBLISH_INTERVAL_MS = 200;
 
 interface SteeringSystemProps {
