@@ -76,29 +76,78 @@ function Flag({ position }: { position: [number, number, number] }) {
 
 const LAMP_HOUSING_COLOUR = '#4a3f45';
 const LAMP_BULB_COLOUR = '#fff4d6';
+const LAMP_BARREL_LENGTH = 0.14;
 
-/** A small ground-level uplighting fixture — a dark dome housing with a
- * warm, glowing "bulb" cap (an emissive material, so it reads as lit even
- * from angles the actual spotlight cone doesn't reach) — sitting on the
- * sand just off to the side of the door, shining up the wall above it. Not
- * a light source itself; `CastleSpotlight` below is the real light,
- * positioned to originate from here. */
-function LightProp({ position }: { position: [number, number, number] }) {
+const UP = new THREE.Vector3(0, 1, 0);
+
+/** A fixture's aim, computed from two fixed points — the barrel's own
+ * quaternion (rotating its local +Y, the axis it's modelled along, to
+ * point along `position → target`) and the lens tip's world offset (so
+ * the actual light source can originate from the open end of the barrel,
+ * not its buried base). Pure geometry, no runtime lookAt: both points are
+ * static layout constants, so this only ever needs to run once per
+ * fixture. */
+function aimFixture(
+  position: [number, number, number],
+  target: [number, number, number],
+  barrelLength: number,
+) {
+  const from = new THREE.Vector3(...position);
+  const dir = new THREE.Vector3(...target).sub(from).normalize();
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(UP, dir);
+  const lensPosition = from.clone().addScaledVector(dir, barrelLength);
+  return { quaternion, lensPosition };
+}
+
+/** A small ground-level floodlight fixture — not a lamppost-style bulb,
+ * but a barrel canister on a stake, tilted so its lens end (bright,
+ * emissive) aims up at the wall and its plain back end faces the camera —
+ * the same "housing you see, light you don't stare into" real landscape
+ * spotlights have. The stake itself stays vertical (it's outside the
+ * tilted group) even though the barrel it holds is angled. Not a light
+ * source itself; `GroundUplight` is the real light, mounted at the lens
+ * tip and aimed the same direction. */
+function LightProp({
+  position,
+  quaternion,
+}: {
+  position: [number, number, number];
+  quaternion: THREE.Quaternion;
+}) {
   return (
     <group position={position}>
-      <mesh castShadow receiveShadow raycast={() => null}>
-        <cylinderGeometry args={[0.09, 0.11, 0.06, 12]} />
-        <meshStandardMaterial color={LAMP_HOUSING_COLOUR} roughness={0.6} />
+      <mesh position={[0, -0.04, 0]} castShadow receiveShadow raycast={() => null}>
+        <cylinderGeometry args={[0.02, 0.025, 0.08, 8]} />
+        <meshStandardMaterial color={LAMP_HOUSING_COLOUR} roughness={0.6} metalness={0.3} />
       </mesh>
-      <mesh position={[0, 0.05, 0]} raycast={() => null}>
-        <sphereGeometry args={[0.05, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial
-          color={LAMP_BULB_COLOUR}
-          emissive={LAMP_BULB_COLOUR}
-          emissiveIntensity={1.2}
-          roughness={0.4}
-        />
-      </mesh>
+      <group quaternion={quaternion}>
+        <mesh
+          position={[0, LAMP_BARREL_LENGTH / 2, 0]}
+          castShadow
+          receiveShadow
+          raycast={() => null}
+        >
+          <cylinderGeometry args={[0.045, 0.045, LAMP_BARREL_LENGTH, 12]} />
+          <meshStandardMaterial color={LAMP_HOUSING_COLOUR} roughness={0.5} metalness={0.4} />
+        </mesh>
+        {/* The lens: local +Y, so the barrel's own quaternion (which
+            rotates +Y onto the aim direction) carries it along for free —
+            facing the target, away from the camera. */}
+        <mesh
+          position={[0, LAMP_BARREL_LENGTH, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          raycast={() => null}
+        >
+          <circleGeometry args={[0.046, 16]} />
+          <meshStandardMaterial
+            color={LAMP_BULB_COLOUR}
+            emissive={LAMP_BULB_COLOUR}
+            emissiveIntensity={1.6}
+            roughness={0.3}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -107,14 +156,35 @@ function LightProp({ position }: { position: [number, number, number] }) {
 // rock sits (`decor-svg/sand-top.svg`'s own "near the rock" note), and a
 // first pass here sat close enough to it to read as swallowed by its
 // shadow rather than as its own distinct fixture.
-const LIGHT_PROP_POSITION: [number, number, number] = [-0.55, 0.03, 0.42];
+// z=0.85, not flush against the wall — a lamp planted right at a vertical
+// surface's own base aims almost straight up it, grazing the face at a
+// steep angle a Lambertian surface barely lights (confirmed live: even at
+// absurd intensity, the wall stayed dark while the merlon tops brightened
+// instead, since those top-facing surfaces catch that near-vertical ray
+// far better than the wall's own forward-facing one does). Standing the
+// fixture out from the wall, the way a real landscape uplight actually
+// would be, gives the ray a real forward component into the face it's
+// meant to light, not just an upward one.
+const LIGHT_PROP_POSITION: [number, number, number] = [-0.55, 0.03, 0.85];
+// x=-0.7, not -0.35 — the doorway itself is clear space out to
+// ±CASTLE_DOOR_HALF_WIDTH (0.5), so a target inside that span aims into
+// the opening rather than the wall beside it; -0.7 lands on the actual
+// left wall segment, above the lamp.
+const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 1.4, 0.29];
 
-/** A ground-level uplight, genuinely originating from `LightProp`'s bulb
- * and aimed up the wall — not a light floating in space with no visible
- * source. `target` is a plain `Object3D` rather than a position tuple
- * because `SpotLight`'s own `target` property must be a scene object, not
- * a vector; set imperatively once both light and target refs exist. */
+/** A ground-level flood uplight, genuinely originating from `LightProp`'s
+ * lens and aimed up the wall — not a light floating in space with no
+ * visible source. `target` is a plain `Object3D` rather than a position
+ * tuple because `SpotLight`'s own `target` property must be a scene
+ * object, not a vector; set imperatively once both light and target refs
+ * exist. Wide angle/penumbra and a real intensity bump (a first pass at
+ * 4 barely registered once the tank-wide LED strip's own ambient wash
+ * was in place) — a "flood," not a tight pin-spot. */
 function GroundUplight() {
+  const { quaternion, lensPosition } = useMemo(
+    () => aimFixture(LIGHT_PROP_POSITION, LIGHT_PROP_TARGET, LAMP_BARREL_LENGTH),
+    [],
+  );
   const lightRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
   useEffect(() => {
@@ -124,23 +194,25 @@ function GroundUplight() {
   }, []);
   return (
     <>
-      <LightProp position={LIGHT_PROP_POSITION} />
+      <LightProp position={LIGHT_PROP_POSITION} quaternion={quaternion} />
+      {/* No castShadow: this light's own source sits essentially at the
+          surface of `LightProp`'s barrel mesh (deliberately, for the
+          "light genuinely comes from the lens" effect) — with shadows on,
+          that mesh immediately self-shadows its own light out almost
+          entirely, which is why an earlier pass here read as having no
+          effect on the wall even at absurd intensities. This fixture is a
+          small accent, not a primary shadow-casting light — the scene's
+          directionalLight already owns real shadows (§8.1's own note). */}
       <spotLight
         ref={lightRef}
-        position={[LIGHT_PROP_POSITION[0], LIGHT_PROP_POSITION[1] + 0.08, LIGHT_PROP_POSITION[2]]}
+        position={[lensPosition.x, lensPosition.y, lensPosition.z]}
         color="#ffe9bd"
-        intensity={4}
-        angle={0.5}
-        penumbra={0.4}
+        intensity={9}
+        angle={0.7}
+        penumbra={0.5}
         distance={3}
-        castShadow
-        shadow-mapSize={[512, 512]}
       />
-      {/* x=-0.7, not -0.35 — the doorway itself is clear space out to
-          ±CASTLE_DOOR_HALF_WIDTH (0.5), so a target inside that span aims
-          into the opening rather than the wall beside it; -0.7 lands on
-          the actual left wall segment, above the lamp. */}
-      <object3D ref={targetRef} position={[-0.7, 1.4, 0.29]} />
+      <object3D ref={targetRef} position={LIGHT_PROP_TARGET} />
     </>
   );
 }
