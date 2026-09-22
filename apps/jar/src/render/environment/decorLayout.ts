@@ -33,8 +33,14 @@ export const CASTLE_KEEP_HEIGHT = 1.7;
 
 /** The doorway's own clear opening — a real cut-through hole
  * (`castle.svg`), sized to comfortably clear most fish (the biggest, a
- * male Veil, occasionally brushes the frame; see this file's header). */
-export const CASTLE_DOOR_HALF_WIDTH = 0.5;
+ * male Veil, occasionally brushes the frame; see this file's header). A
+ * Codex review round on this feature's PR caught that this was actually
+ * only clearing 1 of the 6 fin/sex adult-collider combinations at its
+ * original 0.5 (`Fish.tsx`'s `colliderRadiusFor` diameters run
+ * 0.91-1.45) — 0.65 clears 5 of 6 (only a male Veil, the single biggest
+ * combination at 1.45, still occasionally brushes), matching what this
+ * comment already claimed rather than actually delivering it. */
+export const CASTLE_DOOR_HALF_WIDTH = 0.65;
 export const CASTLE_DOOR_HEIGHT = 1.15;
 
 /** Tower half-size and how far each sits from the keep's own centre —

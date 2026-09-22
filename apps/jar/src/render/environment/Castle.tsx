@@ -166,19 +166,23 @@ function LightProp({
 // fixture out from the wall, the way a real landscape uplight actually
 // would be, gives the ray a real forward component into the face it's
 // meant to light, not just an upward one.
-const LIGHT_PROP_POSITION: [number, number, number] = [-0.55, 0.03, 0.85];
-// x=-0.7, not -0.35 — the doorway itself is clear space out to
-// ±CASTLE_DOOR_HALF_WIDTH (0.5), so a target inside that span aims into
-// the opening rather than the wall beside it; -0.7 lands on the actual
-// left wall segment, above the lamp. y=0.75, not up near the crown
-// (1.4) — a target that high put the brightest part of the cone right
-// at the merlon/crown edge, and what read as "the wall lighting up" in
-// screenshots turned out to be a specular glint off the nearby round
-// window/arrow-slit props (roughness 0.4, glossy enough to catch a
-// highlight from a weak light that barely dents a diffuse flat
-// surface), not real diffuse light on the wall itself. 0.75 sits in a
-// plain flat stretch of wall with no round prop nearby to fake it.
-const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 0.75, 0.29];
+// x=-0.85, not -0.55 — same door-widened reasoning as `ArrowSlit`'s own
+// comment below: the door now spans ±0.65, so -0.55 would plant the lamp
+// inside the opening instead of on the sand beside it.
+const LIGHT_PROP_POSITION: [number, number, number] = [-0.85, 0.03, 0.85];
+// x=-0.925, not -0.35 — the doorway itself is clear space out to
+// ±CASTLE_DOOR_HALF_WIDTH (0.65), so a target inside that span aims into
+// the opening rather than the wall beside it; -0.925 lands at the centre
+// of the actual left wall segment (which spans -1.2 to -0.65), above the
+// lamp. y=0.75, not up near the crown (1.4) — a target that high put the
+// brightest part of the cone right at the merlon/crown edge, and what
+// read as "the wall lighting up" in screenshots turned out to be a
+// specular glint off the nearby round window/arrow-slit props (roughness
+// 0.4, glossy enough to catch a highlight from a weak light that barely
+// dents a diffuse flat surface), not real diffuse light on the wall
+// itself. 0.75 sits in a plain flat stretch of wall with no round prop
+// nearby to fake it.
+const LIGHT_PROP_TARGET: [number, number, number] = [-0.925, 0.75, 0.29];
 
 // Intensity at `light_intensity`'s default 100% — the value tuning
 // converged on before that setting existed. Setup's slider scales this,
@@ -300,8 +304,14 @@ export function Castle() {
         />
       </group>
       <Window position={[0, 1.4, 0.29]} radius={0.09} />
-      <ArrowSlit position={[-0.55, 1.0, 0.29]} />
-      <ArrowSlit position={[0.55, 1.0, 0.29]} />
+      {/* x=±0.9, not ±0.55 — the door widened (`decorLayout.ts`'s own
+          `CASTLE_DOOR_HALF_WIDTH` comment) after a Codex review round
+          caught it not actually clearing most fish colliders; ±0.55
+          would now sit inside the door opening instead of on the solid
+          wall beside it. ±0.9 lands near the centre of each wall
+          segment, which now spans ±0.65 to ±1.2. */}
+      <ArrowSlit position={[-0.9, 1.0, 0.29]} />
+      <ArrowSlit position={[0.9, 1.0, 0.29]} />
       <Flag position={[0, 2.0, 0]} />
       <GroundUplight />
       <Tower x={-CASTLE_TOWER_OFFSET} />
