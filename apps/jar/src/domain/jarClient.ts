@@ -219,7 +219,7 @@ function firstRunSettings(): JarSettings {
  * longer tracks, with nothing left to weld it back inside the tank if it
  * ever drifts out. This interval is the periodic reconciliation that makes
  * a single dropped event self-heal within one cycle instead of silently. */
-const RECONCILE_INTERVAL_MS = 5000;
+export const RECONCILE_INTERVAL_MS = 5000;
 
 let startPromise: Promise<void> | null = null;
 
@@ -234,17 +234,36 @@ export function ensureJarClientStarted(settings: JarSettings = firstRunSettings(
 async function doStart(settings: JarSettings): Promise<void> {
   const isTank = getCurrentWindow().label === TANK_WINDOW_LABEL;
 
+  // Set right before a reconciliation `getSnapshot()` call and checked right
+  // after it resolves — if a `Born`/`Passed`/`Added` event (the ones that
+  // change *which* critters exist, unlike `TickUpdate`'s far more frequent
+  // stat-only updates) lands while that request is in flight, the snapshot
+  // it resolves with is already stale relative to the store: applying it
+  // would roll population state backwards, e.g. a `Passed` event marking a
+  // critter dead, then this reconciler's now-stale response reviving it
+  // with `alive: true` again. Skipping a raced reconciliation is harmless —
+  // the next one fires in `RECONCILE_INTERVAL_MS` against a snapshot that
+  // isn't racing anything.
+  let populationEventDuringResync = false;
+
+  const onEvent = (simEvent: SimEvent) => {
+    if (simEvent.type === 'Born' || simEvent.type === 'Passed' || simEvent.type === 'Added') {
+      populationEventDuringResync = true;
+    }
+    handleEvent(simEvent);
+  };
+
   if (isTank) {
     await pluginApi.start(settings, (event) => {
       const simEvent = event as SimEvent;
-      handleEvent(simEvent);
+      onEvent(simEvent);
       // Rebroadcast so non-tank windows stay in sync without each holding
       // their own `Channel` (the plugin only keeps one — see this file's
       // header).
       void emit(JAR_REBROADCAST_EVENT, simEvent);
     });
   } else {
-    await listen<SimEvent>(JAR_REBROADCAST_EVENT, (e) => handleEvent(e.payload));
+    await listen<SimEvent>(JAR_REBROADCAST_EVENT, (e) => onEvent(e.payload));
   }
 
   const snapshot = (await pluginApi.getSnapshot()) as {
@@ -257,11 +276,13 @@ async function doStart(settings: JarSettings): Promise<void> {
 
   setInterval(() => {
     void (async () => {
+      populationEventDuringResync = false;
       const resync = (await pluginApi.getSnapshot()) as {
         critters: Critter[];
         settings: JarSettings;
         sim_seconds: number;
       };
+      if (populationEventDuringResync) return;
       useJarStore.getState().hydrate(resync);
     })();
   }, RECONCILE_INTERVAL_MS);

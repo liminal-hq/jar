@@ -35,7 +35,8 @@ vi.mock('tauri-plugin-jar-api', () => ({
 
 import defaultSettingsFixture from './protocol/generated/defaultSettings.json';
 import type { Critter } from './protocol/generated/Critter';
-import { DEFAULT_SETTINGS, useJarStore } from './jarClient';
+import type { SimEvent } from './protocol/generated/SimEvent';
+import { DEFAULT_SETTINGS, RECONCILE_INTERVAL_MS, useJarStore } from './jarClient';
 
 function makeCritter(overrides: Partial<Critter> = {}): Critter {
   return {
@@ -286,5 +287,54 @@ describe('ensureJarClientStarted — first-run theme (SPEC.md §4)', () => {
       expect.any(Function),
     );
     vi.unstubAllGlobals();
+  });
+});
+
+describe('ensureJarClientStarted — reconciliation race guard', () => {
+  it('discards a resync response that resolves after a Passed event it raced', async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+
+    const pluginApi = await import('tauri-plugin-jar-api');
+    const critter = makeCritter({ id: 3, alive: true });
+    const initialSnapshot = { critters: [critter], settings: DEFAULT_SETTINGS, sim_seconds: 0 };
+
+    // The callback `doStart` registers with `pluginApi.start` — capturing it
+    // lets the test fire a `SimEvent` the same way the real `Channel` would.
+    let capturedOnEvent: ((event: SimEvent) => void) | undefined;
+    vi.mocked(pluginApi.start).mockImplementation(async (_settings, onEvent) => {
+      capturedOnEvent = onEvent as (event: SimEvent) => void;
+    });
+
+    // First getSnapshot() is the initial hydrate; the second is the
+    // reconciliation interval's — held unresolved so the test can inject a
+    // `Passed` event while it's still in flight.
+    let resolveResync: ((value: typeof initialSnapshot) => void) | undefined;
+    vi.mocked(pluginApi.getSnapshot)
+      .mockResolvedValueOnce(initialSnapshot)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveResync = resolve;
+          }),
+      );
+
+    const freshModule = await import('./jarClient');
+    await freshModule.ensureJarClientStarted();
+    expect(freshModule.useJarStore.getState().critters[3]?.alive).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(RECONCILE_INTERVAL_MS);
+
+    capturedOnEvent?.({ type: 'Passed', id: 3 });
+    expect(freshModule.useJarStore.getState().critters[3]?.alive).toBe(false);
+
+    // The stale snapshot — captured before the death — resolves now. It
+    // must not roll the critter back to alive.
+    resolveResync?.(initialSnapshot);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(freshModule.useJarStore.getState().critters[3]?.alive).toBe(false);
+
+    vi.useRealTimers();
   });
 });
