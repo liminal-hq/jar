@@ -67,6 +67,7 @@ export const DEFAULT_SETTINGS: JarSettings = {
   },
   light_on: true,
   light_colour: 'Daylight',
+  light_intensity: 100,
   ambient_particles_on: true,
   sound_on: false,
   simulation_speed: 1,
@@ -253,4 +254,5 @@ export const jar = {
   setTheme: (theme: DialogTheme, variant: string) => pluginApi.setTheme(theme, variant),
   setFrame: (frame: TankFrame) => pluginApi.setFrame(frame),
   setLightColour: (colour: LightColour) => pluginApi.setLightColour(colour),
+  setLightIntensity: (intensity: number) => pluginApi.setLightIntensity(intensity),
 };

@@ -17,6 +17,7 @@ const COMMANDS: &[&str] = &[
     "set_theme",
     "set_frame",
     "set_light_colour",
+    "set_light_intensity",
     "get_snapshot",
     "load_snapshot",
 ];

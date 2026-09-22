@@ -14,6 +14,7 @@ Default permissions for the jar simulation plugin. Grants every command the app 
 - `allow-set-theme`
 - `allow-set-frame`
 - `allow-set-light-colour`
+- `allow-set-light-intensity`
 - `allow-get-snapshot`
 - `allow-load-snapshot`
 
@@ -178,6 +179,32 @@ Enables the set_light_colour command without any pre-configured scope.
 <td>
 
 Denies the set_light_colour command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:allow-set-light-intensity`
+
+</td>
+<td>
+
+Enables the set_light_intensity command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-set-light-intensity`
+
+</td>
+<td>
+
+Denies the set_light_intensity command without any pre-configured scope.
 
 </td>
 </tr>

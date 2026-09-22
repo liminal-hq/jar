@@ -16,6 +16,7 @@ import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
+import { useJarStore } from '../../domain/jarClient';
 import { CASTLE_GEOMETRY, DECOR_SVG_SCALE } from './decorGeometry';
 import { CASTLE_COLLIDER_BOXES, CASTLE_POSITION, CASTLE_TOWER_OFFSET } from './decorLayout';
 
@@ -179,6 +180,11 @@ const LIGHT_PROP_POSITION: [number, number, number] = [-0.55, 0.03, 0.85];
 // plain flat stretch of wall with no round prop nearby to fake it.
 const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 0.75, 0.29];
 
+// Intensity at `light_intensity`'s default 100% — the value tuning
+// converged on before that setting existed. Setup's slider scales this,
+// not an absolute unit.
+const GROUND_UPLIGHT_BASE_INTENSITY = 25;
+
 /** A ground-level flood uplight, genuinely originating from `LightProp`'s
  * lens and aimed up the wall — not a light floating in space with no
  * visible source. `target` is a plain `Object3D` rather than a position
@@ -195,6 +201,11 @@ const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 0.75, 0.29];
  * sharing that same function stayed dark, despite both catching the same
  * light. See `extrude()`'s own doc comment for the actual fix. */
 function GroundUplight() {
+  // Setup's own intensity slider (JarSettings.light_intensity, a 0-200%
+  // scale) — a separate knob from the tank-wide LED strip's light_on/
+  // light_colour, since this fixture is always on regardless of that
+  // toggle.
+  const intensityPercent = useJarStore((s) => s.settings.light_intensity);
   // Not memoized: `aimFixture` is a handful of vector ops on module-level
   // constants, called once per render of a component that itself only
   // renders once — too cheap to be worth `useMemo`, and memoizing it with
@@ -231,7 +242,7 @@ function GroundUplight() {
         ref={lightRef}
         position={[lensPosition.x, lensPosition.y, lensPosition.z]}
         color="#ffe9bd"
-        intensity={25}
+        intensity={GROUND_UPLIGHT_BASE_INTENSITY * (intensityPercent / 100)}
         angle={0.7}
         penumbra={0.5}
         distance={3}

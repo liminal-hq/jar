@@ -13,7 +13,15 @@ export type JarSettings = { mode: Species, frame: TankFrame, dialog_theme: Dialo
  * Switching `dialog_theme` never touches this map; only an explicit
  * variant pick (or the initial default below) writes to it.
  */
-theme_variants: { [key in DialogTheme]?: string }, light_on: boolean, light_colour: LightColour, ambient_particles_on: boolean, sound_on: boolean, 
+theme_variants: { [key in DialogTheme]?: string }, light_on: boolean, light_colour: LightColour, 
+/**
+ * Percentage scale (0-200, 100 = the fixture's own designed default)
+ * applied to the castle's ground-level uplight (`Castle.tsx`'s
+ * `GroundUplight`) — a separate knob from `light_on`/`light_colour`,
+ * which drive the tank-wide LED strip; this one only tunes the
+ * castle's own always-on accent light.
+ */
+light_intensity: number, ambient_particles_on: boolean, sound_on: boolean, 
 /**
  * 1-60, Real time = 1 (SPEC.md §5).
  */

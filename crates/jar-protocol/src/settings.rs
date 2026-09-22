@@ -69,6 +69,12 @@ pub struct JarSettings {
     pub theme_variants: BTreeMap<DialogTheme, String>,
     pub light_on: bool,
     pub light_colour: LightColour,
+    /// Percentage scale (0-200, 100 = the fixture's own designed default)
+    /// applied to the castle's ground-level uplight (`Castle.tsx`'s
+    /// `GroundUplight`) — a separate knob from `light_on`/`light_colour`,
+    /// which drive the tank-wide LED strip; this one only tunes the
+    /// castle's own always-on accent light.
+    pub light_intensity: u8,
     pub ambient_particles_on: bool, // "Bubbles" (aquarium) / "Mist" (terrarium)
     pub sound_on: bool,
     /// 1-60, Real time = 1 (SPEC.md §5).
@@ -134,6 +140,7 @@ impl Default for JarSettings {
             theme_variants: default_theme_variants(),
             light_on: true,
             light_colour: LightColour::Daylight,
+            light_intensity: 100,
             ambient_particles_on: true,
             sound_on: false,
             simulation_speed: 1,
@@ -159,6 +166,7 @@ mod tests {
         assert_eq!(settings.theme_variants.len(), 6);
         assert!(settings.light_on);
         assert_eq!(settings.light_colour, LightColour::Daylight);
+        assert_eq!(settings.light_intensity, 100);
         assert!(settings.ambient_particles_on);
         assert!(!settings.sound_on);
         assert_eq!(settings.simulation_speed, 1);

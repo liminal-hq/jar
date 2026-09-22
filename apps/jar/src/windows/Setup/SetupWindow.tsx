@@ -185,6 +185,20 @@ export function SetupWindow() {
           </div>
         )}
         <label>
+          Castle light: {settings.light_intensity}%
+          {/* Deliberately not gated on settings.light_on — the castle's own
+              ground-level uplight fixture (Castle.tsx's GroundUplight) is
+              always on, independent of the tank-wide LED strip toggle
+              above. */}
+          <input
+            type="range"
+            min={0}
+            max={200}
+            value={settings.light_intensity}
+            onChange={(e) => void jar.setLightIntensity(Number(e.target.value))}
+          />
+        </label>
+        <label>
           <input
             type="checkbox"
             checked={settings.ambient_particles_on}

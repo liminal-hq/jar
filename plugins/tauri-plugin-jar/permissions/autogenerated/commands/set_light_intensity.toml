@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-light-intensity"
+description = "Enables the set_light_intensity command without any pre-configured scope."
+commands.allow = ["set_light_intensity"]
+
+[[permission]]
+identifier = "deny-set-light-intensity"
+description = "Denies the set_light_intensity command without any pre-configured scope."
+commands.deny = ["set_light_intensity"]

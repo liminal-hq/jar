@@ -23,7 +23,7 @@ const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
 /// every time the current snapshot body changes shape.
-const CURRENT_VERSION: u16 = 4;
+const CURRENT_VERSION: u16 = 5;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
@@ -55,6 +55,21 @@ const CURRENT_VERSION: u16 = 4;
 // `Critter` did), so `SettingsV3` below covers both: the frozen shape as it
 // stood through v3, changed here at v4. `migrate_v3` defaults `light_colour`
 // to `LightColour::Daylight` for anything saved before this field existed.
+//
+// v5 (2026-09-22): `JarSettings` gained `light_intensity: u8` (the
+// castle's ground uplight fixture, `Castle.tsx`'s `GroundUplight` —
+// Setup's own "Castle light" slider). Originally landed as an in-place
+// amendment to the still-unreleased v3 shape rather than a real version
+// bump, on the reasoning that nothing had shipped v3 yet — that reasoning
+// broke the moment this dev build's own autosave had already written a
+// real v3 snapshot to disk earlier the same session testing this same PR,
+// which then failed to decode against the changed struct ("Hit the end
+// of buffer, expected more data") the next time the app started. A real
+// version bump is required the instant a shape change might have an
+// on-disk file to contend with, in-flight PR or not. `SettingsV4`/
+// `SnapshotV4` below are now the frozen pre-v5 shape; `migrate_v4`
+// defaults `light_intensity` to `100` (the fixture's own designed
+// default) for anything saved before this field existed.
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -143,8 +158,32 @@ struct SnapshotV3 {
     settings: SettingsV3,
 }
 
+/// The pre-v5 `JarSettings` shape — see the v5 comment above. Not the live
+/// `jar_protocol::JarSettings`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct SettingsV4 {
+    mode: Species,
+    frame: TankFrame,
+    dialog_theme: DialogTheme,
+    theme_variants: BTreeMap<DialogTheme, String>,
+    light_on: bool,
+    light_colour: LightColour,
+    ambient_particles_on: bool,
+    sound_on: bool,
+    simulation_speed: u8,
+    always_on_top: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV4 {
+    critters: Vec<Critter>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: SettingsV4,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV5 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -168,7 +207,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV4 {
+    let body = SnapshotV5 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -264,7 +303,7 @@ fn migrate_v3(v3: SnapshotV3) -> SnapshotV4 {
         critters: v3.critters,
         sim_seconds: v3.sim_seconds,
         speed: v3.speed,
-        settings: JarSettings {
+        settings: SettingsV4 {
             mode: v3.settings.mode,
             frame: v3.settings.frame,
             dialog_theme: v3.settings.dialog_theme,
@@ -279,6 +318,29 @@ fn migrate_v3(v3: SnapshotV3) -> SnapshotV4 {
     }
 }
 
+/// Defaults `light_intensity` to `100` (the fixture's own designed
+/// default) — nothing saved before v5 ever had this field.
+fn migrate_v4(v4: SnapshotV4) -> SnapshotV5 {
+    SnapshotV5 {
+        critters: v4.critters,
+        sim_seconds: v4.sim_seconds,
+        speed: v4.speed,
+        settings: JarSettings {
+            mode: v4.settings.mode,
+            frame: v4.settings.frame,
+            dialog_theme: v4.settings.dialog_theme,
+            theme_variants: v4.settings.theme_variants,
+            light_on: v4.settings.light_on,
+            light_colour: v4.settings.light_colour,
+            light_intensity: 100,
+            ambient_particles_on: v4.settings.ambient_particles_on,
+            sound_on: v4.settings.sound_on,
+            simulation_speed: v4.settings.simulation_speed,
+            always_on_top: v4.settings.always_on_top,
+        },
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
@@ -286,20 +348,24 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
         return Err(SnapshotError::BadMagic);
     }
 
-    let body: SnapshotV4 = match header.version {
+    let body: SnapshotV5 = match header.version {
         1 => {
             let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v3(migrate_v2(migrate_v1(v1)))
+            migrate_v4(migrate_v3(migrate_v2(migrate_v1(v1))))
         }
         2 => {
             let v2: SnapshotV2 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v3(migrate_v2(v2))
+            migrate_v4(migrate_v3(migrate_v2(v2)))
         }
         3 => {
             let v3: SnapshotV3 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v3(v3)
+            migrate_v4(migrate_v3(v3))
         }
-        4 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        4 => {
+            let v4: SnapshotV4 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v4(v4)
+        }
+        5 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
         other => return Err(SnapshotError::UnsupportedVersion(other)),
     };
 
@@ -542,11 +608,49 @@ mod tests {
         let restored = decode(&bytes).unwrap();
 
         assert_eq!(restored.settings.light_colour, LightColour::Daylight);
+        assert_eq!(restored.settings.light_intensity, 100);
         // The rest of v2's settings and the clock carry over too.
         assert_eq!(restored.settings.mode, Species::Gecko);
         assert_eq!(restored.settings.frame, TankFrame::RoundedGlass);
         assert_eq!(restored.settings.simulation_speed, 10);
         assert_eq!(restored.clock.sim_seconds, 7.0);
         assert_eq!(restored.clock.speed, 2);
+    }
+
+    #[test]
+    fn decode_defaults_light_intensity_on_a_v4_snapshot_that_never_had_one() {
+        let v4 = SnapshotV4 {
+            critters: Vec::new(),
+            sim_seconds: 3.0,
+            speed: 4,
+            settings: SettingsV4 {
+                mode: Species::Fish,
+                frame: TankFrame::NeonCrt,
+                dialog_theme: DialogTheme::HandheldLcd,
+                theme_variants: default_theme_variants(),
+                light_on: true,
+                light_colour: LightColour::Reef, // a real prior pick, not the default
+                ambient_particles_on: true,
+                sound_on: false,
+                simulation_speed: 20,
+                always_on_top: false,
+            },
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 4,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v4).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        assert_eq!(restored.settings.light_intensity, 100);
+        // v4's own real light_colour pick survives, not just the new field's default.
+        assert_eq!(restored.settings.light_colour, LightColour::Reef);
+        assert_eq!(restored.settings.frame, TankFrame::NeonCrt);
+        assert_eq!(restored.settings.simulation_speed, 20);
+        assert_eq!(restored.clock.sim_seconds, 3.0);
+        assert_eq!(restored.clock.speed, 4);
     }
 }
