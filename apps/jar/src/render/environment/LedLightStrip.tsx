@@ -57,14 +57,23 @@ export function LedLightStrip() {
           roughness={0.4}
         />
       </mesh>
+      {/* Subtle, not a spotlight blast — a real area light only lights
+          surfaces that face it, so at any real intensity it reads as a
+          harsh top-only highlight that blows out whatever passes under it
+          (a first pass at intensity 24 did exactly that, caught live).
+          Water scatters light in every direction a bare area light
+          doesn't model; `hemisphereLight` below stands in for that
+          scatter — a soft, non-directional wash that's what actually
+          reads as "aquarium glow" rather than a stage light. */}
       <rectAreaLight
         position={[0, -HOUSING_HEIGHT / 2 - 0.01, 0]}
         width={STRIP_WIDTH * 0.94}
         height={0.11}
         color="#eaf6ff"
-        intensity={24}
+        intensity={4}
         rotation={[-Math.PI / 2, 0, 0]}
       />
+      <hemisphereLight color="#eaf6ff" groundColor="#8a7860" intensity={0.5} />
     </group>
   );
 }
