@@ -113,16 +113,14 @@ const TAIL_SVG_BY_FIN: Record<'Fan' | 'Forked' | 'Veil', string> = {
   Veil: tailVeilSvg,
 };
 
-/** Every fin type gets its own per-fish geometry clone now — the swim wave
- * deforms all three per-frame per-fish (`swimWave.ts`), unlike the old
- * rigid fan/forked shared geometries. Pre-translated to the tail pivot
- * origin (`extrudeAtHinge`) so the wave and the (removed) old pivot
- * rotation would both have operated in the same hinge-centred local space.
+/** Every fin type gets its own per-fish geometry clone — the swim wave
+ * deforms all three per-frame per-fish (`swimWave.ts`). Pre-translated to
+ * the tail pivot origin (`extrudeAtHinge`) so the wave operates in the same
+ * hinge-centred local space `FishModel.tsx` mounts the mesh at.
  * `tailScale` (`MALE_TAIL_SCALE` for males, `1` otherwise) is baked
  * directly into the clone via a uniform scale about that same
- * hinge-centred origin — mathematically identical to the old
- * `<group scale={tailScale}>` wrapper (both scale uniformly about the
- * hinge), so `Fish.tsx`'s collider math needs no changes. */
+ * hinge-centred origin, so `Fish.tsx`'s collider math (which assumes a
+ * uniform scale about the hinge) needs no changes. */
 export function createTailGeometry(
   finType: 'Fan' | 'Forked' | 'Veil',
   tailScale: number,

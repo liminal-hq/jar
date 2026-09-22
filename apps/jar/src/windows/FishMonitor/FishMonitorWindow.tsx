@@ -5,7 +5,8 @@
 // recordings. Not part of SPEC.md/SCREENS.md — supplementary tooling
 // rather than a core product screen, but not gated behind a dev build
 // either: it's self-contained (opening it is what turns telemetry
-// publishing on, via the mount effect below) and just as useful for a
+// publishing on, and closing it resets the day/night override back to
+// `'auto'`, both via the mount effect below) and just as useful for a
 // curious owner as for tuning.
 //
 // (c) Copyright 2026 Scott Morris
@@ -134,6 +135,13 @@ export function FishMonitorWindow() {
     const tick = setInterval(() => forceRerender((n) => n + 1), 500);
     return () => {
       setFishMonitorEnabled(false);
+      // The day/night override below is a real, product-affecting setting
+      // (`Fish.tsx`/`SteeringSystem.tsx` both consume it), not just a debug
+      // overlay — resetting it here on close is what keeps this window
+      // self-contained: closing it always leaves the jar's own real
+      // day/night clock in control again, never stuck pinned to whatever
+      // was last selected.
+      setDayNightOverride('auto');
       unlisten?.();
       clearInterval(tick);
     };

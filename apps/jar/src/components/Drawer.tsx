@@ -95,14 +95,13 @@ export function Drawer({ onNavigate }: DrawerProps) {
       <button style={buttonStyle} onClick={() => void exit()}>
         Exit
       </button>
-      {/* Dev and Fish monitor used to be dev-build-only (`import.meta.env.DEV`)
-       * — un-gated since both are self-contained debugging aids a curious
-       * owner can get real use out of too, not just for tuning: Dev toggles
-       * localStorage-backed debug overlays with no product-facing effect,
-       * and opening Fish monitor is what turns its own telemetry publishing
-       * on in the first place (`FishMonitorWindow.tsx`'s mount effect), so
-       * there's no hidden dev-only toggle a real build would otherwise leave
-       * unreachable. */}
+      {/* Both are self-contained debugging aids a curious owner can get real
+       * use out of too, not just for tuning, so neither is gated behind
+       * `import.meta.env.DEV`: Dev toggles localStorage-backed debug
+       * overlays with no product-facing effect, and opening Fish monitor is
+       * what turns its own telemetry publishing on in the first place
+       * (`FishMonitorWindow.tsx`'s mount effect), so there's no hidden
+       * dev-only toggle a real build would otherwise leave unreachable. */}
       <button style={buttonStyle} onClick={() => void navigate('dev-settings')}>
         Dev
       </button>

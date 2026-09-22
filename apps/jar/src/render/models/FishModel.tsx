@@ -297,42 +297,43 @@ export function FishModel({
   const tailGeometry = useMemo(() => createTailGeometry(finType, tailScale), []);
   const dorsalGeometry = useMemo(() => createDorsalGeometry(), []);
 
-  // Rest-pose snapshots (position + normal), taken once per geometry clone
-  // before any deformation ever runs — the swim wave always rotates *from*
-  // these, never accumulates onto the previous frame's already-deformed
-  // values.
-  const bodyRest = useMemo(() => snapshotRest(bodyGeometry), [bodyGeometry]);
-  const tailRest = useMemo(() => snapshotRest(tailGeometry), [tailGeometry]);
-  const dorsalRest = useMemo(() => snapshotRest(dorsalGeometry), [dorsalGeometry]);
+  // Rest-pose position snapshots, taken once per geometry clone before any
+  // deformation ever runs — the swim wave always rotates *from* these,
+  // never accumulates onto the previous frame's already-deformed values.
+  const bodyRestPositions = useMemo(() => snapshotRestPositions(bodyGeometry), [bodyGeometry]);
+  const tailRestPositions = useMemo(() => snapshotRestPositions(tailGeometry), [tailGeometry]);
+  const dorsalRestPositions = useMemo(
+    () => snapshotRestPositions(dorsalGeometry),
+    [dorsalGeometry],
+  );
 
   // The tail's own tip, in the shared body-space x the wave is defined in
-  // (`swimWave.ts`) — found empirically from the actual geometry (same
-  // technique the old veil-only bend used for its own tail length) rather
+  // (`swimWave.ts`) — found empirically from the actual geometry rather
   // than computed from `TAIL_TIP_SVG_DISTANCE` by hand, so it's automatically
   // correct for whichever fin type this fish actually has. Tail vertices are
   // hinge-shifted (`extrudeAtHinge`), so `TAIL_PIVOT.x` converts back into
   // that shared space.
   const tailTipCommonX = useMemo(() => {
     let maxNegX = 0;
-    for (let i = 0; i < tailRest.positions.length; i += 3) {
-      maxNegX = Math.max(maxNegX, -tailRest.positions[i]!);
+    for (let i = 0; i < tailRestPositions.length; i += 3) {
+      maxNegX = Math.max(maxNegX, -tailRestPositions[i]!);
     }
     return TAIL_PIVOT.x - maxNegX;
-  }, [tailRest]);
+  }, [tailRestPositions]);
   const seamU = useMemo(() => swimWaveU(TAIL_PIVOT.x, tailTipCommonX), [tailTipCommonX]);
   const tipGain = FIN_SWIM_TIP_GAIN[finType];
 
   const bodyWaveTables: WaveTables = useMemo(
-    () => buildWaveTables(bodyRest.positions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
-    [bodyRest, tailTipCommonX, tipGain],
+    () => buildWaveTables(bodyRestPositions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
+    [bodyRestPositions, tailTipCommonX, tipGain],
   );
   const dorsalWaveTables: WaveTables = useMemo(
-    () => buildWaveTables(dorsalRest.positions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
-    [dorsalRest, tailTipCommonX, tipGain],
+    () => buildWaveTables(dorsalRestPositions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
+    [dorsalRestPositions, tailTipCommonX, tipGain],
   );
   const tailWaveTables: WaveTables = useMemo(
-    () => buildWaveTables(tailRest.positions, TAIL_PIVOT.x, TAIL_PIVOT.x, tailTipCommonX, tipGain),
-    [tailRest, tailTipCommonX, tipGain],
+    () => buildWaveTables(tailRestPositions, TAIL_PIVOT.x, TAIL_PIVOT.x, tailTipCommonX, tipGain),
+    [tailRestPositions, tailTipCommonX, tipGain],
   );
   // Each spot's own (u, env) at its fixed rest x — spots don't move
   // relative to the body, so this is a one-time lookup, not a per-frame
@@ -542,49 +543,15 @@ export function FishModel({
     });
 
     // The swim wave: one continuous per-vertex bend spanning the body,
-    // dorsal fin, and tail (`swimWave.ts`), replacing the old rigid tail
-    // pivot plus veil-only secondary bend. All three share this frame's
+    // dorsal fin, and tail (`swimWave.ts`). All three share this frame's
     // `phase`/`amplitude` so they beat as one coherent wave, not three
-    // independent pieces.
-    const bodyPos = bodyGeometry.attributes.position;
-    const bodyNormal = bodyGeometry.attributes.normal;
-    if (bodyPos && bodyNormal) {
-      applySwimWave(
-        bodyPos,
-        bodyNormal,
-        bodyRest.positions,
-        bodyRest.normals,
-        bodyWaveTables,
-        phase,
-        amplitude,
-      );
-    }
-    const dorsalPos = dorsalGeometry.attributes.position;
-    const dorsalNormal = dorsalGeometry.attributes.normal;
-    if (dorsalPos && dorsalNormal) {
-      applySwimWave(
-        dorsalPos,
-        dorsalNormal,
-        dorsalRest.positions,
-        dorsalRest.normals,
-        dorsalWaveTables,
-        phase,
-        amplitude,
-      );
-    }
-    const tailPos = tailGeometry.attributes.position;
-    const tailNormal = tailGeometry.attributes.normal;
-    if (tailPos && tailNormal) {
-      applySwimWave(
-        tailPos,
-        tailNormal,
-        tailRest.positions,
-        tailRest.normals,
-        tailWaveTables,
-        phase,
-        amplitude,
-      );
-    }
+    // independent pieces — and the tail rotates with a `TAIL_PIVOT.x`
+    // offset so it shares the body's own rotation pivot instead of its own
+    // hinge-local one, keeping the body/tail seam closed as amplitude
+    // varies (`applySwimWave`'s own comment).
+    applySwimWave(bodyGeometry, bodyRestPositions, bodyWaveTables, phase, amplitude);
+    applySwimWave(dorsalGeometry, dorsalRestPositions, dorsalWaveTables, phase, amplitude);
+    applySwimWave(tailGeometry, tailRestPositions, tailWaveTables, phase, amplitude, TAIL_PIVOT.x);
 
     // Spots ride the same wave at their own fixed body-space x — a group
     // rotation about the (untranslated) root's own Y axis reproduces
@@ -689,17 +656,10 @@ export function FishModel({
   );
 }
 
-/** Captures a geometry's current position/normal attributes as plain
- * arrays — the swim wave always deforms *from* this rest pose, never
- * accumulates onto whatever the previous frame already wrote. */
-function snapshotRest(geometry: THREE.BufferGeometry): {
-  positions: Float32Array;
-  normals: Float32Array;
-} {
+/** Captures a geometry's current position attribute as a plain array — the
+ * swim wave always deforms *from* this rest pose, never accumulates onto
+ * whatever the previous frame already wrote. */
+function snapshotRestPositions(geometry: THREE.BufferGeometry): Float32Array {
   const positions = geometry.attributes.position?.array;
-  const normals = geometry.attributes.normal?.array;
-  return {
-    positions: positions ? (positions.slice() as Float32Array) : new Float32Array(0),
-    normals: normals ? (normals.slice() as Float32Array) : new Float32Array(0),
-  };
+  return positions ? (positions.slice() as Float32Array) : new Float32Array(0);
 }

@@ -1,18 +1,19 @@
-// The unified per-vertex "swim wave" deformer — generalizes the tail's
-// original per-vertex progressive bend (once Veil-only) into one continuous
-// wave spanning the body, dorsal fin, and all three tail types, replacing
-// the rigid tail-pivot swing entirely. See
+// The unified per-vertex "swim wave" deformer — one continuous per-vertex
+// bend spanning the body, dorsal fin, and all three tail types, so every
+// deforming part shares the same traveling wave rather than each getting
+// its own independent hinge or bend. See
 // `docs/architecture/3d-engine.md` §6.2/§6.6.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import * as THREE from 'three';
+
 /** How much extra amplitude the tail portion of the wave gets, ramping
  * smoothly from 1x at the body/tail seam to this value at the tail's own
  * tip — the body portion is always 1x regardless of fin type. Veil (the
- * proven, already-flowing motion) highest; Fan/Forked moderate. Replaces
- * the old flat `VEIL_BEND_AMPLITUDE`/`RIGID_TAIL_AMPLITUDE_MULTIPLIER`
- * constants (`FishModel.tsx`). Tune by eye. */
+ * flowing motion its shape calls for) highest; Fan/Forked moderate. Tune
+ * by eye. */
 export const FIN_SWIM_TIP_GAIN: Record<'Fan' | 'Forked' | 'Veil', number> = {
   Veil: 3.5,
   Fan: 1.8,
@@ -24,10 +25,10 @@ export const FIN_SWIM_TIP_GAIN: Record<'Fan' | 'Forked' | 'Veil', number> = {
  * this). Tune by eye against the real silhouette. */
 export const SWIM_WAVE_ONSET_X = 45;
 
-/** Phase lag across the *entire* onset-to-tail-tip span — the old
- * veil-only bend's `1.1` covered just the tail; a full-body span needs
- * more so the wave still reads as traveling rather than instant. Tune by
- * eye. */
+/** Phase lag across the *entire* onset-to-tail-tip span. Too small and the
+ * whole fish reads as flexing in lockstep rather than a wave traveling
+ * from body to tail tip; too large and the tip visibly lags the beat
+ * driving it. Tune by eye. */
 export const SWIM_WAVE_LAG = 2.2;
 
 function clamp(value: number, min: number, max: number): number {
@@ -100,41 +101,51 @@ export function buildWaveTables(
   return { u, env };
 }
 
-/** Applies this frame's wave to a geometry's `position`/`normal`
- * attributes in place, from precomputed rest arrays and wave tables —
- * shared by the body, dorsal, and tail meshes (`FishModel.tsx`) so the
- * same per-vertex loop isn't tripled. Rotates the rest normal by the same
- * angle as the position rather than calling `computeVertexNormals()`
- * (correct for a per-vertex rigid rotation, and cheaper). */
+/** Applies this frame's wave to a geometry's `position` attribute in place,
+ * from a precomputed rest array and wave tables — shared by the body,
+ * dorsal, and tail meshes (`FishModel.tsx`) so the same per-vertex loop
+ * isn't tripled.
+ *
+ * `rotationOffsetX` matters for the tail specifically: its rest positions
+ * are hinge-shifted (`extrudeAtHinge`, `fishGeometry.ts`) into a local
+ * space whose origin is the hinge, not the shared body-space origin the
+ * body/dorsal meshes already rotate about. A mesh's vertices have to
+ * rotate about the *same* world-space pivot the body's do, or the same
+ * physical seam point on each mesh ends up at different world positions
+ * once amplitude is nonzero, visibly separating body from tail, even with
+ * a shared, continuous `phase`/`amplitude`/envelope driving both.
+ * Shifting into the shared space by `rotationOffsetX` before rotating,
+ * then back out after, is what keeps that seam closed. `0` for body/dorsal
+ * (already in that shared space); `TAIL_PIVOT.x` for the tail.
+ *
+ * Recomputes normals from the deformed positions rather than rotating the
+ * rest normal by each vertex's own angle: the wave's angle varies
+ * continuously with x, so this isn't a single rigid rotation, and
+ * rotating by the local angle alone ignores that variation (most visible
+ * as wrong-looking lighting toward high-`tipGain` tail tips, where the
+ * angle changes fastest). */
 export function applySwimWave(
-  position: {
-    setXYZ: (index: number, x: number, y: number, z: number) => void;
-    needsUpdate: boolean;
-  },
-  normal: {
-    setXYZ: (index: number, x: number, y: number, z: number) => void;
-    needsUpdate: boolean;
-  },
+  geometry: THREE.BufferGeometry,
   restPositions: Float32Array,
-  restNormals: Float32Array,
   tables: WaveTables,
   phase: number,
   amplitude: number,
+  rotationOffsetX = 0,
 ): void {
+  const position = geometry.attributes.position;
+  if (!position) return;
   for (let v = 0; v < tables.u.length; v++) {
     const angle = swimWaveAngle(tables.env[v]!, tables.u[v]!, phase, amplitude);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const i = v * 3;
-    const x = restPositions[i]!;
+    const x = restPositions[i]! + rotationOffsetX;
     const y = restPositions[i + 1]!;
     const z = restPositions[i + 2]!;
-    position.setXYZ(v, x * cos - z * sin, y, x * sin + z * cos);
-    const nx = restNormals[i]!;
-    const ny = restNormals[i + 1]!;
-    const nz = restNormals[i + 2]!;
-    normal.setXYZ(v, nx * cos - nz * sin, ny, nx * sin + nz * cos);
+    const rotatedX = x * cos - z * sin;
+    const rotatedZ = x * sin + z * cos;
+    position.setXYZ(v, rotatedX - rotationOffsetX, y, rotatedZ);
   }
   position.needsUpdate = true;
-  normal.needsUpdate = true;
+  geometry.computeVertexNormals();
 }

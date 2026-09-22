@@ -4,6 +4,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -13,6 +14,16 @@ import {
   swimWaveEnvelope,
   swimWaveU,
 } from './swimWave';
+
+/** A minimal real triangle geometry — `applySwimWave` needs an actual
+ * `THREE.BufferGeometry` now (it calls `computeVertexNormals()` on it), not
+ * just a position/normal attribute pair. */
+function triangleGeometry(vertices: number[]): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
 describe('swimWaveU', () => {
   it('is 0 at onset and 1 at the tip', () => {
@@ -103,53 +114,87 @@ describe('buildWaveTables', () => {
 
 describe('applySwimWave', () => {
   it('leaves geometry at rest when amplitude is 0', () => {
-    const restPositions = new Float32Array([10, 5, 2]);
-    const restNormals = new Float32Array([0, 1, 0]);
+    const restPositions = new Float32Array([10, 5, 2, 20, 5, 2, 15, 8, 2]);
+    const geometry = triangleGeometry(Array.from(restPositions));
     const tables = buildWaveTables(restPositions, 0, -60, -150, 3);
-    const written: number[][] = [];
-    const position = {
-      setXYZ: (i: number, x: number, y: number, z: number) => {
-        written[i] = [x, y, z];
-      },
-      needsUpdate: false,
-    };
-    const normal = {
-      setXYZ: () => {},
-      needsUpdate: false,
-    };
 
-    applySwimWave(position, normal, restPositions, restNormals, tables, 1.5, 0);
+    applySwimWave(geometry, restPositions, tables, 1.5, 0);
 
-    expect(written[0]![0]).toBeCloseTo(10, 5);
-    expect(written[0]![1]).toBeCloseTo(5, 5);
-    expect(written[0]![2]).toBeCloseTo(2, 5);
-    expect(position.needsUpdate).toBe(true);
+    const pos = geometry.attributes.position!;
+    expect(pos.getX(0)).toBeCloseTo(10, 5);
+    expect(pos.getY(0)).toBeCloseTo(5, 5);
+    expect(pos.getZ(0)).toBeCloseTo(2, 5);
   });
 
-  it('leaves y untouched and only rotates x/z, for both position and normal', () => {
-    const restPositions = new Float32Array([-140, 7, 0]); // deep in the tail zone
-    const restNormals = new Float32Array([1, 0, 0]);
+  it('leaves y untouched and only rotates x/z', () => {
+    // Deep in the tail zone, well past the onset — a triangle so
+    // computeVertexNormals has real geometry to work with.
+    const restPositions = new Float32Array([-140, 7, 0, -140, 7, 5, -135, 7, 2]);
+    const geometry = triangleGeometry(Array.from(restPositions));
     const tables = buildWaveTables(restPositions, 0, -60, -150, 3);
-    let writtenPos: number[] = [];
-    let writtenNormal: number[] = [];
-    const position = {
-      setXYZ: (_i: number, x: number, y: number, z: number) => {
-        writtenPos = [x, y, z];
-      },
-      needsUpdate: false,
-    };
-    const normal = {
-      setXYZ: (_i: number, x: number, y: number, z: number) => {
-        writtenNormal = [x, y, z];
-      },
-      needsUpdate: false,
-    };
 
-    applySwimWave(position, normal, restPositions, restNormals, tables, 0.4, 1.0);
+    applySwimWave(geometry, restPositions, tables, 0.4, 1.0);
 
-    expect(writtenPos[1]).toBeCloseTo(7, 5); // y unchanged
-    expect(writtenNormal[1]).toBeCloseTo(0, 5); // normal's y unchanged
+    const pos = geometry.attributes.position!;
+    expect(pos.getY(0)).toBeCloseTo(7, 5); // y unchanged
     // Position actually moved (non-trivial angle at full tail-tip amplitude).
-    expect(writtenPos[0]).not.toBeCloseTo(-140, 3);
+    expect(pos.getX(0)).not.toBeCloseTo(-140, 3);
+  });
+
+  it('recomputes normals from the deformed positions rather than leaving them at rest', () => {
+    const restPositions = new Float32Array([-140, 0, -2, -140, 0, 2, -130, 4, 0]);
+    const geometry = triangleGeometry(Array.from(restPositions));
+    const restNormalZ = geometry.attributes.normal!.getZ(0);
+    const tables = buildWaveTables(restPositions, 0, -60, -150, 3);
+
+    applySwimWave(geometry, restPositions, tables, Math.PI / 2, 1.0);
+
+    // A large in-plane rotation at this amplitude/phase changes which way
+    // the triangle faces — the normal should have moved off its rest value,
+    // proving it was actually recomputed, not left stale.
+    expect(geometry.attributes.normal!.getZ(0)).not.toBeCloseTo(restNormalZ, 3);
+  });
+
+  it('rotates a hinge-shifted (tail-local) vertex about the same world pivot as an unshifted (body-space) one at the same physical seam point', () => {
+    // The actual regression: the tail's rest positions are hinge-shifted by
+    // `extrudeAtHinge` (local origin = the hinge, at world x = TAIL_PIVOT.x),
+    // while body/dorsal positions already share the world/body-space
+    // origin. A shared physical point — body-space x = -56, i.e. tail-local
+    // x = -56 - TAIL_PIVOT.x = 4 when TAIL_PIVOT.x = -60 — must land at the
+    // same *world* position after deformation from both representations,
+    // once `rotationOffsetX` shifts the tail's rotation into that same
+    // shared space.
+    const tailPivotX = -60;
+    const bodySpaceX = -56;
+    const tailLocalX = bodySpaceX - tailPivotX; // 4
+
+    const bodyRest = new Float32Array([bodySpaceX, 0, 3, bodySpaceX, 0, -3, bodySpaceX - 5, 4, 0]);
+    const tailRest = new Float32Array([tailLocalX, 0, 3, tailLocalX, 0, -3, tailLocalX - 5, 4, 0]);
+
+    const bodyGeometry = triangleGeometry(Array.from(bodyRest));
+    const tailGeometry = triangleGeometry(Array.from(tailRest));
+
+    // Same tip/seam parameterization for both, as `FishModel.tsx` builds
+    // them (body: spaceOffsetX=0; tail: spaceOffsetX=TAIL_PIVOT.x).
+    const bodyTables = buildWaveTables(bodyRest, 0, tailPivotX, -150, 3);
+    const tailTables = buildWaveTables(tailRest, tailPivotX, tailPivotX, -150, 3);
+
+    const phase = 1.1;
+    const amplitude = 1.0; // large amplitude — the seam gap grows with it
+    applySwimWave(bodyGeometry, bodyRest, bodyTables, phase, amplitude);
+    // Tail mesh's own local origin is offset by TAIL_PIVOT.x in world space
+    // (`FishModel.tsx` mounts it at `position={[TAIL_PIVOT.x, ...]}`) — so
+    // the tail's *world* x is its rotated-local-x plus that same offset.
+    applySwimWave(tailGeometry, tailRest, tailTables, phase, amplitude, tailPivotX);
+
+    const bodyPos = bodyGeometry.attributes.position!;
+    const tailPos = tailGeometry.attributes.position!;
+    const bodyWorldX = bodyPos.getX(0);
+    const bodyWorldZ = bodyPos.getZ(0);
+    const tailWorldX = tailPos.getX(0) + tailPivotX;
+    const tailWorldZ = tailPos.getZ(0);
+
+    expect(tailWorldX).toBeCloseTo(bodyWorldX, 5);
+    expect(tailWorldZ).toBeCloseTo(bodyWorldZ, 5);
   });
 });
