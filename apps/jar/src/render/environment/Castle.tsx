@@ -87,18 +87,22 @@ function CastleSpotlight() {
   }, []);
   return (
     <>
+      {/* Positioned well out front and only modestly above the keep, not
+          nearly overhead — a steep-from-above angle grazes the front face
+          (the one the fixed camera actually sees) and mostly just lights
+          the thin roof-tops instead, which is invisible from here. */}
       <spotLight
         ref={lightRef}
-        position={[0, 2, 1.5]}
+        position={[0, 1.3, 2.4]}
         color="#bfe8ff"
-        intensity={3}
-        angle={0.5}
+        intensity={5}
+        angle={0.55}
         penumbra={0.5}
-        distance={5}
+        distance={6}
         castShadow
         shadow-mapSize={[512, 512]}
       />
-      <object3D ref={targetRef} position={[0, 0.8, 0]} />
+      <object3D ref={targetRef} position={[0, 0.8, 0.28]} />
     </>
   );
 }
