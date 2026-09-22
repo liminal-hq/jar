@@ -2,11 +2,11 @@
 // hand-authored SVG silhouettes in `fish-svg/` (parsed and cached once by
 // `fishGeometry.ts`) stand in for the originally-envisioned rigged GLTF
 // pipeline, giving Jar's flat-vector-art identity a genuinely fish-shaped
-// model without needing a real asset pipeline or a bone rig. Implements
-// hue-via-material-color and the belly gradient (§6.4), life-stage scale
-// (§6.3), spot toggles, sex dimorphism (§6.7), and — for the first time —
-// the `fin` gene actually changing which tail mesh a fish gets, rather
-// than being tracked by the sim and never rendered.
+// model without needing a real asset pipeline or a bone rig — the body and
+// tail flex via a per-vertex traveling wave instead (`swimWave.ts`), not a
+// skeleton. Implements hue-via-material-color and the belly gradient
+// (§6.4), life-stage scale (§6.3), spot toggles, sex dimorphism (§6.7), and
+// the `fin` gene actually changing which tail mesh a fish gets.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -24,7 +24,8 @@ import { animationMulFor, maxSpeedFor } from '../steering/steeringParams';
 import {
   BODY_DEPTH,
   createBodyGeometry,
-  createVeilGeometry,
+  createDorsalGeometry,
+  createTailGeometry,
   MALE_TAIL_SCALE,
   MOUTH_HINGE,
   paintBellyGradient,
@@ -35,6 +36,14 @@ import {
   wrapInPivot,
 } from './fishGeometry';
 import { advanceTailPhase } from './tailPhase';
+import {
+  applySwimWave,
+  buildWaveTables,
+  FIN_SWIM_TIP_GAIN,
+  swimWaveAngle,
+  swimWaveU,
+  type WaveTables,
+} from './swimWave';
 import { computeTurnRate } from './turnRate';
 
 interface FishModelProps {
@@ -125,24 +134,16 @@ const CALM_FREQUENCY_SPEED_SCALE = 1.8;
 const EXCITED_FREQUENCY_BASE = 4;
 const EXCITED_FREQUENCY_SPEED_SCALE = 2.5;
 
-/** Base tail-beat amplitude at the calm and excited ends of the cruise
- * range (before the turn/overdrive boosts below). */
+/** Base swim-wave amplitude at the calm and excited ends of the cruise
+ * range (before the turn/overdrive boosts below) — per-fin-type tip boost
+ * on top of this lives in `swimWave.ts`'s `FIN_SWIM_TIP_GAIN`. */
 const CALM_AMPLITUDE = 0.08;
 const EXCITED_AMPLITUDE = 0.16;
 
-/** Fan/Forked tails are one rigid single-pivot paddle with no secondary
- * motion (unlike Veil, which layers `VEIL_BEND_AMPLITUDE`'s per-vertex
- * progressive bend on top of this same base swing) — at the plain base
- * amplitude above, that single small pivot rotation reads as stiff/rigid
- * rather than swimming. This boosts *only* their base swing to compensate;
- * Veil is left at 1 since it's already getting its exaggeration from the
- * secondary bend instead. */
-const RIGID_TAIL_AMPLITUDE_MULTIPLIER = 1.8;
-
-/** How much a turn adds to tail amplitude — kept well under
+/** How much a turn adds to amplitude — kept well under
  * `CALM_AMPLITUDE`/`EXCITED_AMPLITUDE` above (a fraction of the base range,
  * not a comparable addition to it), so a turn reads as a slightly bigger
- * tail sweep, not a faster/more frantic one. A live pass at `0.08`/cap `2`
+ * sweep, not a faster/more frantic one. A live pass at `0.08`/cap `2`
  * (max +0.16, matching the *entire* base range) still read as swishing too
  * fast through a turn — halved again here. The old `turnRate * 0.25` with
  * no practical cap could add up to 3-7x the base amplitude on an ordinary
@@ -185,7 +186,7 @@ const OVERDRIVE_AMPLITUDE_SCALE = 0.15;
 const REST_ENTER_SPEED = 0.05;
 const REST_EXIT_SPEED = 0.12;
 const REST_ENTER_DWELL_SEC = 0.5;
-/** How quickly the tail's amplitude/frequency actually ramp toward their
+/** How quickly the amplitude/frequency actually ramp toward their
  * rest-vs-active target once the rest *state* above has changed — never an
  * instant cut, "a fully motionless fish is the fastest way to break the
  * illusion" (§6.6). */
@@ -200,12 +201,9 @@ const MICRO_FLICK_AMPLITUDE = 0.12;
 const MICRO_FLICK_MIN_INTERVAL_SEC = 4;
 const MICRO_FLICK_MAX_INTERVAL_SEC = 4;
 
-const VEIL_BEND_AMPLITUDE = 0.5;
-const VEIL_PHASE_LAG = 1.1; // matches docs/architecture/3d-engine.md §6.6's per-segment stagger constant
 const PECTORAL_FLUTTER_AMPLITUDE = 0.18;
 const MOUTH_CYCLE_FREQUENCY = 0.9;
 const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside a hand-picked ~20–25° sweet spot
-const BODY_BANK_AMPLITUDE = 0.05;
 const BODY_BOB_AMPLITUDE = 0.02;
 
 export function FishModel({
@@ -218,15 +216,15 @@ export function FishModel({
   onDebugFrame,
 }: FishModelProps) {
   const rootRef = useRef<THREE.Group>(null);
-  const tailPivotRef = useRef<THREE.Group>(null);
   const pectoralPivotRef = useRef<THREE.Group>(null);
   const pectoralFarPivotRef = useRef<THREE.Group>(null);
   const mouthPivotRef = useRef<THREE.Group>(null);
+  const spotGroupRefs = useRef<Array<THREE.Group | null>>([]);
 
   // One random phase per fish, fixed at spawn — without it every fish beats
   // in perfect unison whenever they share a speed (§6.6).
   const phaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
-  // The tail beat's own accumulated phase, seeded from the above — see
+  // The swim wave's own accumulated phase, seeded from the above — see
   // `advanceTailPhase`'s doc comment for why this has to accumulate rather
   // than derive from absolute clock time.
   const phaseRef = useRef(phaseSeed);
@@ -288,35 +286,66 @@ export function FishModel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const finType = useMemo(() => critter.fin ?? 'Forked', []);
 
-  // Per-fish clone: the belly gradient is painted per fish from its own
-  // hue, so this can't be the shared module-level geometry.
+  // Per-fish clones: the body's belly gradient is painted per fish from its
+  // own hue, and the body/tail/dorsal all deform per-frame per-fish via the
+  // swim wave (`swimWave.ts`), so none of the three can be shared geometry.
   const bodyGeometry = useMemo(() => createBodyGeometry(), []);
   useEffect(() => {
     paintBellyGradient(bodyGeometry, bodyColour, bellyColour);
   }, [bodyGeometry, bodyColour, bellyColour]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tailGeometry = useMemo(() => createTailGeometry(finType, tailScale), []);
+  const dorsalGeometry = useMemo(() => createDorsalGeometry(), []);
 
-  // Per-fish clone: only the veil tail needs one (its per-frame bend
-  // differs per fish); fan/forked reuse the shared, unmutated geometry.
-  const veilGeometry = useMemo(() => (finType === 'Veil' ? createVeilGeometry() : null), [finType]);
-  const veilRestPositions = useMemo(() => {
-    const pos = veilGeometry?.attributes.position;
-    return pos ? (pos.array.slice() as Float32Array) : null;
-  }, [veilGeometry]);
-  const veilTailLength = useMemo(() => {
-    if (!veilRestPositions) return 0;
-    let max = 0;
-    for (let i = 0; i < veilRestPositions.length; i += 3) {
-      max = Math.max(max, -veilRestPositions[i]!);
+  // Rest-pose snapshots (position + normal), taken once per geometry clone
+  // before any deformation ever runs — the swim wave always rotates *from*
+  // these, never accumulates onto the previous frame's already-deformed
+  // values.
+  const bodyRest = useMemo(() => snapshotRest(bodyGeometry), [bodyGeometry]);
+  const tailRest = useMemo(() => snapshotRest(tailGeometry), [tailGeometry]);
+  const dorsalRest = useMemo(() => snapshotRest(dorsalGeometry), [dorsalGeometry]);
+
+  // The tail's own tip, in the shared body-space x the wave is defined in
+  // (`swimWave.ts`) — found empirically from the actual geometry (same
+  // technique the old veil-only bend used for its own tail length) rather
+  // than computed from `TAIL_TIP_SVG_DISTANCE` by hand, so it's automatically
+  // correct for whichever fin type this fish actually has. Tail vertices are
+  // hinge-shifted (`extrudeAtHinge`), so `TAIL_PIVOT.x` converts back into
+  // that shared space.
+  const tailTipCommonX = useMemo(() => {
+    let maxNegX = 0;
+    for (let i = 0; i < tailRest.positions.length; i += 3) {
+      maxNegX = Math.max(maxNegX, -tailRest.positions[i]!);
     }
-    return max;
-  }, [veilRestPositions]);
+    return TAIL_PIVOT.x - maxNegX;
+  }, [tailRest]);
+  const seamU = useMemo(() => swimWaveU(TAIL_PIVOT.x, tailTipCommonX), [tailTipCommonX]);
+  const tipGain = FIN_SWIM_TIP_GAIN[finType];
 
-  const tailGeometry =
-    finType === 'Fan'
-      ? SHARED_GEOMETRY.tailFan
-      : finType === 'Forked'
-        ? SHARED_GEOMETRY.tailForked
-        : (veilGeometry ?? SHARED_GEOMETRY.tailForked);
+  const bodyWaveTables: WaveTables = useMemo(
+    () => buildWaveTables(bodyRest.positions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
+    [bodyRest, tailTipCommonX, tipGain],
+  );
+  const dorsalWaveTables: WaveTables = useMemo(
+    () => buildWaveTables(dorsalRest.positions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
+    [dorsalRest, tailTipCommonX, tipGain],
+  );
+  const tailWaveTables: WaveTables = useMemo(
+    () => buildWaveTables(tailRest.positions, TAIL_PIVOT.x, TAIL_PIVOT.x, tailTipCommonX, tipGain),
+    [tailRest, tailTipCommonX, tipGain],
+  );
+  // Each spot's own (u, env) at its fixed rest x — spots don't move
+  // relative to the body, so this is a one-time lookup, not a per-frame
+  // table scan.
+  const spotWave = useMemo(
+    () =>
+      SPOTS.map((spot) => {
+        const u = swimWaveU(spot.x, tailTipCommonX);
+        const env = u; // spots sit within the body zone; tail tip-gain never applies to them
+        return { u, env };
+      }),
+    [tailTipCommonX],
+  );
 
   const pectoralMaterial = useMemo(
     () =>
@@ -364,11 +393,12 @@ export function FishModel({
   useEffect(() => {
     return () => {
       bodyGeometry.dispose();
-      veilGeometry?.dispose();
+      tailGeometry.dispose();
+      dorsalGeometry.dispose();
       pectoralMaterial.dispose();
       mouthMaterial.dispose();
     };
-  }, [bodyGeometry, veilGeometry, pectoralMaterial, mouthMaterial]);
+  }, [bodyGeometry, tailGeometry, dorsalGeometry, pectoralMaterial, mouthMaterial]);
 
   useFrame((state, delta) => {
     if (still) return;
@@ -457,11 +487,9 @@ export function FishModel({
       freqMul *
       (1 + OVERDRIVE_FREQUENCY_SCALE * overdrive) *
       (1 - TURN_RATE_FREQUENCY_DAMP_SCALE * cappedTurnRate);
-    const rigidTailMul = finType === 'Veil' ? 1 : RIGID_TAIL_AMPLITUDE_MULTIPLIER;
     const activeAmplitude =
       (THREE.MathUtils.lerp(CALM_AMPLITUDE, EXCITED_AMPLITUDE, excite) +
         cappedTurnRate * TURN_RATE_AMPLITUDE_SCALE) *
-      rigidTailMul *
       ampMul *
       (1 + OVERDRIVE_AMPLITUDE_SCALE * overdrive) *
       (1 + STEADY_AMPLITUDE_BONUS * steadiness);
@@ -513,32 +541,60 @@ export function FishModel({
       phase,
     });
 
-    if (tailPivotRef.current) {
-      tailPivotRef.current.rotation.y = Math.sin(phase) * amplitude;
+    // The swim wave: one continuous per-vertex bend spanning the body,
+    // dorsal fin, and tail (`swimWave.ts`), replacing the old rigid tail
+    // pivot plus veil-only secondary bend. All three share this frame's
+    // `phase`/`amplitude` so they beat as one coherent wave, not three
+    // independent pieces.
+    const bodyPos = bodyGeometry.attributes.position;
+    const bodyNormal = bodyGeometry.attributes.normal;
+    if (bodyPos && bodyNormal) {
+      applySwimWave(
+        bodyPos,
+        bodyNormal,
+        bodyRest.positions,
+        bodyRest.normals,
+        bodyWaveTables,
+        phase,
+        amplitude,
+      );
+    }
+    const dorsalPos = dorsalGeometry.attributes.position;
+    const dorsalNormal = dorsalGeometry.attributes.normal;
+    if (dorsalPos && dorsalNormal) {
+      applySwimWave(
+        dorsalPos,
+        dorsalNormal,
+        dorsalRest.positions,
+        dorsalRest.normals,
+        dorsalWaveTables,
+        phase,
+        amplitude,
+      );
+    }
+    const tailPos = tailGeometry.attributes.position;
+    const tailNormal = tailGeometry.attributes.normal;
+    if (tailPos && tailNormal) {
+      applySwimWave(
+        tailPos,
+        tailNormal,
+        tailRest.positions,
+        tailRest.normals,
+        tailWaveTables,
+        phase,
+        amplitude,
+      );
     }
 
-    // Veil-only secondary bend: bends progressively more toward the tip
-    // each frame (a per-vertex deformation, not a literal second joint),
-    // phase-lagged along its length by the same stagger §6.6 specifies for
-    // the real bone chain, so it reads as one continuous wave rather than
-    // a rigid paddle. Fan/forked stay rigid single-pivot — their paddle
-    // shapes don't need it.
-    if (finType === 'Veil' && veilGeometry && veilRestPositions) {
-      const pos = veilGeometry.attributes.position;
-      if (pos) {
-        for (let i = 0; i < veilRestPositions.length; i += 3) {
-          const x = veilRestPositions[i]!;
-          const y = veilRestPositions[i + 1]!;
-          const z = veilRestPositions[i + 2]!;
-          const tt = THREE.MathUtils.clamp(-x / veilTailLength, 0, 1);
-          const angle = tt * VEIL_BEND_AMPLITUDE * Math.sin(phase + tt * VEIL_PHASE_LAG);
-          const cos = Math.cos(angle);
-          const sin = Math.sin(angle);
-          pos.setXYZ(i / 3, x * cos - z * sin, y, x * sin + z * cos);
-        }
-        pos.needsUpdate = true;
-        veilGeometry.computeVertexNormals();
-      }
+    // Spots ride the same wave at their own fixed body-space x — a group
+    // rotation about the (untranslated) root's own Y axis reproduces
+    // exactly the same "rotate my (x,z) about the body's local origin"
+    // transform the body mesh's own vertices get at that x.
+    for (let i = 0; i < SPOTS.length; i++) {
+      const group = spotGroupRefs.current[i];
+      if (!group) continue;
+      const { u, env } = spotWave[i]!;
+      group.rotation.y = swimWaveAngle(env, u, phase, amplitude);
     }
 
     const flutter = Math.sin(flutterPhase) * PECTORAL_FLUTTER_AMPLITUDE;
@@ -555,28 +611,19 @@ export function FishModel({
         -Math.max(0, Math.sin(t * MOUTH_CYCLE_FREQUENCY + phaseSeed)) * MOUTH_OPEN_AMPLITUDE;
     }
 
-    // Whole-body bank/bob, approximating the spine wave §6.2 describes as
-    // the aspirational technique — there's no bone rig here, so this is a
-    // local wobble layered on `FishModel`'s own root group rather than a
-    // true per-segment bend. Doesn't fight `Fish.tsx`'s `RigidBody`, which
-    // owns the fish's actual world position/heading — this just adds a
-    // small additional local transform nested inside that.
-    //
-    // Scaled by `excite` (real-speed-derived, same term the tail's own
-    // frequency/amplitude use) rather than following `frequency` at full
-    // strength unconditionally — `frequency` alone can spike well above
-    // what the body is actually doing (the overdrive term above reacts to a
-    // *raised ceiling*, not to genuine forward progress catching up to it),
-    // and with no bone rig to distribute that into a real swimming
-    // undulation, a fast bank/bob with little real motion under it reads as
-    // the whole fish vibrating in place rather than swimming hard. Bob is
-    // driven by `bobPhaseRef`'s own half-frequency accumulator (see its
-    // declaration) rather than absolute clock time, for the same reason
-    // `advanceTailPhase` exists: a `frequency`-scaled elapsed-time term
-    // drifts further out of sync with the tail the longer a fish lives.
+    // Whole-body bob — the swim wave above now carries the "roll into a
+    // turn" motion the old bank term substituted for, so only a small
+    // vertical bob remains here, layered on `FishModel`'s own root group
+    // rather than a true per-segment bend. Doesn't fight `Fish.tsx`'s
+    // `RigidBody`, which owns the fish's actual world position/heading —
+    // this just adds a small additional local transform nested inside
+    // that. Driven by `bobPhaseRef`'s own half-frequency accumulator (see
+    // its declaration) rather than absolute clock time, for the same
+    // reason `advanceTailPhase` exists: a `frequency`-scaled elapsed-time
+    // term drifts further out of sync with the tail the longer a fish
+    // lives.
     const swayIntensity = THREE.MathUtils.lerp(0.3, 1, excite);
     if (rootRef.current) {
-      rootRef.current.rotation.z = Math.sin(phase) * BODY_BANK_AMPLITUDE * swayIntensity;
       rootRef.current.position.y = Math.sin(bobPhase) * BODY_BOB_AMPLITUDE * swayIntensity;
     }
   });
@@ -587,7 +634,7 @@ export function FishModel({
         <meshStandardMaterial vertexColors roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
-      <mesh geometry={SHARED_GEOMETRY.dorsal} castShadow>
+      <mesh geometry={dorsalGeometry} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
@@ -607,11 +654,9 @@ export function FishModel({
         <meshStandardMaterial color="#22222a" roughness={0.4} />
       </mesh>
 
-      <group ref={tailPivotRef} position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]} scale={tailScale}>
-        <mesh geometry={tailGeometry} castShadow>
-          <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
-        </mesh>
-      </group>
+      <mesh geometry={tailGeometry} position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]} castShadow>
+        <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
+      </mesh>
 
       <mesh position={[EYE.x, EYE.y, BODY_DEPTH / 2 + 3]}>
         <sphereGeometry args={[EYE.r, 16, 16]} />
@@ -624,7 +669,12 @@ export function FishModel({
 
       {critter.spots &&
         SPOTS.map((spot, i) => (
-          <group key={i}>
+          <group
+            key={i}
+            ref={(el) => {
+              spotGroupRefs.current[i] = el;
+            }}
+          >
             <mesh position={[spot.x, spot.y, BODY_DEPTH / 2 + spot.r * 0.4]}>
               <sphereGeometry args={[spot.r, 12, 12]} />
               <meshStandardMaterial color="#2b2a33" roughness={0.7} />
@@ -637,4 +687,19 @@ export function FishModel({
         ))}
     </group>
   );
+}
+
+/** Captures a geometry's current position/normal attributes as plain
+ * arrays — the swim wave always deforms *from* this rest pose, never
+ * accumulates onto whatever the previous frame already wrote. */
+function snapshotRest(geometry: THREE.BufferGeometry): {
+  positions: Float32Array;
+  normals: Float32Array;
+} {
+  const positions = geometry.attributes.position?.array;
+  const normals = geometry.attributes.normal?.array;
+  return {
+    positions: positions ? (positions.slice() as Float32Array) : new Float32Array(0),
+    normals: normals ? (normals.slice() as Float32Array) : new Float32Array(0),
+  };
 }
