@@ -5,7 +5,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { bladeSwayAngle, SWAY_AMPLITUDE } from './plantSway';
+import {
+  bladeSwayAngle,
+  DISTURBANCE_MAX_ANGLE,
+  DISTURBANCE_RADIUS,
+  plantDisturbanceAngle,
+  SWAY_AMPLITUDE,
+} from './plantSway';
 
 function maxAbsOverTime(tt: number, phase: number): number {
   let max = 0;
@@ -49,5 +55,29 @@ describe('bladeSwayAngle', () => {
     const ratioShallow = bladeSwayAngle(0.3, t, 0) / 0.3;
     const ratioDeep = bladeSwayAngle(0.9, t, 0) / 0.9;
     expect(ratioShallow).not.toBeCloseTo(ratioDeep, 3);
+  });
+});
+
+describe('plantDisturbanceAngle', () => {
+  it('is zero at or beyond the disturbance radius', () => {
+    expect(plantDisturbanceAngle(0.2, DISTURBANCE_RADIUS)).toBe(0);
+    expect(plantDisturbanceAngle(0.2, DISTURBANCE_RADIUS + 1)).toBe(0);
+  });
+
+  it('reaches the full DISTURBANCE_MAX_ANGLE right at distance 0', () => {
+    expect(Math.abs(plantDisturbanceAngle(0.2, 0))).toBeCloseTo(DISTURBANCE_MAX_ANGLE, 5);
+  });
+
+  it('grows as the fish gets closer', () => {
+    const far = Math.abs(plantDisturbanceAngle(0.2, DISTURBANCE_RADIUS * 0.8));
+    const near = Math.abs(plantDisturbanceAngle(0.2, DISTURBANCE_RADIUS * 0.2));
+    expect(near).toBeGreaterThan(far);
+  });
+
+  it('leans away from whichever side the fish is on', () => {
+    const fishOnRight = plantDisturbanceAngle(0.3, 0.1);
+    const fishOnLeft = plantDisturbanceAngle(-0.3, 0.1);
+    expect(Math.sign(fishOnRight)).toBe(-1);
+    expect(Math.sign(fishOnLeft)).toBe(1);
   });
 });

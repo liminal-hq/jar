@@ -19,9 +19,19 @@ import {
   HIDE_JITTER,
   HIDE_POINT,
   PLANT_BROADLEAF_POSITION,
+  PLANT_FRONT_RIGHT_POSITION,
+  PLANT_LEFT_OF_KEEP_POSITION,
   PLANT_SMALL_KELP_POSITION,
   PLANT_TALL_KELP_POSITION,
 } from './decorLayout';
+
+const ALL_PLANT_POSITIONS = [
+  PLANT_TALL_KELP_POSITION,
+  PLANT_BROADLEAF_POSITION,
+  PLANT_SMALL_KELP_POSITION,
+  PLANT_FRONT_RIGHT_POSITION,
+  PLANT_LEFT_OF_KEEP_POSITION,
+];
 
 function isInsideTank(point: { x: number; y: number; z: number }, margin = 0): boolean {
   return (
@@ -88,18 +98,14 @@ describe('hide point', () => {
 });
 
 describe('plant positions', () => {
-  it('all three sit inside the tank', () => {
-    expect(isInsideTank(PLANT_TALL_KELP_POSITION)).toBe(true);
-    expect(isInsideTank(PLANT_BROADLEAF_POSITION)).toBe(true);
-    expect(isInsideTank(PLANT_SMALL_KELP_POSITION)).toBe(true);
+  it('all five sit inside the tank', () => {
+    for (const plant of ALL_PLANT_POSITIONS) {
+      expect(isInsideTank(plant)).toBe(true);
+    }
   });
 
-  it('none of the three sit inside a castle collider box (they surround the castle, not just sit to one side of it)', () => {
-    for (const plant of [
-      PLANT_TALL_KELP_POSITION,
-      PLANT_BROADLEAF_POSITION,
-      PLANT_SMALL_KELP_POSITION,
-    ]) {
+  it('none of the five sit inside a castle collider box (they surround the castle, not just sit to one side of it)', () => {
+    for (const plant of ALL_PLANT_POSITIONS) {
       for (const box of CASTLE_COLLIDER_BOXES) {
         const boxWorldX = CASTLE_POSITION.x + box.position.x;
         const boxWorldY = CASTLE_POSITION.y + box.position.y;

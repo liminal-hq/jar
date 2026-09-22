@@ -1,9 +1,11 @@
-// Three swaying plant clusters — per-blade per-vertex bend, the same
+// Five swaying plant clusters — per-blade per-vertex bend, the same
 // technique `FishModel.tsx`'s veil tail uses (`bladeSwayAngle`'s own doc
 // comment for why a per-vertex bend beats a rigid hinge-pivot swing for
 // something as flexible as a plant blade). No colliders (§8.2's own
 // precedent — foliage is decoration, not something a critter needs to be
-// physically blocked by).
+// physically blocked by) — instead, a fish swimming close enough visibly
+// pushes a blade aside (`plantDisturbanceAngle`), which reads as the same
+// kind of interaction a real collider would give without needing one.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -12,6 +14,7 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
+import { useSteeringRegistry } from '../steering/SteeringSystem';
 import {
   createBroadBladeGeometry,
   createKelpBladeGeometry,
@@ -19,10 +22,12 @@ import {
 } from './decorGeometry';
 import {
   PLANT_BROADLEAF_POSITION,
+  PLANT_FRONT_RIGHT_POSITION,
+  PLANT_LEFT_OF_KEEP_POSITION,
   PLANT_SMALL_KELP_POSITION,
   PLANT_TALL_KELP_POSITION,
 } from './decorLayout';
-import { bladeSwayAngle } from './plantSway';
+import { bladeSwayAngle, plantDisturbanceAngle } from './plantSway';
 
 interface BladeSpec {
   kind: 'kelp' | 'broad';
@@ -60,8 +65,15 @@ const SMALL_KELP_BLADES: BladeSpec[] = [
  * per instance, same reason `FishModel.tsx`'s veil tail needs its own
  * clone rather than sharing one mutable geometry across fish), bends it
  * every frame around a random per-blade phase so a cluster's blades don't
- * sway in unison. */
-function Blade({ kind, colour, rotationDeg, scale }: BladeSpec) {
+ * sway in unison, plus an extra push from whichever registered fish is
+ * currently closest to the blade's own cluster (`plantDisturbanceAngle`). */
+function Blade({
+  kind,
+  colour,
+  rotationDeg,
+  scale,
+  clusterPosition,
+}: BladeSpec & { clusterPosition: { x: number; y: number; z: number } }) {
   const geometry = useMemo(
     () => (kind === 'kelp' ? createKelpBladeGeometry() : createBroadBladeGeometry()).clone(),
     [kind],
@@ -79,19 +91,39 @@ function Blade({ kind, colour, rotationDeg, scale }: BladeSpec) {
     return max;
   }, [restPositions]);
   const phase = useMemo(() => Math.random() * Math.PI * 2, []);
+  const registry = useSteeringRegistry();
 
   useFrame((state) => {
     if (!restPositions || bladeLength <= 0) return;
     const pos = geometry.attributes.position;
     if (!pos) return;
     const t = state.clock.elapsedTime;
+
+    // Nearest registered fish to this blade's own cluster, world-distance
+    // — cheap enough at this fish count (≤ population cap) to do per blade,
+    // per frame, no spatial index needed.
+    let nearestDistance = Infinity;
+    let nearestOffsetX = 0;
+    for (const fish of registry.values()) {
+      const fp = fish.vehicle.position;
+      const dx = fp.x - clusterPosition.x;
+      const dy = fp.y - clusterPosition.y;
+      const dz = fp.z - clusterPosition.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestOffsetX = dx;
+      }
+    }
+    const disturbance = plantDisturbanceAngle(nearestOffsetX, nearestDistance);
+
     for (let i = 0; i < restPositions.length; i += 3) {
       const x = restPositions[i]!;
       const y = restPositions[i + 1]!;
       const z = restPositions[i + 2]!;
       const h = -y; // height from the base — the blade grows toward -y.
       const tt = THREE.MathUtils.clamp(h / bladeLength, 0, 1);
-      const angle = bladeSwayAngle(tt, t, phase);
+      const angle = bladeSwayAngle(tt, t, phase) + tt * disturbance;
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
       // Rotates the (height, width) pair around the base — the same
@@ -140,6 +172,7 @@ function Cluster({
           colour={b.colour}
           rotationDeg={b.rotationDeg}
           scale={b.scale}
+          clusterPosition={position}
         />
       ))}
     </group>
@@ -152,6 +185,8 @@ export function Plants() {
       <Cluster position={PLANT_TALL_KELP_POSITION} blades={TALL_KELP_BLADES} />
       <Cluster position={PLANT_BROADLEAF_POSITION} blades={BROADLEAF_BLADES} />
       <Cluster position={PLANT_SMALL_KELP_POSITION} blades={SMALL_KELP_BLADES} />
+      <Cluster position={PLANT_FRONT_RIGHT_POSITION} blades={BROADLEAF_BLADES} />
+      <Cluster position={PLANT_LEFT_OF_KEEP_POSITION} blades={SMALL_KELP_BLADES} />
     </>
   );
 }

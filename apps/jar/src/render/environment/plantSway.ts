@@ -27,3 +27,23 @@ export const SWAY_PHASE_LAG = 1.1;
 export function bladeSwayAngle(tt: number, t: number, phase: number): number {
   return tt * SWAY_AMPLITUDE * Math.sin(t * SWAY_FREQUENCY + phase + tt * SWAY_PHASE_LAG);
 }
+
+/** How close a fish has to get to a plant before it visibly pushes a blade
+ * aside, and the biggest extra bend it can add on top of the ambient
+ * current sway — large enough to read as "the fish just brushed past,"
+ * capped well short of folding a blade back on itself. */
+export const DISTURBANCE_RADIUS = 0.5;
+export const DISTURBANCE_MAX_ANGLE = 0.9;
+
+/** Extra bend from the nearest disturbing fish — 0 at or beyond
+ * `DISTURBANCE_RADIUS`, growing smoothly as the fish closes in, signed so
+ * the blade leans *away* from whichever side (`localOffsetX`) the fish is
+ * on. `Plants.tsx` scales this by the same `tt` the ambient sway uses, so a
+ * nearby fish still only visibly moves the blade's upper reach, not its
+ * rooted base. */
+export function plantDisturbanceAngle(localOffsetX: number, distance: number): number {
+  if (distance >= DISTURBANCE_RADIUS) return 0;
+  const closeness = 1 - Math.max(0, distance) / DISTURBANCE_RADIUS;
+  const direction = localOffsetX >= 0 ? -1 : 1;
+  return direction * closeness * DISTURBANCE_MAX_ANGLE;
+}

@@ -130,15 +130,22 @@ export const HIDE_POINT = {
 };
 export const HIDE_JITTER = { x: 0.2, y: 0.1, z: 0.1 };
 
-/** Plant cluster positions — spread around the castle rather than bunched
- * on one side, all clear of its collider footprint. All at floor height. */
-// Back-left anchor, clear of the castle's whole footprint (towers + roof
-// overhang reach roughly x = -1.63 on the castle's own left side).
+/** Plant cluster positions — five now, not three: the original three plus
+ * two new ones added around the castle rather than relocating any of the
+ * originals. All clear of the castle's collider footprint, all at floor
+ * height. */
+// Back-left anchor.
 export const PLANT_TALL_KELP_POSITION = { x: -2.5, y: FLOOR_TOP_Y, z: -0.9 };
-// Front-right, standing in front of (not overlapping — separated in z) the
-// right tower, clear of the airstone (~66% x per §8.1, ≈ +0.96 world).
-export const PLANT_BROADLEAF_POSITION = { x: 2.3, y: FLOOR_TOP_Y, z: 0.6 };
-// In the gap between the left tower and the keep's own left edge, pulled
-// forward of the castle's front face — reads as sitting just left of the
-// keep, in front of it.
-export const PLANT_SMALL_KELP_POSITION = { x: -0.9, y: FLOOR_TOP_Y, z: 0.25 };
+// Original spot — nudged from `-1.6` to `-2.0` so it still clears the
+// castle's roof overhang now that the castle itself grew wider.
+export const PLANT_BROADLEAF_POSITION = { x: -2.0, y: FLOOR_TOP_Y, z: 0.5 };
+// Original spot — nudged from `-1.0` to `-1.9` for the same reason.
+export const PLANT_SMALL_KELP_POSITION = { x: -1.9, y: FLOOR_TOP_Y, z: -0.3 };
+// New: front-right, standing in front of (not overlapping — separated in
+// z) the right tower, clear of the airstone (~66% x per §8.1, ≈ +0.96
+// world).
+export const PLANT_FRONT_RIGHT_POSITION = { x: 2.3, y: FLOOR_TOP_Y, z: 0.6 };
+// New: in the gap between the left tower and the keep's own left edge,
+// pulled forward of the castle's front face — reads as sitting just left
+// of the keep, in front of it.
+export const PLANT_LEFT_OF_KEEP_POSITION = { x: -0.9, y: FLOOR_TOP_Y, z: 0.25 };
