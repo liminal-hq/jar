@@ -22,15 +22,18 @@ import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
 
 import { useJarStore } from '../../domain/jarClient';
-import { TANK_DEPTH, TANK_HEIGHT, TANK_WIDTH } from '../physics/coordinates';
-
-const WALL_INSET = 0.15;
-const WALL_THICKNESS = 0.1;
+import {
+  TANK_DEPTH,
+  TANK_HEIGHT,
+  TANK_INNER_BOUNDS,
+  TANK_WIDTH,
+  WALL_THICKNESS,
+} from '../physics/coordinates';
 
 export function AquariumEnvironment() {
-  const halfW = TANK_WIDTH / 2 - WALL_INSET;
-  const halfH = TANK_HEIGHT / 2 - WALL_INSET;
-  const halfD = TANK_DEPTH / 2 - WALL_INSET;
+  const halfW = TANK_INNER_BOUNDS.x;
+  const halfH = TANK_INNER_BOUNDS.y;
+  const halfD = TANK_INNER_BOUNDS.z;
   const lightOn = useJarStore((s) => s.settings.light_on);
 
   return (

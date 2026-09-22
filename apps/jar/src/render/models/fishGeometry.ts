@@ -54,6 +54,31 @@ function extrude(shapes: THREE.Shape[], depth: number, bevel = 0.6): THREE.Buffe
  * attachment overlaps the body by ~4 units. */
 export const BODY_DEPTH = 16;
 
+/** Converts the SVG artwork's authored units (`viewBox="-170 -110 340 220"`)
+ * into world units — `FishModel.tsx` scales its whole root group by this
+ * (times life-stage scale), and `Fish.tsx` needs the same factor to size a
+ * collider that actually matches what gets rendered. */
+export const SVG_SCALE = 0.004;
+
+/** §6.7's modest fin scale-up for males, applied to the tail group only —
+ * shared here (not just local to `FishModel.tsx`) because `Fish.tsx`'s
+ * collider sizing needs to account for it too: a male's tail is the single
+ * largest thing on the model. */
+export const MALE_TAIL_SCALE = 1.2;
+
+/** Raw SVG-space distance from the model's local origin (0,0) to each tail
+ * shape's farthest point — read directly off `fish-svg/tail-*.svg`'s own
+ * path data (root at the shared `TAIL_PIVOT.x` = −60, tip beyond it). This
+ * is always the model's true bounding radius: further out than the nose
+ * (body's rightmost point, SVG x=100) in every fin type, and by a wide
+ * enough margin that a flat "nose vs. tail, take the max" isn't needed
+ * elsewhere — `Fish.tsx`'s collider sizing uses this directly. */
+export const TAIL_TIP_SVG_DISTANCE: Record<'Fan' | 'Forked' | 'Veil', number> = {
+  Fan: 127,
+  Forked: 114,
+  Veil: 151,
+};
+
 /** Hinge points, already converted into three.js's post-`extrude()`-flip
  * space (negate the SVG-authored y): tail pivot (−60,0), pectoral root
  * (52,10), mouth hinge (90,8). */

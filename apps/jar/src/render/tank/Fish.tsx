@@ -16,7 +16,8 @@ import { lifeStageScale } from '../../domain/simConstants';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
 import { FishModel } from '../models/FishModel';
-import { simPercentToWorld } from '../physics/coordinates';
+import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
+import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
 import { useSteeringRegistry } from '../steering/SteeringSystem';
 import { useFishSteering } from '../steering/useFishSteering';
 
@@ -26,8 +27,33 @@ import { useFishSteering } from '../steering/useFishSteering';
  * small, and a manual sphere sidesteps `colliders="hull"` entirely: its
  * automatic hull generation was producing a malformed collider from the
  * model's nested tail-pivot group, launching fish out of the tank on their
- * very first physics step. */
-const COLLIDER_RADIUS = 0.32;
+ * very first physics step.
+ *
+ * Sized from the tail tip, not the nose or body — `TAIL_TIP_SVG_DISTANCE`
+ * is always the model's farthest point from its own origin, further out
+ * than the nose in every fin type. A flat radius here (as this used to be)
+ * undersizes it for a male and/or a Veil-tailed fish badly enough that the
+ * tail visibly pokes through the glass or the sand while the RigidBody's
+ * centre, which is all a `BallCollider` actually constrains, stays legally
+ * inside — exactly the "fish swims through the wall" bug this fixes. */
+function colliderRadiusFor(critter: Critter): number {
+  const finType = critter.fin ?? 'Forked';
+  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
+  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale * lifeStageScale(critter.age_sec);
+}
+
+/** Same tail-tip sizing as `colliderRadiusFor`, but always at this fish's
+ * eventual adult/elder scale (`lifeStageScale` maxes out at `1`) rather
+ * than its current age. `favourite_spot` is rolled once at spawn and never
+ * revisited (`rust-core.md` §6.4), so the clearance reserved around it has
+ * to stay clear of whatever size this fish will grow into — a fry-sized
+ * reservation would leave an adult's much larger collider overlapping the
+ * wall by the time it actually arrives there. */
+function maxColliderRadiusFor(critter: Critter): number {
+  const finType = critter.fin ?? 'Forked';
+  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
+  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale;
+}
 
 interface FishProps {
   critter: Critter;
@@ -48,11 +74,24 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const registry = useSteeringRegistry();
 
+  // How much room this fish's eventual adult-sized collider (plus the wall
+  // collider's own half-thickness) needs reserved inside
+  // `TANK_INNER_BOUNDS` — see `simPercentToWorld`'s own comment for why
+  // mapping onto that bound alone still lets a fish's collider overlap the
+  // wall, and `maxColliderRadiusFor`'s own comment for why this has to be
+  // the fish's eventual size, not its size at spawn.
+  const spotClearance = useMemo(
+    () => WALL_THICKNESS / 2 + maxColliderRadiusFor(critter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const favouriteSpotWorld = useMemo(() => {
     const p = simPercentToWorld(
       critter.favourite_spot.x,
       critter.favourite_spot.y,
       critter.favourite_spot.z,
+      spotClearance,
     );
     return new YUKA.Vector3(p.x, p.y, p.z);
     // Favourite spot never changes after spawn (rust-core.md §6.4) — no
@@ -66,6 +105,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
         critter.favourite_spot.x,
         critter.favourite_spot.y,
         critter.favourite_spot.z,
+        spotClearance,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -136,7 +176,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       linearDamping={2.5}
       angularDamping={5}
     >
-      <BallCollider args={[COLLIDER_RADIUS * lifeStageScale(critter.age_sec)]} />
+      <BallCollider args={[colliderRadiusFor(critter)]} />
       <group
         onClick={(e) => {
           // Stops propagation to other intersected R3F objects, but not
