@@ -162,7 +162,7 @@ Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Veh
 
 ### 6.1 Base archetypes
 
-**As shipped, this diverges from the rigged/morph-target approach originally specified below** — no rigged GLTF asset pipeline exists, so the model is built entirely from hand-authored flat SVG silhouettes (`apps/jar/src/render/models/fish-svg/`), parsed with three.js's `SVGLoader` and extruded into thin 3D slabs (`fishGeometry.ts`). Body, dorsal, gill, mouth and pectoral are one silhouette each, extruded once and shared read-only across every fish instance; the `fin` gene (`SPEC.md` §5: `Fan | Forked | Veil`) selects which of three separately-authored tail silhouettes gets mounted at the tail pivot for a given fish — a geometry swap picked once at spawn, not a runtime blend, since the gene doesn't change after birth (`docs/architecture/rust-core.md` §6.1's "never re-rolled" genes). Body-shape variation (a real inherited gene, not yet built — see this repo's open PR2/PR3 plans) will extend this same pattern with additional body silhouettes, each carrying its own attachment-point table for where the shared tail/dorsal/pectoral/gill/mouth pieces weld on.
+**As shipped, this diverges from the rigged/morph-target approach originally specified below** — no rigged GLTF asset pipeline exists, so the model is built entirely from hand-authored flat SVG silhouettes (`apps/jar/src/render/models/fish-svg/`), parsed with three.js's `SVGLoader` and extruded into thin 3D slabs (`fishGeometry.ts`). Body, dorsal, gill, mouth and pectoral are one silhouette each, extruded once and shared read-only across every fish instance; the `fin` gene (`SPEC.md` §5: `Fan | Forked | Veil`) selects which of three separately-authored tail silhouettes gets mounted at the tail pivot for a given fish — a geometry swap picked once at spawn, not a runtime blend, since the gene doesn't change after birth (`docs/architecture/rust-core.md` §6.1's "never re-rolled" genes). There is no body-shape gene (§6.7 is explicit that sex dimorphism is deliberately not a body-shape change either) — one shared body silhouette covers every fish.
 
 ### 6.2 Rig
 
@@ -298,6 +298,8 @@ Explicitly **not** trying to be clever about long-run resource cost here — per
 ---
 
 ## 12. Asset pipeline
+
+Fish (§6.1) no longer follow this pipeline — they shipped as hand-authored flat SVG silhouettes, extruded at runtime (`fishGeometry.ts`), with no rigged asset or generator step involved. This section now applies only to the gecko (§7), which is still unbuilt and still specified as a real bone rig, and to any future critter that needs one.
 
 1. **Generate base meshes.** Text-to-3D or image-to-3D (using the existing flat-vector critter art from `Jar.dc.html`'s `svg()` function as a style reference image) via Meshy or Tripo3D. Tripo3D's built-in stylized presets and auto-rig/auto-animate are the better fit for this project's look and for skipping manual rigging; Meshy's topology/remesh controls are the better fit if hand-rigging in Blender afterward. Either is viable — pick one per model rather than mixing tools mid-pipeline for the same asset.
 2. **Rig.** Use the generator's auto-rig where available; otherwise hand-rig in Blender against the bone specs in §6.2/§7.
