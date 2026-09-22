@@ -3,10 +3,11 @@
 // from the same SVG-extrusion technique `FishModel.tsx` uses. Static
 // collision follows §5.1's convention for tank furniture, split into
 // several boxes (not one solid footprint) specifically to leave the
-// doorway clear — see `decorLayout.ts`'s `CASTLE_COLLIDER_BOXES`. An
-// overhead spotlight (deliberately requested, not one of §10.1's generic
-// fill/rim lights) picks it out from the base ambient/directional pair —
-// anything swimming through its cone gets lit the same way, for free.
+// doorway clear — see `decorLayout.ts`'s `CASTLE_COLLIDER_BOXES`. A small
+// ground-level uplighting fixture prop (deliberately requested, not one
+// of §10.1's generic fill/rim lights) picks it out from the base
+// ambient/directional pair — anything swimming through its cone gets lit
+// the same way, for free.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -102,14 +103,18 @@ function LightProp({ position }: { position: [number, number, number] }) {
   );
 }
 
-const LIGHT_PROP_POSITION: [number, number, number] = [0.55, 0.03, 0.42];
+// Left of the door, not right — the right side is where `SandFloor.tsx`'s
+// rock sits (`decor-svg/sand-top.svg`'s own "near the rock" note), and a
+// first pass here sat close enough to it to read as swallowed by its
+// shadow rather than as its own distinct fixture.
+const LIGHT_PROP_POSITION: [number, number, number] = [-0.55, 0.03, 0.42];
 
 /** A ground-level uplight, genuinely originating from `LightProp`'s bulb
  * and aimed up the wall — not a light floating in space with no visible
  * source. `target` is a plain `Object3D` rather than a position tuple
  * because `SpotLight`'s own `target` property must be a scene object, not
  * a vector; set imperatively once both light and target refs exist. */
-function CastleSpotlight() {
+function GroundUplight() {
   const lightRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
   useEffect(() => {
@@ -131,7 +136,11 @@ function CastleSpotlight() {
         castShadow
         shadow-mapSize={[512, 512]}
       />
-      <object3D ref={targetRef} position={[0.35, 1.5, 0.29]} />
+      {/* x=-0.7, not -0.35 — the doorway itself is clear space out to
+          ±CASTLE_DOOR_HALF_WIDTH (0.5), so a target inside that span aims
+          into the opening rather than the wall beside it; -0.7 lands on
+          the actual left wall segment, above the lamp. */}
+      <object3D ref={targetRef} position={[-0.7, 1.4, 0.29]} />
     </>
   );
 }
@@ -187,7 +196,7 @@ export function Castle() {
       <ArrowSlit position={[-0.55, 1.0, 0.29]} />
       <ArrowSlit position={[0.55, 1.0, 0.29]} />
       <Flag position={[0, 2.0, 0]} />
-      <CastleSpotlight />
+      <GroundUplight />
       <Tower x={-CASTLE_TOWER_OFFSET} />
       <Tower x={CASTLE_TOWER_OFFSET} />
 

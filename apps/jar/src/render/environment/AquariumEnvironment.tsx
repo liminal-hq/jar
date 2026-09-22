@@ -32,6 +32,7 @@ import {
   WALL_THICKNESS,
 } from '../physics/coordinates';
 import { Castle } from './Castle';
+import { LedLightStrip } from './LedLightStrip';
 import { Plants } from './Plants';
 import { SandFloor } from './SandFloor';
 
@@ -71,19 +72,23 @@ export function AquariumEnvironment() {
       </mesh>
 
       {/* Surface highlight (§8.1's last bullet): a soft light band toggled
-          by the drawer's Light control, standing in for a light-shaft
-          effect without a real volumetric light. */}
+          by the drawer's Light control, plus the real hood-mounted fixture
+          (`LedLightStrip`) that band stands in front of — a fish tank's
+          actual light source, not just a cosmetic glow. */}
       {lightOn && (
-        <mesh position={[0, halfH - 0.15, 0]} raycast={() => null}>
-          <planeGeometry args={[TANK_WIDTH, 0.3]} />
-          <meshBasicMaterial
-            color="#ffffff"
-            transparent
-            opacity={0.35}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
+        <>
+          <mesh position={[0, halfH - 0.15, 0]} raycast={() => null}>
+            <planeGeometry args={[TANK_WIDTH, 0.3]} />
+            <meshBasicMaterial
+              color="#ffffff"
+              transparent
+              opacity={0.35}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+          <LedLightStrip />
+        </>
       )}
 
       {/* Invisible containment box — six thin fixed colliders rather than
