@@ -122,6 +122,22 @@ export const CASTLE_COLLIDER_BOXES: Array<{
   },
 ];
 
+/** A safe corridor through the doorway opening — `CastleAvoidanceBehaviour`
+ * exempts a fish inside this volume from the flanking wall-segment/lintel
+ * push entirely, rather than merely reducing it. Without this, the
+ * anticipatory margin those boxes expand by (up to ~0.9 world units for a
+ * large fish, `useFishSteering.ts`'s `maxColliderRadius + CONTAINMENT_BUFFER`)
+ * comfortably exceeds `CASTLE_DOOR_HALF_WIDTH` (0.65), so the two walls'
+ * expanded zones overlap *past the doorway's own centre* — a fish
+ * approaching head-on would get deflected sideways before ever reaching
+ * the opening the door was specifically sized to let it through. Matches
+ * the door's real clear opening in x/y; z is generous enough to cover both
+ * the approach from outside and `HIDE_POINT` behind it. */
+export const CASTLE_DOORWAY_CORRIDOR = {
+  position: { x: 0, y: CASTLE_DOOR_HEIGHT / 2, z: 0 },
+  halfExtents: { x: CASTLE_DOOR_HALF_WIDTH, y: CASTLE_DOOR_HEIGHT / 2, z: 1.2 },
+};
+
 /** Where a hiding fish paths to — inside the doorway's own footprint, well
  * behind the keep's front face, so reaching it means genuinely passing
  * through the opening (or around the castle's shallow sides — the

@@ -1,0 +1,127 @@
+// Anticipatory avoidance for the castle's static collision geometry —
+// steers a vehicle away once it's within `margin` of any of
+// `CASTLE_COLLIDER_BOXES` (`decorLayout.ts`), the same anticipatory
+// philosophy `TankContainmentBehaviour` uses for the glass: without this,
+// `WanderBehavior` has no notion the castle exists at all, and a fish
+// committed to wandering straight into it just fights its own physical
+// collision response every frame. Video-confirmed as the dominant cause of
+// fish appearing to shake/spin in place near the castle: a fish can get
+// pinned against a tower or the doorway indefinitely (one traced across a
+// full recording never moved more than ~1% of the tank's width) while
+// `WanderBehavior` keeps handing it a fresh, obstacle-blind heading every
+// frame.
+//
+// (c) Copyright 2026 Scott Morris
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+import * as YUKA from 'yuka';
+
+import {
+  CASTLE_COLLIDER_BOXES,
+  CASTLE_DOORWAY_CORRIDOR,
+  CASTLE_POSITION,
+} from '../environment/decorLayout';
+
+/** Same rationale as `TankContainmentBehaviour`'s own `STRENGTH` — has to
+ * be able to out-vote `WanderBehavior`'s clamped force
+ * (`vehicle.maxForce = 3`, `useFishSteering.ts`) at full penetration. */
+const STRENGTH = 4;
+
+/** A single box's push on a point within `margin` of it, or a zero vector
+ * if the point isn't within `margin` on *every* axis — checking axes
+ * independently (as `tankContainmentBehaviour.ts`'s `pushAxis` does for
+ * the tank's infinite walls) would wrongly push a point that merely shares
+ * this box's height or depth from clear across the tank. Once genuinely
+ * near the box, the push goes out along whichever axis is closest to the
+ * box's real surface (the shortest way clear) — the same "nearest face"
+ * idea `decorLayout.ts`'s `keepClearOfCastle` uses for a one-off point
+ * correction, applied here as a continuous, smoothly-graded force (0 at
+ * `margin` out from the surface, `strength` right at it) instead of a
+ * discrete snap. */
+export function pushFromBox(
+  position: { x: number; y: number; z: number },
+  boxCenter: { x: number; y: number; z: number },
+  halfExtents: { x: number; y: number; z: number },
+  margin: number,
+  strength: number,
+): { x: number; y: number; z: number } {
+  const dx = position.x - boxCenter.x;
+  const dy = position.y - boxCenter.y;
+  const dz = position.z - boxCenter.z;
+  const ex = halfExtents.x + margin;
+  const ey = halfExtents.y + margin;
+  const ez = halfExtents.z + margin;
+  if (Math.abs(dx) >= ex || Math.abs(dy) >= ey || Math.abs(dz) >= ez) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  const penetration = {
+    x: ex - Math.abs(dx),
+    y: ey - Math.abs(dy),
+    z: ez - Math.abs(dz),
+  };
+  const minPenetration = Math.min(penetration.x, penetration.y, penetration.z);
+  const magnitude = (Math.min(minPenetration, margin) / margin) * strength;
+
+  if (minPenetration === penetration.x) return { x: Math.sign(dx || 1) * magnitude, y: 0, z: 0 };
+  if (minPenetration === penetration.y) return { x: 0, y: Math.sign(dy || 1) * magnitude, z: 0 };
+  return { x: 0, y: 0, z: Math.sign(dz || 1) * magnitude };
+}
+
+/** Whether `position` falls inside a fixed (non-margin-expanded) box — used
+ * for `CASTLE_DOORWAY_CORRIDOR`'s hard exemption, as opposed to
+ * `pushFromBox`'s margin-expanded, graded check. */
+export function isInsideBox(
+  position: { x: number; y: number; z: number },
+  boxCenter: { x: number; y: number; z: number },
+  halfExtents: { x: number; y: number; z: number },
+): boolean {
+  return (
+    Math.abs(position.x - boxCenter.x) < halfExtents.x &&
+    Math.abs(position.y - boxCenter.y) < halfExtents.y &&
+    Math.abs(position.z - boxCenter.z) < halfExtents.z
+  );
+}
+
+export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
+  /** Same margin-derivation contract as `TankContainmentBehaviour` — the
+   * caller (`useFishSteering.ts`) passes this fish's own collider radius
+   * plus a buffer, so the turn away happens before the body itself is
+   * close enough to actually touch the castle. */
+  constructor(private readonly margin: number) {
+    super();
+  }
+
+  calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
+    force.x = 0;
+    force.y = 0;
+    force.z = 0;
+    const position = { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z };
+
+    // A fish lined up with the doorway is meant to be there — exempt it
+    // entirely rather than merely softening the push, or it still gets
+    // deflected before threading the actual opening (see
+    // `CASTLE_DOORWAY_CORRIDOR`'s own comment).
+    const corridorCenter = {
+      x: CASTLE_POSITION.x + CASTLE_DOORWAY_CORRIDOR.position.x,
+      y: CASTLE_POSITION.y + CASTLE_DOORWAY_CORRIDOR.position.y,
+      z: CASTLE_POSITION.z + CASTLE_DOORWAY_CORRIDOR.position.z,
+    };
+    if (isInsideBox(position, corridorCenter, CASTLE_DOORWAY_CORRIDOR.halfExtents)) {
+      return force;
+    }
+
+    for (const box of CASTLE_COLLIDER_BOXES) {
+      const boxCenter = {
+        x: CASTLE_POSITION.x + box.position.x,
+        y: CASTLE_POSITION.y + box.position.y,
+        z: CASTLE_POSITION.z + box.position.z,
+      };
+      const push = pushFromBox(position, boxCenter, box.halfExtents, this.margin, STRENGTH);
+      force.x += push.x;
+      force.y += push.y;
+      force.z += push.z;
+    }
+    return force;
+  }
+}
