@@ -11,12 +11,18 @@
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
 
-/** How close a chaser has to get to its target before the chase ends
- * "caught," rather than timing out (`CHASE_MAX_SEC`, `Fish.tsx`) — chosen
- * near `BASE_SEPARATION_RADIUS` (`steeringParams.ts`) so the chase concludes
- * right around where separation would start pushing the two fish apart
- * anyway, instead of fighting it. */
-export const CHASE_CAUGHT_DISTANCE = 0.7;
+/** How close a chaser's collider surface has to get to its target's before
+ * the chase ends "caught," rather than timing out (`CHASE_MAX_SEC`,
+ * `Fish.tsx`) — a gap between the two `BallCollider`s, not a raw
+ * centre-to-centre distance: an adult pair's colliders (`Fish.tsx`'s
+ * `colliderRadiusFor`, up to ~0.72 each for a male Veil) physically can't
+ * get their centres closer than the sum of both radii, so a flat
+ * centre-distance threshold this small could never trigger for any adult
+ * pair. Chosen small — this is "close enough to count as touching," not a
+ * generous catch radius; the chase concludes right around actual contact,
+ * which is also roughly where `BASE_SEPARATION_RADIUS`
+ * (`steeringParams.ts`) would start pushing the two fish apart anyway. */
+export const CHASE_CAUGHT_SURFACE_GAP = 0.15;
 
 /** How far away a tankmate can be and still be considered a chase target —
  * a fish across the whole tank shouldn't suddenly beeline for one it can
@@ -26,6 +32,18 @@ export const CHASE_TARGET_RADIUS = 2.5;
 /** A chase that hasn't caught its target by this long gives up — keeps a
  * burst reading as a short, lively moment rather than a sustained sprint. */
 export const CHASE_MAX_SEC = 5;
+
+/** How long a fish keeps excluding its previous chase target
+ * (`selectChaseTarget`'s `excludedId`) after a chase ends, before that
+ * exclusion clears — a brief anti-ping-pong cooldown, not a permanent ban.
+ * In a two-fish tank especially, never clearing this would make the one
+ * possible chase target permanently ineligible after the first chase,
+ * turning the advertised occasional behaviour into a one-shot. Comfortably
+ * longer than `CHASE_MAX_SEC` so a fish doesn't immediately re-target the
+ * tankmate it just gave up on, comfortably shorter than the 8-15s roll
+ * interval (`Fish.tsx`'s `ROLL_MIN_MS`/`ROLL_MAX_MS`) so the exclusion is
+ * usually gone well before the next roll that could act on it. */
+export const CHASE_EXCLUSION_COOLDOWN_SEC = 10;
 
 const LOW_MOOD_THRESHOLD = 33;
 const HIGH_MOOD_THRESHOLD = 85;

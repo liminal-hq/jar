@@ -25,7 +25,8 @@ import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
 import {
   burstChanceFor,
   burstMultiplierFor,
-  CHASE_CAUGHT_DISTANCE,
+  CHASE_CAUGHT_SURFACE_GAP,
+  CHASE_EXCLUSION_COOLDOWN_SEC,
   CHASE_MAX_SEC,
   chaseChanceFor,
   rampBurstMultiplier,
@@ -185,6 +186,10 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // `burstMulRef` is the current multiplier on top of `maxSpeedFor(energy)`.
   const chaseTargetIdRef = useRef<CritterId | null>(null);
   const lastChasedIdRef = useRef<CritterId | null>(null);
+  // Time since `lastChasedIdRef` was last set — once it passes
+  // `CHASE_EXCLUSION_COOLDOWN_SEC`, the exclusion clears (see that
+  // constant's own comment for why this can't be permanent).
+  const lastChasedElapsedRef = useRef(0);
   const chaseElapsedRef = useRef(0);
   const burstMulRef = useRef(1);
   // The ceiling multiplier the *current* burst (chase or spontaneous) is
@@ -235,6 +240,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       isHeadingActive: false,
       getDebugAnim: () => debugAnimRef.current,
       hue: critter.hue,
+      getColliderRadius: () => colliderRadiusFor(critter),
     });
     return () => {
       registry.delete(critter.id);
@@ -299,13 +305,27 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       }
     }
 
+    if (lastChasedIdRef.current !== null) {
+      lastChasedElapsedRef.current += delta;
+      if (lastChasedElapsedRef.current > CHASE_EXCLUSION_COOLDOWN_SEC) {
+        lastChasedIdRef.current = null;
+      }
+    }
+
     if (modeRef.current === 'chasing') {
       chaseElapsedRef.current += delta;
       const target =
         chaseTargetIdRef.current !== null ? registry.get(chaseTargetIdRef.current) : undefined;
+      // Surface gap, not raw centre distance — two adult colliders
+      // physically can't get their centres closer than the sum of both
+      // radii (`CHASE_CAUGHT_SURFACE_GAP`'s own comment), so subtracting
+      // both out first is what makes "caught" reachable at every fish size.
       const caught =
         target !== undefined &&
-        steering.vehicle.position.distanceTo(target.vehicle.position) < CHASE_CAUGHT_DISTANCE;
+        steering.vehicle.position.distanceTo(target.vehicle.position) -
+          colliderRadiusFor(critter) -
+          target.getColliderRadius() <
+          CHASE_CAUGHT_SURFACE_GAP;
       const targetInvalid = target === undefined || target.getMode() !== 'active';
       if (caught || targetInvalid || chaseElapsedRef.current > CHASE_MAX_SEC) {
         // The evader is deliberately left assigned — `pursuit.weight` is
@@ -313,6 +333,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
         // behavior with a stale evader is harmless; it's just overwritten
         // the next time this fish starts a chase.
         lastChasedIdRef.current = chaseTargetIdRef.current;
+        lastChasedElapsedRef.current = 0;
         chaseTargetIdRef.current = null;
         setMode('active');
       }

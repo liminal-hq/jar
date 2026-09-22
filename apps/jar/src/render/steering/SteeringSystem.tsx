@@ -68,6 +68,11 @@ export interface RegisteredFish {
   /** `Critter.hue`, 0-360 — never changes after spawn, so a plain field
    * rather than a getter. Feeds the fish monitor window's map. */
   hue: number;
+  /** `Fish.tsx`'s `colliderRadiusFor(critter)` — a getter, not a plain
+   * field, since it scales with life-stage and so changes as the fish
+   * grows. Lets another fish's chase-catch check (`Fish.tsx`) account for
+   * this fish's actual current collider size, not just its own. */
+  getColliderRadius: () => number;
 }
 
 type Registry = Map<number, RegisteredFish>;

@@ -26,8 +26,9 @@ export const MODE_WEIGHTS: Record<FishMotionMode, ModeWeights> = {
   settled: { wander: 0, separation: 0, arrive: 0, pursuit: 0 },
   // A chase is a committed beeline, not a meander — wander off. Separation
   // stays on to protect third-party fish the chaser passes; it doesn't fight
-  // pursuit near the target because `CHASE_CAUGHT_DISTANCE` (`chaseParams.ts`)
-  // ends the chase right around where separation would start pushing back.
+  // pursuit near the target because `CHASE_CAUGHT_SURFACE_GAP`
+  // (`chaseParams.ts`) ends the chase right around where separation would
+  // start pushing back.
   chasing: { wander: 0, separation: 1, arrive: 0, pursuit: 1 },
 };
 
