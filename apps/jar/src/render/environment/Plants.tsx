@@ -85,13 +85,26 @@ function Blade({
   const bladeLength = useMemo(() => {
     if (!restPositions) return 0;
     let max = 0;
+    // `svgExtrude.ts`'s `extrude()` ends with `scale(1, -1, 1)` (SVG's
+    // downward Y vs three.js's upward Y), so a blade authored tip-up in
+    // SVG space (tip at negative Y) ends up tip-at-*positive*-Y here —
+    // the base sits at ~0, not the tip. Measuring `-restPositions[i+1]`
+    // (as if the tip were still at negative Y) silently maxed out at the
+    // wrong end, collapsing `bladeLength` to a hair's width and disabling
+    // sway/disturbance on every blade despite the `bladeLength <= 0`
+    // guard below never actually tripping.
     for (let i = 0; i < restPositions.length; i += 3) {
-      max = Math.max(max, -restPositions[i + 1]!);
+      max = Math.max(max, restPositions[i + 1]!);
     }
     return max;
   }, [restPositions]);
   const phase = useMemo(() => Math.random() * Math.PI * 2, []);
   const registry = useSteeringRegistry();
+  // The blade's own world-space height above its cluster's floor-level
+  // anchor — `bladeLength` is measured in the mesh's local (pre-transform)
+  // units, so it needs the same scale the `<mesh>` below applies to reach
+  // world units.
+  const worldBladeHeight = bladeLength * scale * DECOR_SVG_SCALE;
 
   useFrame((state) => {
     if (!restPositions || bladeLength <= 0) return;
@@ -99,15 +112,23 @@ function Blade({
     if (!pos) return;
     const t = state.clock.elapsedTime;
 
-    // Nearest registered fish to this blade's own cluster, world-distance
-    // — cheap enough at this fish count (≤ population cap) to do per blade,
-    // per frame, no spatial index needed.
+    // Nearest registered fish to this blade, world-distance — measured to
+    // the closest point on the blade's own vertical extent (base to tip),
+    // not just its floor-level cluster anchor, so a fish hovering near a
+    // tall blade's tip still reads as close even though it is far above
+    // the anchor point itself. Cheap enough at this fish count (≤
+    // population cap) to do per blade, per frame, no spatial index needed.
     let nearestDistance = Infinity;
     let nearestOffsetX = 0;
     for (const fish of registry.values()) {
       const fp = fish.vehicle.position;
+      const closestY = THREE.MathUtils.clamp(
+        fp.y,
+        clusterPosition.y,
+        clusterPosition.y + worldBladeHeight,
+      );
       const dx = fp.x - clusterPosition.x;
-      const dy = fp.y - clusterPosition.y;
+      const dy = fp.y - closestY;
       const dz = fp.z - clusterPosition.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (distance < nearestDistance) {
@@ -121,7 +142,7 @@ function Blade({
       const x = restPositions[i]!;
       const y = restPositions[i + 1]!;
       const z = restPositions[i + 2]!;
-      const h = -y; // height from the base — the blade grows toward -y.
+      const h = y; // height from the base — post-flip, the blade grows toward +y.
       const tt = THREE.MathUtils.clamp(h / bladeLength, 0, 1);
       const angle = bladeSwayAngle(tt, t, phase) + tt * disturbance;
       const cos = Math.cos(angle);
@@ -131,7 +152,7 @@ function Blade({
       // rotation, remapped to this blade's own long axis (§6.6).
       const newH = h * cos - x * sin;
       const newX = h * sin + x * cos;
-      pos.setXYZ(i / 3, newX, -newH, z);
+      pos.setXYZ(i / 3, newX, newH, z);
     }
     pos.needsUpdate = true;
     geometry.computeVertexNormals();
