@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities granted to every Jar window — the tank plus the critter card, family tree and setup windows created at runtime (SPEC.md §2).",
-  "windows": ["tank", "critter-card", "family-tree", "setup", "dev-settings"],
+  "windows": ["tank", "critter-card", "family-tree", "setup", "dev-settings", "fish-monitor"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
