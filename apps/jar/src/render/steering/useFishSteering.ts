@@ -39,10 +39,17 @@ const WANDER_DISTANCE = 1.6;
  * (`SteeringSystem.tsx`) then smooths whatever's left. */
 const MAX_STEERING_FORCE = 3;
 
+/** Extra room beyond a fish's own collider radius before the containment
+ * push starts — not just enough to clear the glass at zero margin
+ * remaining, but enough that the fish has room to actually complete the
+ * turn away from the wall before its collider would reach it. */
+const CONTAINMENT_BUFFER = 0.2;
+
 export function useFishSteering(
   personality: Personality,
   livingPopulation: number,
   favouriteSpotWorld: YUKA.Vector3,
+  maxColliderRadius: number,
 ) {
   const params = useMemo(
     () => steeringParamsFor(personality, livingPopulation),
@@ -63,7 +70,7 @@ export function useFishSteering(
 
     const separation = new YUKA.SeparationBehavior();
     separation.weight = MODE_WEIGHTS.active.separation;
-    const containment = new TankContainmentBehaviour();
+    const containment = new TankContainmentBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
 
     const arrive = new YUKA.ArriveBehavior(favouriteSpotWorld, 3, 0.3);
     arrive.weight = MODE_WEIGHTS.active.arrive;
@@ -74,16 +81,23 @@ export function useFishSteering(
     // (cheap for a handful of fish); see `rampWeights`'s comment for why
     // that's the point.
 
+    // `containment` goes first: Yuka's `SteeringManager` accumulates each
+    // behaviour's force in insertion order and stops once the running total
+    // already reaches `vehicle.maxForce` — added last (as this used to be),
+    // a fish committed to wandering straight at the glass could exhaust the
+    // whole force budget on `wander`/`separation` before containment ever
+    // got a chance to contribute, letting it collide and jitter against the
+    // glass despite its own strength nominally out-voting the others.
+    vehicle.steering.add(containment);
     vehicle.steering.add(wander);
     vehicle.steering.add(separation);
-    vehicle.steering.add(containment);
     vehicle.steering.add(arrive);
 
     return { vehicle, wander, separation, containment, arrive };
-    // Created once per mounted fish instance; personality/params changes
-    // mid-life aren't expected (a critter's personality never changes
-    // after spawn per SPEC.md §5), so this intentionally doesn't react to
-    // `params` changing.
+    // Created once per mounted fish instance; personality/params/
+    // maxColliderRadius changes mid-life aren't expected (a critter's
+    // personality/fin/sex never change after spawn per SPEC.md §5), so this
+    // intentionally doesn't react to any of them changing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

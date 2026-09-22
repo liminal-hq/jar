@@ -48,11 +48,14 @@ function colliderRadiusFor(critter: Critter): number {
 
 /** Same tail-tip sizing as `colliderRadiusFor`, but always at this fish's
  * eventual adult/elder scale (`lifeStageScale` maxes out at `1`) rather
- * than its current age. `favourite_spot` is rolled once at spawn and never
- * revisited (`rust-core.md` §6.4), so the clearance reserved around it has
- * to stay clear of whatever size this fish will grow into — a fry-sized
- * reservation would leave an adult's much larger collider overlapping the
- * wall by the time it actually arrives there. */
+ * than its current age — used anywhere the result gets fixed once at
+ * spawn/mount and can't react to the fish growing later: `spotClearance`
+ * below (`favourite_spot` is rolled once at spawn and never revisited,
+ * `rust-core.md` §6.4, so the clearance reserved around it has to stay
+ * clear of whatever size this fish will grow into) and `useFishSteering`'s
+ * containment margin (fixed once at mount). A fry-sized reservation would
+ * leave an adult's much larger collider overlapping the wall/glass by the
+ * time it actually gets there. */
 function maxColliderRadiusFor(critter: Critter): number {
   const finType = critter.fin ?? 'Forked';
   const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
@@ -124,7 +127,21 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     [],
   );
 
-  const steering = useFishSteering(critter.personality, livingPopulation, favouriteSpotWorld);
+  // Fixed once at spawn, same rationale as `favouriteSpotWorld`/
+  // `spawnPosition` above — this fish's `fin`/`sex` never change, so its
+  // eventual max collider size doesn't either.
+  const maxColliderRadius = useMemo(
+    () => maxColliderRadiusFor(critter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const steering = useFishSteering(
+    critter.personality,
+    livingPopulation,
+    favouriteSpotWorld,
+    maxColliderRadius,
+  );
 
   const simNight = useJarStore((s) =>
     isNight(s.simSeconds, s.settings.simulation_speed, new Date().getHours()),

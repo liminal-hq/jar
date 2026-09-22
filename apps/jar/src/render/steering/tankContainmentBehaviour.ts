@@ -14,12 +14,6 @@ import * as YUKA from 'yuka';
 
 import { TANK_INNER_BOUNDS } from '../physics/coordinates';
 
-/** How far from a wall the push starts — comfortably wider than a fish's
- * own collider radius (`Fish.tsx`'s `colliderRadiusFor`, up to ~0.72 for a
- * male Veil-tailed adult) so the turn happens before the body itself is
- * ever close enough to touch the glass. */
-const MARGIN = 0.6;
-
 /** Must be able to out-vote `WanderBehavior`'s own clamped force
  * (`vehicle.maxForce = 3`, `useFishSteering.ts`) at full penetration, or a
  * fish committed to wandering straight at the glass would still win. */
@@ -39,10 +33,21 @@ function pushAxis(position: number, bound: number, margin: number, strength: num
 }
 
 export class TankContainmentBehaviour extends YUKA.SteeringBehavior {
+  /** How far from a wall the push starts — the caller (`useFishSteering.ts`)
+   * derives this from the specific fish's own collider radius plus a
+   * buffer, so the turn happens before the body itself is ever close
+   * enough to touch the glass. A flat margin here used to undersize this
+   * badly for a male Veil-tailed adult (~0.72 radius against a 0.6
+   * margin), letting exactly the wall contact/jitter this behaviour exists
+   * to prevent happen anyway. */
+  constructor(private readonly margin: number) {
+    super();
+  }
+
   calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
-    force.x = pushAxis(vehicle.position.x, TANK_INNER_BOUNDS.x, MARGIN, STRENGTH);
-    force.y = pushAxis(vehicle.position.y, TANK_INNER_BOUNDS.y, MARGIN, STRENGTH);
-    force.z = pushAxis(vehicle.position.z, TANK_INNER_BOUNDS.z, MARGIN, STRENGTH);
+    force.x = pushAxis(vehicle.position.x, TANK_INNER_BOUNDS.x, this.margin, STRENGTH);
+    force.y = pushAxis(vehicle.position.y, TANK_INNER_BOUNDS.y, this.margin, STRENGTH);
+    force.z = pushAxis(vehicle.position.z, TANK_INNER_BOUNDS.z, this.margin, STRENGTH);
     return force;
   }
 }
