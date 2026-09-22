@@ -27,7 +27,7 @@ Screen-by-screen window/UI inventory lives in `SCREENS.md`. Rendering, physics, 
 
 ## 3. Windows & screens
 
-See `SCREENS.md` for the full window/screen inventory (Tank, Setup, Critter card, Family tree, Mobile companion).
+See `SCREENS.md` for the full window/screen inventory (Tank, Setup, Critter card, Family tree, Mobile companion), plus two supplementary tooling windows reachable from the tank drawer (Dev, Fish monitor) that aren't part of the core product screens above but are always available, not gated behind a dev build.
 
 ## 4. Themes
 

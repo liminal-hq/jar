@@ -7,7 +7,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 - No OS chrome. Currently no separate frame bezel either — the glass tank enclosure itself (see `docs/architecture/3d-engine.md` §8.1) is the window's whole visual boundary, edge to edge, translucent through to the desktop behind it. The six frame treatments (`SPEC.md` §4) are built and Setup-selectable but not applied to the tank window while this is revisited.
 - Contents: backdrop (aquarium or terrarium), critters, bubbles/mist, night tint, status chip (bottom-left: `4 fish · 22:14 · asleep`), event toasts (top-centre, 4 s).
 - Click the tank → the **drawer** slides out from behind it, growing the window to the right. It overlaps the bezel by ~18 px so it reads as attached. When there isn't 180px of room to the right (the window is against the monitor's work-area edge, or maximized), it instead floats as an in-window overlay over part of the tank rather than resizing off-screen — the window can't reposition itself leftward on Wayland, so there's no other side to flip to. Clicking the tank again, or leaving the drawer idle, closes it.
-  - Drawer buttons (top → bottom): Light · Bubbles (aquarium) / Mist (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup · Exit (saves the jar, quits the app — essential on GNOME where there is no tray).
+  - Drawer buttons (top → bottom): Light · Bubbles (aquarium) / Mist (terrarium) · Sound · Gecko/Fish (mode switch) · Tree · Setup · Exit (saves the jar, quits the app — essential on GNOME where there is no tray) · Dev · Fish monitor (both always available, not gated behind a dev build — see "Dev / Fish monitor" below).
   - Drawer styling follows the **dialog theme**: Modern borrows the frame's colours (wood → dark wood, neon frame → magenta); Classic 98 → grey bevel panel with pushed-in buttons; Neon terminal → dark panel, magenta outline text.
 
 The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `docs/architecture/3d-engine.md`; only the bezel/drawer/toasts/status chip are flat HTML/CSS chrome around it.
@@ -38,6 +38,13 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
 - One row per generation (Gen 1, Gen 2 …). Nodes: portrait, name, stage. Passed critters: muted, `† remembered`.
 - Click node → focuses W2.
 - Title shows `N ever` (all critters that have lived in this mode).
+
+## Dev / Fish monitor
+
+Two supplementary tooling windows, reachable from the W1 drawer — not part of the original product spec, but always available (not gated behind a dev build) since both are self-contained and genuinely useful for a curious owner, not just for tuning.
+
+- **Dev** — checkboxes for two `localStorage`-backed debug overlays (mouse event capture, live fish position capture), each showing its own live panel inline while enabled. Purely local state, no effect on the jar itself.
+- **Fish monitor** — a live table plus top-down/front maps of every fish's steering/animation state (mode, resting, speed, turn rate). A Day/night radio group overrides the tank's real day/night clock while the window is open, resetting to Auto as soon as it closes so it never leaves the jar's own clock stuck.
 
 ## Mobile companion (Android)
 
