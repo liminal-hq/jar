@@ -140,6 +140,19 @@ const TURN_RATE_AMPLITUDE_CAP = 1.5;
  * `TURN_RATE_AMPLITUDE_CAP` this trims frequency by ~18%. */
 const TURN_RATE_FREQUENCY_DAMP_SCALE = 0.12;
 
+/** A separate, real-speed-derived signal from `excite`/`speedNorm`: how
+ * *steady* the fish's actual speed is right now, not how fast. Speeding up
+ * or slowing down is the hardest part of this whole animation to sell (the
+ * body's own physical response lags the steering target, `getSpeed`'s doc
+ * comment above) — so amplitude gets no bonus while genuinely accelerating,
+ * and a modest one once speed has actually settled, rather than reading
+ * uniformly lively regardless of whether the fish is mid-transition. Smoothed
+ * (not raw per-frame delta-speed) so it doesn't flicker frame to frame. */
+const ACCEL_SMOOTHING_RATE = 3;
+const ACCEL_STEADY_THRESHOLD = 0.15;
+const ACCEL_BUSY_THRESHOLD = 1.0;
+const STEADY_AMPLITUDE_BONUS = 0.25;
+
 /** How much a burst's `burstOverdrive` term (`chaseParams.ts`) can further
  * scale frequency/amplitude on top of everything above — halved from an
  * earlier pass for the same "less flutter, more swim" reason. */
@@ -203,6 +216,11 @@ export function FishModel({
   // invisible between polls. Decays fast enough to read as "just happened"
   // rather than a stuck reading.
   const peakTurnRateRef = useRef(0);
+
+  // Smoothed real-speed derivative, feeding the steady-state amplitude
+  // bonus above — see `ACCEL_SMOOTHING_RATE`'s doc comment.
+  const prevSpeedRef = useRef(0);
+  const smoothedAccelRef = useRef(0);
 
   // Idle/rest state — see the constants above for the hysteresis and blend
   // timing this drives.
@@ -378,6 +396,24 @@ export function FishModel({
     const overdrive = burstOverdrive(speed, baseCeiling);
     const { freqMul, ampMul } = animationMulFor(critter.personality, critter.mood);
     const cappedTurnRate = Math.min(turnRate, TURN_RATE_AMPLITUDE_CAP);
+
+    // How steady (vs. actively changing) the fish's real speed is right
+    // now — smoothed so an isolated frame's noise doesn't flicker the
+    // bonus below on and off.
+    const rawAccel = delta > 0 ? (speed - prevSpeedRef.current) / delta : 0;
+    prevSpeedRef.current = speed;
+    smoothedAccelRef.current = THREE.MathUtils.lerp(
+      smoothedAccelRef.current,
+      rawAccel,
+      1 - Math.exp(-ACCEL_SMOOTHING_RATE * delta),
+    );
+    const steadiness =
+      1 -
+      THREE.MathUtils.smoothstep(
+        Math.abs(smoothedAccelRef.current),
+        ACCEL_STEADY_THRESHOLD,
+        ACCEL_BUSY_THRESHOLD,
+      );
     const activeFrequency =
       THREE.MathUtils.lerp(
         CALM_FREQUENCY_BASE + CALM_FREQUENCY_SPEED_SCALE * speedNorm,
@@ -391,7 +427,8 @@ export function FishModel({
       (THREE.MathUtils.lerp(CALM_AMPLITUDE, EXCITED_AMPLITUDE, excite) +
         cappedTurnRate * TURN_RATE_AMPLITUDE_SCALE) *
       ampMul *
-      (1 + OVERDRIVE_AMPLITUDE_SCALE * overdrive);
+      (1 + OVERDRIVE_AMPLITUDE_SCALE * overdrive) *
+      (1 + STEADY_AMPLITUDE_BONUS * steadiness);
 
     // Micro-flick while resting: an instant bump back toward cruise
     // amplitude that the blend below immediately starts decaying again —
