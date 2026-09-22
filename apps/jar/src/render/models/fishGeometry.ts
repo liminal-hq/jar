@@ -128,6 +128,7 @@ export function wrapInPivot(
   hingeY: number,
 ): THREE.Group {
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
   const pivot = new THREE.Group();
   pivot.position.set(hingeX, hingeY, 0);
   pivot.add(mesh);

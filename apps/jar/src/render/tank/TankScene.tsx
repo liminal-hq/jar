@@ -41,6 +41,7 @@ export function TankScene() {
     <Canvas
       frameloop={frameloop}
       camera={{ fov: 38, position: [0, 2, 9] }}
+      shadows
       gl={{
         alpha: true,
         antialias: true,
@@ -55,7 +56,21 @@ export function TankScene() {
       }}
     >
       <ambientLight intensity={0.6} />
-      <directionalLight position={[2, 4, 3]} intensity={0.8} />
+      {/* `shadow-camera-*` sized to the tank's own ~6×4×3 volume (default
+          orthographic bounds are far more generous than this small a scene
+          needs, which only wastes shadow-map resolution on empty space). */}
+      <directionalLight
+        position={[2, 4, 3]}
+        intensity={0.8}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-left={-3.5}
+        shadow-camera-right={3.5}
+        shadow-camera-top={2.5}
+        shadow-camera-bottom={-2.5}
+        shadow-camera-near={0.5}
+        shadow-camera-far={10}
+      />
       {/* Physics steps at Rapier's own fixed rate, independent of the
           render frame rate (§5.1/§11) — `Physics` handles that internally. */}
       <Physics gravity={[0, 0, 0]}>

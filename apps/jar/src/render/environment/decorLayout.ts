@@ -23,10 +23,13 @@ import { TANK_INNER_BOUNDS } from '../physics/coordinates';
 export const FLOOR_TOP_Y = -TANK_INNER_BOUNDS.y + 0.1;
 
 /** World-unit half-size of the keep body alone (door and merlons
- * excluded) — `decor-svg/castle.svg`'s `keep-body` path is 480×300 SVG
- * units, times `DECOR_SVG_SCALE` (`decorGeometry.ts`). */
+ * excluded) — `decor-svg/castle.svg`'s `keep-body` path is 480×340 SVG
+ * units, times `DECOR_SVG_SCALE` (`decorGeometry.ts`). Taller than the
+ * flanking towers on purpose — a first pass had the keep+merlon crown
+ * reading level with or below the tower roofs, inverting the intended
+ * "keep rises above its towers" silhouette. */
 export const CASTLE_KEEP_HALF_WIDTH = 1.2;
-export const CASTLE_KEEP_HEIGHT = 1.5;
+export const CASTLE_KEEP_HEIGHT = 1.7;
 
 /** The doorway's own clear opening — a real cut-through hole
  * (`castle.svg`), sized to comfortably clear most fish (the biggest, a
@@ -40,16 +43,19 @@ export const CASTLE_DOOR_HEIGHT = 1.15;
  * same "one shared shape, two placed instances" pattern
  * `fishGeometry.ts` uses for the mirrored pectoral fin. */
 export const CASTLE_TOWER_HALF_WIDTH = 0.275;
-export const CASTLE_TOWER_HEIGHT = 1.1;
-export const CASTLE_TOWER_OFFSET = 1.45;
+export const CASTLE_TOWER_HEIGHT = 0.9;
+/** Real clearance from the keep's own edge (`CASTLE_KEEP_HALF_WIDTH`), not
+ * flush against it — a first pass with the towers nearly touching the
+ * keep read as one fused blob rather than a keep with two flanking
+ * towers. */
+export const CASTLE_TOWER_OFFSET = 1.8;
 export const CASTLE_ROOF_HALF_WIDTH = 0.325;
 
-/** Where the castle sits — `x` pushed right of centre but pulled back in
- * from the original design's `1.7` once the castle grew to fit a
- * fish-sized door (a `1.7` centre would push the tower+roof footprint
- * past the tank's own wall); `z` toward the back plane, clear of the
- * airstone (~66% x, `docs/architecture/3d-engine.md` §8.1). */
-export const CASTLE_POSITION = { x: 1.0, y: FLOOR_TOP_Y, z: -0.8 };
+/** Where the castle sits — `x` pulled toward centre so the wider
+ * tower-to-tower span (`CASTLE_TOWER_OFFSET` grew for real tower
+ * clearance) still clears the tank wall; `z` pulled forward from an
+ * original `-0.8`, which read as pressed against the back glass. */
+export const CASTLE_POSITION = { x: 0.5, y: FLOOR_TOP_Y, z: -0.3 };
 
 /** Static collider footprint — left wall segment, right wall segment, and
  * a lintel above the door opening (leaving the door itself clear), plus
@@ -124,10 +130,15 @@ export const HIDE_POINT = {
 };
 export const HIDE_JITTER = { x: 0.2, y: 0.1, z: 0.1 };
 
-/** Plant cluster positions — left-weighted, clear of the castle's visual
- * footprint (towers + roof overhang reach roughly `x = -0.78` on the
- * castle's own left side) and the airstone (~66% x per §8.1, ≈ +0.96
- * world). All at floor height. */
-export const PLANT_TALL_KELP_POSITION = { x: -2.3, y: FLOOR_TOP_Y, z: -0.9 };
-export const PLANT_BROADLEAF_POSITION = { x: -1.6, y: FLOOR_TOP_Y, z: 0.4 };
-export const PLANT_SMALL_KELP_POSITION = { x: -1.0, y: FLOOR_TOP_Y, z: -0.5 };
+/** Plant cluster positions — spread around the castle rather than bunched
+ * on one side, all clear of its collider footprint. All at floor height. */
+// Back-left anchor, clear of the castle's whole footprint (towers + roof
+// overhang reach roughly x = -1.63 on the castle's own left side).
+export const PLANT_TALL_KELP_POSITION = { x: -2.5, y: FLOOR_TOP_Y, z: -0.9 };
+// Front-right, standing in front of (not overlapping — separated in z) the
+// right tower, clear of the airstone (~66% x per §8.1, ≈ +0.96 world).
+export const PLANT_BROADLEAF_POSITION = { x: 2.3, y: FLOOR_TOP_Y, z: 0.6 };
+// In the gap between the left tower and the keep's own left edge, pulled
+// forward of the castle's front face — reads as sitting just left of the
+// keep, in front of it.
+export const PLANT_SMALL_KELP_POSITION = { x: -0.9, y: FLOOR_TOP_Y, z: 0.25 };

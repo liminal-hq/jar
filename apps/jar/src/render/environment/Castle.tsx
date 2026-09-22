@@ -17,16 +17,33 @@ import { CASTLE_COLLIDER_BOXES, CASTLE_POSITION, CASTLE_TOWER_OFFSET } from './d
 
 const KEEP_COLOUR = '#d9a86c';
 const ROOF_COLOUR = '#c96f5e';
+const WINDOW_COLOUR = '#4a3f45';
+
+/** Plain sphere primitive, not an extruded SVG shape — same rationale as
+ * `FishModel.tsx`'s eye/spot circles: cheap, and there's no reason to route
+ * something this simple through `SVGLoader`. Mounted slightly proud of
+ * whichever face it sits on so it doesn't z-fight the wall behind it. */
+function Window({ position, radius }: { position: [number, number, number]; radius: number }) {
+  return (
+    <mesh position={position} raycast={() => null}>
+      <sphereGeometry args={[radius, 12, 12]} />
+      <meshStandardMaterial color={WINDOW_COLOUR} roughness={0.4} />
+    </mesh>
+  );
+}
 
 function Tower({ x }: { x: number }) {
   return (
-    <group position={[x, 0, 0]} scale={DECOR_SVG_SCALE}>
-      <mesh geometry={CASTLE_GEOMETRY.towerBody} raycast={() => null}>
-        <meshStandardMaterial color={KEEP_COLOUR} roughness={0.6} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh geometry={CASTLE_GEOMETRY.towerRoof} raycast={() => null}>
-        <meshStandardMaterial color={ROOF_COLOUR} roughness={0.6} side={THREE.DoubleSide} />
-      </mesh>
+    <group position={[x, 0, 0]}>
+      <group scale={DECOR_SVG_SCALE}>
+        <mesh geometry={CASTLE_GEOMETRY.towerBody} castShadow receiveShadow raycast={() => null}>
+          <meshStandardMaterial color={KEEP_COLOUR} roughness={0.6} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh geometry={CASTLE_GEOMETRY.towerRoof} castShadow receiveShadow raycast={() => null}>
+          <meshStandardMaterial color={ROOF_COLOUR} roughness={0.6} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+      <Window position={[0, 0.45, 0.245]} radius={0.07} />
     </group>
   );
 }
@@ -47,9 +64,22 @@ export function Castle() {
   return (
     <group position={[CASTLE_POSITION.x, CASTLE_POSITION.y, CASTLE_POSITION.z]}>
       <group scale={DECOR_SVG_SCALE}>
-        <mesh geometry={CASTLE_GEOMETRY.keepBody} material={keepMaterial} raycast={() => null} />
-        <mesh geometry={CASTLE_GEOMETRY.merlons} material={keepMaterial} raycast={() => null} />
+        <mesh
+          geometry={CASTLE_GEOMETRY.keepBody}
+          material={keepMaterial}
+          castShadow
+          receiveShadow
+          raycast={() => null}
+        />
+        <mesh
+          geometry={CASTLE_GEOMETRY.merlons}
+          material={keepMaterial}
+          castShadow
+          receiveShadow
+          raycast={() => null}
+        />
       </group>
+      <Window position={[0, 1.4, 0.29]} radius={0.09} />
       <Tower x={-CASTLE_TOWER_OFFSET} />
       <Tower x={CASTLE_TOWER_OFFSET} />
 

@@ -20,10 +20,10 @@
        fish's own model are visible straight through it. -->
   <path id="keep-body" fill="#d9a86c" fill-rule="evenodd" d="
     M -240 0
-    L -240 -276
-    A 24 24 0 0 1 -216 -300
-    L 216 -300
-    A 24 24 0 0 1 240 -276
+    L -240 -316
+    A 24 24 0 0 1 -216 -340
+    L 216 -340
+    A 24 24 0 0 1 240 -316
     L 240 0
     Z
     M -100 0
@@ -35,27 +35,32 @@
 
   <!-- Three dome merlons crowning the keep, drawn as separate overlapping
        circles sharing the keep's own colour (fused visually, not a single
-       path union). -->
+       path union) — a deliberately tall crown, clear of the shorter
+       flanking towers (`decorLayout.ts`'s own comment on why: the keep
+       rendered level with or below the tower roofs on a first pass). -->
   <path id="merlons" fill="#d9a86c" d="
-    M -180 -300 A 30 30 0 0 1 -120 -300 A 30 30 0 0 1 -180 -300 Z
-    M -30 -300 A 30 30 0 0 1 30 -300 A 30 30 0 0 1 -30 -300 Z
-    M 120 -300 A 30 30 0 0 1 180 -300 A 30 30 0 0 1 120 -300 Z"/>
+    M -190 -340 A 40 40 0 0 1 -110 -340 A 40 40 0 0 1 -190 -340 Z
+    M -40 -340 A 40 40 0 0 1 40 -340 A 40 40 0 0 1 -40 -340 Z
+    M 110 -340 A 40 40 0 0 1 190 -340 A 40 40 0 0 1 110 -340 Z"/>
 
-  <!-- One tower, local origin at its own base centre (y=0). -->
+  <!-- One tower, local origin at its own base centre (y=0) — shorter than
+       the keep+merlon crown, and positioned with real clearance from the
+       keep by `decorLayout.ts`'s `CASTLE_TOWER_OFFSET`, not flush against
+       it. -->
   <path id="tower-body" fill="#d9a86c" d="
     M -55 0
-    L -55 -204
-    A 16 16 0 0 1 -39 -220
-    L 39 -220
-    A 16 16 0 0 1 55 -204
+    L -55 -164
+    A 16 16 0 0 1 -39 -180
+    L 39 -180
+    A 16 16 0 0 1 55 -164
     L 55 0
     Z"/>
 
   <!-- Plump bowed-outward cone roof, sitting on the tower's own top edge. -->
   <path id="tower-roof" fill="#c96f5e" d="
-    M -65 -220
-    C -70 -250, -45 -285, -12 -300
-    A 12 12 0 0 1 12 -300
-    C 45 -285, 70 -250, 65 -220
+    M -65 -180
+    C -70 -205, -45 -235, -12 -250
+    A 10 10 0 0 1 12 -250
+    C 45 -235, 70 -205, 65 -180
     Z"/>
 </svg>

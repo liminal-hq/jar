@@ -94,10 +94,22 @@ describe('plant positions', () => {
     expect(isInsideTank(PLANT_SMALL_KELP_POSITION)).toBe(true);
   });
 
-  it('all three sit clear of the castle footprint', () => {
-    const castleLeftEdge = CASTLE_POSITION.x - (CASTLE_TOWER_OFFSET + CASTLE_ROOF_HALF_WIDTH);
-    expect(PLANT_TALL_KELP_POSITION.x).toBeLessThan(castleLeftEdge);
-    expect(PLANT_BROADLEAF_POSITION.x).toBeLessThan(castleLeftEdge);
-    expect(PLANT_SMALL_KELP_POSITION.x).toBeLessThan(castleLeftEdge);
+  it('none of the three sit inside a castle collider box (they surround the castle, not just sit to one side of it)', () => {
+    for (const plant of [
+      PLANT_TALL_KELP_POSITION,
+      PLANT_BROADLEAF_POSITION,
+      PLANT_SMALL_KELP_POSITION,
+    ]) {
+      for (const box of CASTLE_COLLIDER_BOXES) {
+        const boxWorldX = CASTLE_POSITION.x + box.position.x;
+        const boxWorldY = CASTLE_POSITION.y + box.position.y;
+        const boxWorldZ = CASTLE_POSITION.z + box.position.z;
+        const inside =
+          Math.abs(plant.x - boxWorldX) < box.halfExtents.x &&
+          Math.abs(plant.y - boxWorldY) < box.halfExtents.y &&
+          Math.abs(plant.z - boxWorldZ) < box.halfExtents.z;
+        expect(inside).toBe(false);
+      }
+    }
   });
 });

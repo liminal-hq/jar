@@ -110,6 +110,8 @@ function Blade({ kind, colour, rotationDeg, scale }: BladeSpec) {
       geometry={geometry}
       rotation={[0, 0, THREE.MathUtils.degToRad(rotationDeg)]}
       scale={scale * DECOR_SVG_SCALE}
+      castShadow
+      receiveShadow
       raycast={() => null}
     >
       <meshStandardMaterial color={colour} roughness={0.6} side={THREE.DoubleSide} />

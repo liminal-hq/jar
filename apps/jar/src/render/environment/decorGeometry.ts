@@ -71,5 +71,6 @@ export function createBroadBladeGeometry(): THREE.BufferGeometry {
  * instance (there's exactly one sand floor). */
 export const SAND_GEOMETRY = {
   top: extrude(shapesById(sandTopParsed, 'sand-top'), 10),
+  rock: extrude(shapesById(sandTopParsed, 'rock'), 26),
   pebbles: extrude(shapesById(sandTopParsed, 'pebbles'), 18),
 };
