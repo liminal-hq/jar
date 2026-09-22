@@ -83,15 +83,15 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
   const tailScale = isMale ? 1.2 : 1.0; // §6.7 — modest fin scale-up, males only
   const saturation = isMale ? 0.75 : 0.62; // §6.7 — a few points apart, not a strong split
 
-  const bodyColor = useMemo(
+  const bodyColour = useMemo(
     () => new THREE.Color().setHSL(critter.hue / 360, saturation, 0.55),
     [critter.hue, saturation],
   );
-  const bellyColor = useMemo(
+  const bellyColour = useMemo(
     () => new THREE.Color().setHSL(critter.hue / 360, 0.4, 0.82),
     [critter.hue],
   );
-  const finColor = useMemo(
+  const finColour = useMemo(
     () => new THREE.Color().setHSL(critter.hue / 360, saturation, 0.48),
     [critter.hue, saturation],
   );
@@ -106,8 +106,8 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
   // hue, so this can't be the shared module-level geometry.
   const bodyGeometry = useMemo(() => createBodyGeometry(), []);
   useEffect(() => {
-    paintBellyGradient(bodyGeometry, bodyColor, bellyColor);
-  }, [bodyGeometry, bodyColor, bellyColor]);
+    paintBellyGradient(bodyGeometry, bodyColour, bellyColour);
+  }, [bodyGeometry, bodyColour, bellyColour]);
 
   // Per-fish clone: only the veil tail needs one (its per-frame bend
   // differs per fish); fan/forked reuse the shared, unmutated geometry.
@@ -134,8 +134,8 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
 
   const pectoralMaterial = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({ color: finColor, roughness: 0.6, side: THREE.DoubleSide }),
-    [finColor],
+      new THREE.MeshStandardMaterial({ color: finColour, roughness: 0.6, side: THREE.DoubleSide }),
+    [finColour],
   );
   const pectoralPivot = useMemo(() => {
     const pivot = wrapInPivot(
@@ -160,8 +160,8 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
 
   const mouthMaterial = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6, side: THREE.DoubleSide }),
-    [bodyColor],
+      new THREE.MeshStandardMaterial({ color: bodyColour, roughness: 0.6, side: THREE.DoubleSide }),
+    [bodyColour],
   );
   const mouthPivot = useMemo(
     () => wrapInPivot(SHARED_GEOMETRY.mouth, mouthMaterial, MOUTH_HINGE.x, MOUTH_HINGE.y),
@@ -248,14 +248,14 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
       </mesh>
 
       <mesh geometry={SHARED_GEOMETRY.dorsal}>
-        <meshStandardMaterial color={finColor} roughness={0.6} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
       <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]}>
-        <meshStandardMaterial color={finColor} roughness={0.6} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
       <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]}>
-        <meshStandardMaterial color={finColor} roughness={0.6} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
       <primitive object={pectoralPivot} ref={pectoralPivotRef} />
@@ -269,7 +269,7 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
 
       <group ref={tailPivotRef} position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]} scale={tailScale}>
         <mesh geometry={tailGeometry}>
-          <meshStandardMaterial color={finColor} roughness={0.6} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
         </mesh>
       </group>
 

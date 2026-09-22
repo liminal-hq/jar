@@ -144,19 +144,19 @@ export function wrapInPivot(
  * back. Call once per fish whenever its hue/sex-driven colours change. */
 export function paintBellyGradient(
   geometry: THREE.BufferGeometry,
-  bodyColor: THREE.Color,
-  bellyColor: THREE.Color,
+  bodyColour: THREE.Color,
+  bellyColour: THREE.Color,
 ): void {
   const pos = geometry.attributes.position;
   if (!pos) return; // ExtrudeGeometry always has a position attribute; guards the type only
-  const colors = new Float32Array(pos.count * 3);
+  const colours = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const belly = 1 - THREE.MathUtils.smoothstep(pos.getY(i), -32, -12);
-    c.copy(bodyColor).lerp(bellyColor, belly);
-    colors[i * 3] = c.r;
-    colors[i * 3 + 1] = c.g;
-    colors[i * 3 + 2] = c.b;
+    c.copy(bodyColour).lerp(bellyColour, belly);
+    colours[i * 3] = c.r;
+    colours[i * 3 + 1] = c.g;
+    colours[i * 3 + 2] = c.b;
   }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
 }
