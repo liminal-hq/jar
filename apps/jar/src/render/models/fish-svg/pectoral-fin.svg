@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Small rounded pectoral paddle. Root ~(52,10) buried in the body, angling
+       down-back to a rounded tip near (28,38). Author once; the far-side fin is
+       mirrored programmatically in three.js. Placeholder fill. -->
+  <path id="pectoral-fin" fill="#6fa8dc" d="
+    M 52 10
+    C 46 12, 38 18, 33 26
+    C 29 33, 27 38, 30 40
+    C 34 42, 42 36, 47 28
+    C 51 21, 53 15, 52 10
+    Z"/>
+</svg>

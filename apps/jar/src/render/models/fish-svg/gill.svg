@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Soft gill-cover crescent, just behind and below the eye (eye centre (68,-10)).
+       Convex side faces the tail (-X), echoing an operculum edge without being
+       anatomical. Tips y = -13 (top) and +13 (bottom); mid-thickness ~5 units at
+       x ~ 44.5-49.8. Author once; mirror programmatically to the far face like
+       pectoral-fin. Placeholder fill (runtime: body hue slightly darkened). -->
+  <path id="gill" fill="#5b8fc0" d="
+    M 55 -13
+    C 48 -8, 44 0, 45.5 10
+    C 46 12.5, 48.5 13.8, 49.5 12
+    C 48.7 4, 50.5 -3.5, 56.5 -9.5
+    C 57.5 -11.5, 56.8 -13.2, 55 -13
+    Z"/>
+</svg>

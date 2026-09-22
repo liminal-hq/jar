@@ -162,67 +162,56 @@ Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Veh
 
 ### 6.1 Base archetypes
 
-The `fin` gene (`SPEC.md` §5: `fan | forked | veil`) is the one structurally-varying trait; everything else (`hue`, `spots`) is a material property, not a mesh property. Build **one rigged base body** with **three tail blend shapes** (fan/forked/veil), selected once at spawn time by setting the corresponding morph-target influence to 1 and the others to 0 — not runtime-blended, since the gene doesn't change after birth. This avoids maintaining three separate rigged meshes for what is, structurally, one fish with a swappable tail.
+**As shipped, this diverges from the rigged/morph-target approach originally specified below** — no rigged GLTF asset pipeline exists, so the model is built entirely from hand-authored flat SVG silhouettes (`apps/jar/src/render/models/fish-svg/`), parsed with three.js's `SVGLoader` and extruded into thin 3D slabs (`fishGeometry.ts`). Body, dorsal, gill, mouth and pectoral are one silhouette each, extruded once and shared read-only across every fish instance; the `fin` gene (`SPEC.md` §5: `Fan | Forked | Veil`) selects which of three separately-authored tail silhouettes gets mounted at the tail pivot for a given fish — a geometry swap picked once at spawn, not a runtime blend, since the gene doesn't change after birth (`docs/architecture/rust-core.md` §6.1's "never re-rolled" genes). There is no body-shape gene (§6.7 is explicit that sex dimorphism is deliberately not a body-shape change either) — one shared body silhouette covers every fish.
 
 ### 6.2 Rig
 
-Minimal bone chain, authored facing a fixed convention direction (pick one, e.g. `+Z`, and document it in the model file itself — this must line up exactly with how the heading quaternion in §5.2 is computed, or every fish will swim backwards):
-
-- `root`
-- `spine1 → spine2 → spine3` (3 segments is enough for a visible traveling wave; more adds render cost without reading as more "alive")
-- `tail` (the morph-blended fin geometry hangs off this bone)
-- Optional: 2 pectoral fin bones, 1 dorsal fin bone, for a small amount of independent fin motion — nice-to-have, not required for the "wow" moment to land.
+**No skeleton.** In place of the bone chain originally specified here, five pieces that need to rotate — the tail, both pectoral fins (mirrored), and the mouth — are each pre-translated so their own local origin sits exactly at their hinge point (`fishGeometry.ts`'s `extrudeAtHinge`), then wrapped in a `THREE.Group` positioned at that same hinge (`wrapInPivot`); rotating the group rotates the geometry about the hinge with no further bookkeeping. Body, dorsal and both gills are rigid meshes with no pivot at all. The veil tail is the one piece that goes beyond a single rigid hinge: it gets an additional per-frame per-vertex bend (§6.6) layered on top of its own pivot rotation, approximating a second joint without actually adding one. Authored facing `+X` (`fish-svg/body.svg`'s own header comment) — this must line up with how the heading quaternion in §5.2 is computed, or every fish swims backwards.
 
 ### 6.3 Life-stage scaling
 
-Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). Uniform scale on the root bone is sufficient for v1; proportion changes (bigger eyes on fry, etc.) are a nice stretch, not required.
+Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). A single uniform scale on `FishModel`'s root `<group>` (`lifeStageScale(critter.age_sec)`, composed with the SVG-to-world unit conversion below) is what's actually applied; proportion changes (bigger eyes on fry, etc.) remain a nice stretch, not built.
 
-### 6.4 Materials — flat/toon, not PBR
+### 6.4 Materials — flat, not PBR
 
-The 2D art direction is flat vector color, not realism (`SPEC.md` §1: "nicer interface and flat vector art"). Carry that into 3D deliberately — `MeshToonMaterial` or a flat-shaded `MeshStandardMaterial` with minimal roughness variation reads as "the same product," where a fully PBR fish would look like a different app wearing Jar's UI:
+The 2D art direction is flat vector colour, not realism (`SPEC.md` §1: "nicer interface and flat vector art"). As shipped this is plain `MeshStandardMaterial` (`roughness: 0.6`, `side: THREE.DoubleSide` — needed because `fishGeometry.ts`'s SVG-to-three.js Y-flip reverses face winding, see that file's own comment) rather than `MeshToonMaterial`; the flat-art read comes from the low roughness and the deliberately simple geometry, not a toon shader:
 
-- **Hue (gene):** drive `material.color.setHSL(hue/360, sat, light)` directly at spawn — the model's base material should be a neutral, single-tone surface designed for this, not a painted/textured skin that a hue rotate would fight with.
-- **Belly gradient:** paint two vertex-color zones once at model-authoring time (top tone, lighter belly tone) and blend them via vertex color in the material — cheap, static, matches the `ellipse` belly highlight in the original `svg()` function.
-- **Spots (gene):** 3–4 small dark sphere primitives (or flattened spheroids) parented to the body at fixed authored positions, toggled visible/invisible by the `spots` boolean — this is a deliberately low- tech match for the original SVG's literal `<circle>` spots rather than a shader-based spot mask, and it's cheaper to author and reason about.
-- **Eyes:** white sphere + black pupil sphere for "awake"; swap to a small curved "closed eyelid" mesh (or a morph target on the head) for "asleep" — same visible/invisible toggle mechanism as spots.
+- **Hue (gene):** `material.color.setHSL(hue/360, sat, 0.55)` on the body/fin materials at spawn (`FishModel.tsx`) — the model's base material is a neutral single-tone surface designed for exactly this, never a painted/textured skin.
+- **Belly gradient:** the body mesh is vertex-painted per fish (`fishGeometry.ts`'s `paintBellyGradient`, run once whenever hue/sex-driven colour changes) rather than a static two-zone paint baked at authoring time — it wraps the whole rounded volume via `THREE.MathUtils.smoothstep()` on vertex Y, so the gradient reads correctly from underneath and from the back too, not just face-on.
+- **Spots (gene):** 4 small dark sphere primitives, mirrored front/back, at fixed authored positions (`FishModel.tsx`'s `SPOTS` constant, sourced from the design notes), toggled by the `spots` boolean — a deliberately low-tech match for the original SVG's literal `<circle>` spots.
+- **Eyes:** a white-less black sphere pair (pupil only, no separate sclera mesh) at fixed authored positions, mirrored front/back. **Not yet built:** an asleep/closed-eyelid state — every fish's eyes currently render "awake" regardless of `mood`/energy or the tank's day/night state.
 
 ### 6.5 Genetics → visual mapping (reference table)
 
 | Gene (from `SPEC.md` §5) | 2D implementation                                                                                                                                     | 3D implementation                                                                     |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `hue`                    | CSS `hsl(H, %, %)` per SVG element                                                                                                                    | `material.color.setHSL()` on the shared body material                                 |
-| `fin` (fan/forked/veil)  | Different SVG `path` per value                                                                                                                        | Morph-target selection on the `tail` bone's geometry                                  |
-| `spots` (bool)           | 3–4 SVG `<circle>` overlays                                                                                                                           | 3–4 small sphere primitives, visibility-toggled                                       |
-| `sex` (male/female)      | Not modeled in the 2D prototype; now tracked in the sim (`SPEC.md` §5) and shown in the critter card (`SCREENS.md` W2), but never had a _visual_ form | Subtle dimorphism per §6.7 — small fin/scale/saturation multiplier, not a second mesh |
+| `hue`                    | CSS `hsl(H, %, %)` per SVG element                                                                                                                    | `material.color.setHSL()` on the body/fin materials (§6.4)                            |
+| `fin` (Fan/Forked/Veil)  | Different SVG `path` per value                                                                                                                        | Which pre-built tail geometry mounts at the tail pivot (§6.1) — a swap, not a blend   |
+| `spots` (bool)           | 3–4 SVG `<circle>` overlays                                                                                                                           | 4 small sphere primitives, visibility-toggled                                         |
+| `sex` (male/female)      | Not modeled in the 2D prototype; now tracked in the sim (`SPEC.md` §5) and shown in the critter card (`SCREENS.md` W2), but never had a _visual_ form | Subtle dimorphism per §6.7 — tail-scale and saturation multipliers, not a second mesh |
 | `trait`                  | Movement-loop branching                                                                                                                               | Yuka steering parameter modulation (§4.1)                                             |
-| life stage               | SVG size multiplier                                                                                                                                   | Root-bone uniform scale (§6.3)                                                        |
+| life stage               | SVG size multiplier                                                                                                                                   | Root-group uniform scale (§6.3)                                                       |
 | `mood`/`energy`          | (not visually shown beyond card UI)                                                                                                                   | Same — stats stay in the critter card, not the 3D model                               |
 
-### 6.6 Animation — procedural spine wave (primary), baked clips (optional secondary)
+### 6.6 Animation — per-hinge oscillation (no skeleton), plus one per-vertex secondary
 
-Primary technique — no baked animation required:
+Since there's no bone chain (§6.2), the traveling-spine-wave technique originally specified here doesn't apply — instead, each hinge gets its own independent sine oscillation, all driven off the same `speed`/`turnRate` inputs and a per-fish `phaseSeed`, composed on `FishModel`'s single `useFrame` callback:
 
-```js
-const frequency = 4 + speed * 2; // faster swim → faster beat
-const amplitude = 0.15 + Math.abs(turnRate) * 0.3; // sharper turn → bigger S-curve
-spineBones.forEach((bone, i) => {
-  const phase = t * frequency + i * 1.1 + phaseSeed; // 1.1 rad stagger → wave travels head→tail
-  bone.rotation.y = Math.sin(phase) * amplitude * (i / spineBones.length); // tail whips more than head
-});
-```
-
-- `phaseSeed`: one random value per fish, fixed at spawn — without it, every fish beats in perfect unison whenever they happen to share a speed, which reads as robotic rather than alive. Cheap, easy to forget, disproportionately important.
-- Bank into turns: lerp the root bone's roll toward `-turnRate × k` each frame — small addition, large effect on "carving through water" versus "sliding along a rail."
-- Idle state (`speed ≈ 0`, i.e. asleep or paused): drop to a slow, low-amplitude fin/gill flutter rather than freezing solid. A motionless fish is the fastest way to break the illusion — this rule matters more than almost anything else in this section.
-- If fish models are sourced via a generator with auto-rig **and** auto-animate (Tripo3D does both), baked idle/swim/turn clips may be used as a secondary layer via `AnimationMixer` with `timeScale` driven by `speed / baseSpeed` — treat this as a substitute presentation layer, not a replacement for the phase-staggering and amplitude-scaling logic above, which is what actually sells individual, non-synchronized motion.
+- **Tail** (`tailPivotRef.rotation.y`): `Math.sin(t * frequency + phaseSeed) * amplitude`, where `frequency = 4 + speed * 2` and `amplitude` widens with `turnRate` (capped) when actively swimming, or drops to a low `0.08` idle flutter at `speed < 0.05` — the idle-flutter rule from the original spec survives unchanged; a motionless fish still reads as dead, not asleep.
+- **Veil tail only** (`veilGeometry`'s vertex positions, `fishGeometry.ts`): a genuine per-vertex bend on top of the pivot rotation above — each vertex's local `x` (distance from the tail tip) sets how much extra angle it picks up, phase-lagged by `1.1` rad per the original spec's stagger constant, so the tail reads as one continuous wave rather than a rigid paddle. Fan/Forked stay rigid single-pivot; only Veil's shape calls for the extra motion.
+- **Pectoral fins** (`pectoralPivotRef`/`pectoralFarPivotRef.rotation.z`): a smaller, faster flutter (`phase * 1.3`), independent of the tail's own phase.
+- **Mouth** (`mouthPivotRef.rotation.z`): its own slower period (`t * 0.9 + phaseSeed`), unrelated to the tail beat — opens toward the belly side (sign verified by tracing the jaw-tip vertex's trajectory) then closes, never fully idle.
+- **Whole-body bank/bob** (`FishModel`'s root `<group>.rotation.z`/`.position.y`): a small (`0.05` rad / `0.02` unit) wobble at the tail's own frequency, substituting for the originally-specified root-bone roll-into-turns — deliberately local and layered inside `Fish.tsx`'s `RigidBody`, which alone owns the fish's actual world position/heading; this never fights it.
+- `phaseSeed`: one random value per fish, fixed at spawn (`Math.random()` in `FishModel`'s first render) — without it, every fish beats in perfect unison whenever they share a speed, reading as robotic rather than alive. Cheap, easy to forget, disproportionately important — carried over from the original spec unchanged.
+- Not built: baked `AnimationMixer` clips from a generator's auto-rig/auto-animate output — moot now that there's no rigged asset pipeline at all (§6.1).
 
 ### 6.7 Sex-based visual dimorphism
 
-`sex` (male/female, `SPEC.md` §5) is tracked by the sim and shown on the critter card, but the 2D prototype never gave it a visual form at all — nothing in `svg()` reads it. Give it a small, tasteful presence rather than a second character model:
+`sex` (male/female, `SPEC.md` §5) is tracked by the sim and shown on the critter card, but the 2D prototype never gave it a visual form at all — nothing in `svg()` reads it. As shipped (`FishModel.tsx`):
 
-- **Fins:** males get a modest scale-up (~1.15–1.25×) on the tail and dorsal fin geometry; females stay at the base scale. This is a uniform multiplier on existing bones/morph targets from §6.2, not new geometry.
-- **Saturation:** males' `setHSL()` call (§6.4) uses a slightly higher saturation value than females' at the same `hue` — a few percentage points, not a strong split. The goal is "a careful look tells them apart," not "obviously two different color schemes."
-- Both multipliers are fixed constants applied once at spawn alongside the `fin`/`spots` visual setup (§6.5) — no runtime cost, no interaction with steering or animation.
+- **Fins:** males get `MALE_TAIL_SCALE = 1.2×` on the tail pivot's own scale (`fishGeometry.ts`, shared with `Fish.tsx`'s collider sizing — see §5.2); females stay at 1×. Only the tail scales, not the dorsal fin (the original spec's "tail and dorsal" was narrowed to tail-only during implementation).
+- **Saturation:** males render at `sat = 0.75`, females at `0.62`, both at the same `hue` — a larger split than the original spec's "a few percentage points," landing on it by eye once real fish were on screen rather than deriving it on paper.
+- Both are fixed constants applied once at spawn alongside the `fin`/`spots` visual setup (§6.5) — no runtime cost, no interaction with steering or animation.
 - Explicitly **not** doing: a separate body shape, a separate rig, or any behavioral difference — `sex` affects breeding eligibility (`SPEC.md` §5) and this one visual pass, nothing else.
 
 ---
@@ -310,6 +299,8 @@ Explicitly **not** trying to be clever about long-run resource cost here — per
 
 ## 12. Asset pipeline
 
+Fish (§6.1) no longer follow this pipeline — they shipped as hand-authored flat SVG silhouettes, extruded at runtime (`fishGeometry.ts`), with no rigged asset or generator step involved. This section now applies only to the gecko (§7), which is still unbuilt and still specified as a real bone rig, and to any future critter that needs one.
+
 1. **Generate base meshes.** Text-to-3D or image-to-3D (using the existing flat-vector critter art from `Jar.dc.html`'s `svg()` function as a style reference image) via Meshy or Tripo3D. Tripo3D's built-in stylized presets and auto-rig/auto-animate are the better fit for this project's look and for skipping manual rigging; Meshy's topology/remesh controls are the better fit if hand-rigging in Blender afterward. Either is viable — pick one per model rather than mixing tools mid-pipeline for the same asset.
 2. **Rig.** Use the generator's auto-rig where available; otherwise hand-rig in Blender against the bone specs in §6.2/§7.
 3. **Export** as GLB (includes mesh, rig, morph targets, and any baked clips in one file).
@@ -332,7 +323,8 @@ Directory convention: raw GLBs in `/assets/models/`, generated JSX components in
 /src/render/
   tank/                      # R3F <Canvas> + scene root, camera (§2.3),
                               # transparency setup (§1.1)
-  models/                    # gltfjsx output — FishModel, GeckoModel
+  models/                    # FishModel + fishGeometry (SVG→extrude, §6.1),
+                              # GeckoModel
   steering/                  # Yuka vehicle wrappers, per-trait param
                               # tables (§4.1), navmesh setup (§4.2)
   physics/                   # RigidBody wrapper hooks, static colliders,

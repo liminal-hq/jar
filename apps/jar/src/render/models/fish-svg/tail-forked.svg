@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Classic forked V tail with rounded lobe tips and a soft notch.
+       Root overlaps body from x=-56 (pivot at -60,0). Placeholder fill. -->
+  <path id="tail-forked" fill="#6fa8dc" d="
+    M -56 -12
+    C -72 -18, -86 -26, -96 -31
+    C -106 -35, -114 -31, -114 -24
+    C -114 -18, -102 -8, -85 0
+    C -102 8, -114 18, -114 24
+    C -114 31, -106 35, -96 31
+    C -86 26, -72 18, -56 12
+    Z"/>
+</svg>

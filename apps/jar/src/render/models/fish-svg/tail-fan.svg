@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Rounded goldfish fan tail. Root overlaps body from x=-56 (pivot at -60,0).
+       Wide at the pivot: flares immediately, never a whip. Placeholder fill. -->
+  <path id="tail-fan" fill="#6fa8dc" d="
+    M -56 -12
+    C -72 -18, -87 -26, -99 -32
+    C -112 -37, -127 -18, -127 0
+    C -127 18, -112 37, -99 32
+    C -87 26, -72 18, -56 12
+    Z"/>
+</svg>

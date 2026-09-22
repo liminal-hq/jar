@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Jar fish body. Faces +X, nose at (100,0), tail pivot at (-60,0).
+       Fills are placeholders: hue is applied at runtime via material.color.setHSL(). -->
+  <path id="body-back" fill="#6fa8dc" d="
+    M 100 0
+    C 100 -32, 58 -44, 10 -44
+    C -26 -44, -50 -20, -60 -12
+    C -65 -8, -67 -5, -67 0
+    C -67 5, -65 8, -60 12
+    C -50 22, -26 46, 15 46
+    C 48 46, 76 32, 88 18
+    C 96 12, 100 8, 100 0
+    Z"/>
+  <path id="body-belly" fill="#cfe6f5" d="
+    M 88 16
+    C 64 26, 36 30, 8 28
+    C -22 26, -46 18, -60 12
+    C -50 22, -26 46, 15 46
+    C 48 46, 76 32, 88 18
+    Z"/>
+  <circle id="eye" fill="#22222a" cx="68" cy="-10" r="7"/>
+</svg>
