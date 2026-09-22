@@ -19,6 +19,7 @@ import type { Critter } from '../../domain/protocol/generated/Critter';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { selectCritter } from '../../domain/selection';
 import { lifeStageScale } from '../../domain/simConstants';
+import { keepClearOfCastle } from '../environment/decorLayout';
 import { FishModel } from '../models/FishModel';
 import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
@@ -117,30 +118,38 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     [],
   );
 
-  const favouriteSpotWorld = useMemo(() => {
+  // A fish's own collider radius, nudged clear of the castle's static
+  // colliders (`decorLayout.ts`'s `keepClearOfCastle`) — `favourite_spot`
+  // is rolled in jar-core, which has no knowledge of decor
+  // (`docs/architecture/rust-core.md`'s "no I/O, no render knowledge"
+  // sim-core boundary), so nothing upstream can already have avoided the
+  // castle. Left un-nudged, a fish whose rolled spot happened to land
+  // inside a collider box would mount its RigidBody already
+  // interpenetrating it, which Rapier resolves with an immediate
+  // pop/launch on the very first physics step. `spawnPosition` and
+  // `favouriteSpotWorld` share this one nudged point rather than each
+  // computing (and each needing to separately remember to nudge) their
+  // own — they're the same point by definition: where the fish starts is
+  // where it returns to when it visits its favourite spot.
+  const safeFavouriteSpot = useMemo(() => {
     const p = simPercentToWorld(
       critter.favourite_spot.x,
       critter.favourite_spot.y,
       critter.favourite_spot.z,
       spotClearance,
     );
-    return new YUKA.Vector3(p.x, p.y, p.z);
+    return keepClearOfCastle(p, colliderRadiusFor(critter));
     // Favourite spot never changes after spawn (rust-core.md §6.4) — no
     // need to react to it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const spawnPosition = useMemo(
-    () =>
-      simPercentToWorld(
-        critter.favourite_spot.x,
-        critter.favourite_spot.y,
-        critter.favourite_spot.z,
-        spotClearance,
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+  const favouriteSpotWorld = useMemo(
+    () => new YUKA.Vector3(safeFavouriteSpot.x, safeFavouriteSpot.y, safeFavouriteSpot.z),
+    [safeFavouriteSpot],
   );
+
+  const spawnPosition = safeFavouriteSpot;
 
   // Fixed once at spawn, same rationale as `favouriteSpotWorld`/
   // `spawnPosition` above — this fish's `fin`/`sex` never change, so its

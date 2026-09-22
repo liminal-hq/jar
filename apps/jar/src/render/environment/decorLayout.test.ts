@@ -18,6 +18,7 @@ import {
   CASTLE_TOWER_HALF_WIDTH,
   HIDE_JITTER,
   HIDE_POINT,
+  keepClearOfCastle,
   PLANT_BROADLEAF_POSITION,
   PLANT_FRONT_RIGHT_POSITION,
   PLANT_LEFT_OF_KEEP_POSITION,
@@ -117,5 +118,62 @@ describe('plant positions', () => {
         expect(inside).toBe(false);
       }
     }
+  });
+});
+
+function isOutsideEveryColliderBox(
+  point: { x: number; y: number; z: number },
+  margin: number,
+): boolean {
+  return CASTLE_COLLIDER_BOXES.every((box) => {
+    const boxWorldX = CASTLE_POSITION.x + box.position.x;
+    const boxWorldY = CASTLE_POSITION.y + box.position.y;
+    const boxWorldZ = CASTLE_POSITION.z + box.position.z;
+    const inside =
+      Math.abs(point.x - boxWorldX) < box.halfExtents.x + margin &&
+      Math.abs(point.y - boxWorldY) < box.halfExtents.y + margin &&
+      Math.abs(point.z - boxWorldZ) < box.halfExtents.z + margin;
+    return !inside;
+  });
+}
+
+describe('keepClearOfCastle', () => {
+  const MARGIN = 0.3; // a plausible fish collider radius (Fish.tsx's colliderRadiusFor runs 0.46-0.72)
+
+  it('leaves a point that is already clear of every box untouched', () => {
+    const farAway = { x: -3, y: 0, z: -3 };
+    expect(keepClearOfCastle(farAway, MARGIN)).toEqual(farAway);
+  });
+
+  it('pushes a point out of a wall segment box it started inside', () => {
+    const box = CASTLE_COLLIDER_BOXES[0]!; // left wall segment
+    const deepInside = {
+      x: CASTLE_POSITION.x + box.position.x,
+      y: CASTLE_POSITION.y + box.position.y,
+      z: CASTLE_POSITION.z + box.position.z,
+    };
+    const pushed = keepClearOfCastle(deepInside, MARGIN);
+    expect(isOutsideEveryColliderBox(pushed, MARGIN)).toBe(true);
+  });
+
+  it('pushes a point out even when only the margin (not the raw box) reaches it', () => {
+    const box = CASTLE_COLLIDER_BOXES[0]!; // left wall segment
+    // Perturbed along Z, not X: an X push from this box's edge lands close
+    // enough to the neighbouring tower box that it's ambiguous which one
+    // "outside" means relative to — Z has no such neighbour to interfere.
+    const boxWorldZ = CASTLE_POSITION.z + box.position.z;
+    const justOutsideRawBox = {
+      x: CASTLE_POSITION.x + box.position.x,
+      y: CASTLE_POSITION.y + box.position.y,
+      z: boxWorldZ + box.halfExtents.z + MARGIN / 2,
+    };
+    const pushed = keepClearOfCastle(justOutsideRawBox, MARGIN);
+    expect(isOutsideEveryColliderBox(pushed, MARGIN)).toBe(true);
+  });
+
+  it('leaves the doorway opening itself untouched (not inside any box by design)', () => {
+    // Same point HIDE_POINT targets — a hiding fish must still be able to
+    // reach it without this function shoving it back out.
+    expect(keepClearOfCastle(HIDE_POINT, MARGIN)).toEqual(HIDE_POINT);
   });
 });

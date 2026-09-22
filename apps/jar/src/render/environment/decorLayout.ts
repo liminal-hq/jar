@@ -155,3 +155,60 @@ export const PLANT_FRONT_RIGHT_POSITION = { x: 2.3, y: FLOOR_TOP_Y, z: 0.6 };
 // pulled forward of the castle's front face — reads as sitting just left
 // of the keep, in front of it.
 export const PLANT_LEFT_OF_KEEP_POSITION = { x: -0.9, y: FLOOR_TOP_Y, z: 0.25 };
+
+/** Pushes a point clear of `CASTLE_COLLIDER_BOXES` (each box expanded by
+ * `margin` on every side) if it falls inside one, along whichever axis
+ * needs the smallest push (the standard AABB minimum-translation
+ * approach) — otherwise returns the point unchanged. Exists because a
+ * critter's `favourite_spot` (`Fish.tsx`) is rolled in `jar-core`, which
+ * has no knowledge of decor (`docs/architecture/rust-core.md`'s own
+ * "no I/O, no render knowledge" boundary for the sim core) — nothing
+ * upstream of the frontend can already avoid the castle, so a fish
+ * spawning (or returning to rest) at a percent-rolled point that happens
+ * to land inside one of these boxes would otherwise mount its RigidBody
+ * already interpenetrating a fixed collider, which Rapier resolves with
+ * an immediate pop/launch on the very first physics step rather than a
+ * normal approach and stop. Loops a few times since resolving one box's
+ * penetration can, in principle, push into an adjacent one. */
+export function keepClearOfCastle(
+  point: { x: number; y: number; z: number },
+  margin: number,
+): { x: number; y: number; z: number } {
+  let result = point;
+  for (let pass = 0; pass < 4; pass++) {
+    let pushedThisPass = false;
+    for (const box of CASTLE_COLLIDER_BOXES) {
+      const boxWorld = {
+        x: CASTLE_POSITION.x + box.position.x,
+        y: CASTLE_POSITION.y + box.position.y,
+        z: CASTLE_POSITION.z + box.position.z,
+      };
+      const expanded = {
+        x: box.halfExtents.x + margin,
+        y: box.halfExtents.y + margin,
+        z: box.halfExtents.z + margin,
+      };
+      const dx = result.x - boxWorld.x;
+      const dy = result.y - boxWorld.y;
+      const dz = result.z - boxWorld.z;
+      const inside =
+        Math.abs(dx) < expanded.x && Math.abs(dy) < expanded.y && Math.abs(dz) < expanded.z;
+      if (!inside) continue;
+
+      const penetrationX = expanded.x - Math.abs(dx);
+      const penetrationY = expanded.y - Math.abs(dy);
+      const penetrationZ = expanded.z - Math.abs(dz);
+      const sign = (n: number) => (n < 0 ? -1 : 1); // never 0 — a point exactly on the box's own centre plane still needs a direction to push
+      if (penetrationX <= penetrationY && penetrationX <= penetrationZ) {
+        result = { ...result, x: boxWorld.x + sign(dx) * expanded.x };
+      } else if (penetrationY <= penetrationX && penetrationY <= penetrationZ) {
+        result = { ...result, y: boxWorld.y + sign(dy) * expanded.y };
+      } else {
+        result = { ...result, z: boxWorld.z + sign(dz) * expanded.z };
+      }
+      pushedThisPass = true;
+    }
+    if (!pushedThisPass) break;
+  }
+  return result;
+}
