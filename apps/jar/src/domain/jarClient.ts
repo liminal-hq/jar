@@ -205,6 +205,22 @@ function firstRunSettings(): JarSettings {
   return prefersDark ? { ...DEFAULT_SETTINGS, dialog_theme: 'ModernDark' } : DEFAULT_SETTINGS;
 }
 
+/** How often every window re-fetches the authoritative snapshot and
+ * re-hydrates its store, independent of the `Channel`/rebroadcast event
+ * stream above. That stream is genuinely fire-and-forget on the Rust side
+ * (`plugin.rs`'s tick loop does `let _ = channel.send(event)` — a failed
+ * send is intentionally not surfaced as an error) with no redundancy for a
+ * one-shot event like `Passed`: a single dropped send leaves a critter
+ * `alive: true` in this store forever, since no later `TickUpdate` ever
+ * mentions a dead critter again (`events_for_tick` filters them out) and
+ * nothing else ever corrects it. A live-but-stale critter isn't just a
+ * stats bug — its `<Fish>` keeps mounted, so its Yuka vehicle and Rapier
+ * `RigidBody` keep running steering/physics on a critter the sim itself no
+ * longer tracks, with nothing left to weld it back inside the tank if it
+ * ever drifts out. This interval is the periodic reconciliation that makes
+ * a single dropped event self-heal within one cycle instead of silently. */
+export const RECONCILE_INTERVAL_MS = 5000;
+
 let startPromise: Promise<void> | null = null;
 
 /** Idempotent — safe to call from every window's top-level effect. Only
@@ -218,17 +234,44 @@ export function ensureJarClientStarted(settings: JarSettings = firstRunSettings(
 async function doStart(settings: JarSettings): Promise<void> {
   const isTank = getCurrentWindow().label === TANK_WINDOW_LABEL;
 
+  // Bumped on every event, of every type — `hydrate()` overwrites
+  // `critters`, `settings` *and* `simSeconds` all at once, so a
+  // `SettingsChanged`/`Renamed`/`TickUpdate` landing mid-request is just as
+  // capable of getting silently rolled back by a stale reconciliation
+  // response as a `Born`/`Passed`/`Added` is; nothing here is exempt.
+  // Each reconciliation attempt captures this counter right before firing
+  // its own `getSnapshot()` and compares it again right after that request
+  // resolves — if it moved, some event arrived during this specific
+  // request's flight, so its response is already stale relative to the
+  // store and applying it would roll state backwards (e.g. a `Passed`
+  // event marking a critter dead, then a stale response reviving it with
+  // `alive: true` again). Capturing the counter per request, rather than
+  // one flag shared across every reconciliation attempt, is what keeps two
+  // overlapping requests (a `getSnapshot()` slower than
+  // `RECONCILE_INTERVAL_MS`, so the next interval fires before the last
+  // one resolved) from interfering with each other's staleness check —
+  // one request finishing doesn't reset the flag out from under another
+  // still in flight. Skipping a raced reconciliation is harmless — the
+  // next one fires in `RECONCILE_INTERVAL_MS` against a snapshot that
+  // isn't racing anything.
+  let eventGeneration = 0;
+
+  const onEvent = (simEvent: SimEvent) => {
+    eventGeneration++;
+    handleEvent(simEvent);
+  };
+
   if (isTank) {
     await pluginApi.start(settings, (event) => {
       const simEvent = event as SimEvent;
-      handleEvent(simEvent);
+      onEvent(simEvent);
       // Rebroadcast so non-tank windows stay in sync without each holding
       // their own `Channel` (the plugin only keeps one — see this file's
       // header).
       void emit(JAR_REBROADCAST_EVENT, simEvent);
     });
   } else {
-    await listen<SimEvent>(JAR_REBROADCAST_EVENT, (e) => handleEvent(e.payload));
+    await listen<SimEvent>(JAR_REBROADCAST_EVENT, (e) => onEvent(e.payload));
   }
 
   const snapshot = (await pluginApi.getSnapshot()) as {
@@ -238,6 +281,20 @@ async function doStart(settings: JarSettings): Promise<void> {
     is_night: boolean;
   };
   useJarStore.getState().hydrate(snapshot);
+
+  setInterval(() => {
+    void (async () => {
+      const requestGeneration = eventGeneration;
+      const resync = (await pluginApi.getSnapshot()) as {
+        critters: Critter[];
+        settings: JarSettings;
+        sim_seconds: number;
+        is_night: boolean;
+      };
+      if (eventGeneration !== requestGeneration) return;
+      useJarStore.getState().hydrate(resync);
+    })();
+  }, RECONCILE_INTERVAL_MS);
 }
 
 /** Typed wrappers over the untyped `tauri-plugin-jar-api` commands — every
