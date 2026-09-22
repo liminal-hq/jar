@@ -140,9 +140,9 @@ function isOutsideEveryColliderBox(
 describe('keepClearOfCastle', () => {
   const MARGIN = 0.3; // a plausible fish collider radius (Fish.tsx's colliderRadiusFor runs 0.46-0.72)
 
-  it('leaves a point that is already clear of every box untouched', () => {
-    const farAway = { x: -3, y: 0, z: -3 };
-    expect(keepClearOfCastle(farAway, MARGIN)).toEqual(farAway);
+  it('leaves a point that is already clear of every box, well inside the tank, untouched', () => {
+    const clear = { x: -2, y: 0, z: 0 };
+    expect(keepClearOfCastle(clear, MARGIN)).toEqual(clear);
   });
 
   it('pushes a point out of a wall segment box it started inside', () => {
@@ -175,5 +175,27 @@ describe('keepClearOfCastle', () => {
     // Same point HIDE_POINT targets — a hiding fish must still be able to
     // reach it without this function shoving it back out.
     expect(keepClearOfCastle(HIDE_POINT, MARGIN)).toEqual(HIDE_POINT);
+  });
+
+  it('does not push a point past the tank wall while clearing a tower near it', () => {
+    // A tower sits close enough to the back wall that pushing straight out
+    // of it, with no tank-bounds awareness, can land past that wall.
+    const tower = CASTLE_COLLIDER_BOXES[3]!; // left tower
+    const towerWorld = {
+      x: CASTLE_POSITION.x + tower.position.x,
+      y: CASTLE_POSITION.y + tower.position.y,
+      z: CASTLE_POSITION.z + tower.position.z,
+    };
+    const behindTower = {
+      x: towerWorld.x,
+      y: towerWorld.y,
+      z: towerWorld.z - tower.halfExtents.z - 0.05, // just past its back face
+    };
+    const pushed = keepClearOfCastle(behindTower, MARGIN);
+
+    expect(isOutsideEveryColliderBox(pushed, MARGIN)).toBe(true);
+    expect(Math.abs(pushed.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x - MARGIN + 1e-9);
+    expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - MARGIN + 1e-9);
+    expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - MARGIN + 1e-9);
   });
 });

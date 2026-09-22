@@ -159,13 +159,11 @@ function LightProp({
 // shadow rather than as its own distinct fixture.
 // z=0.85, not flush against the wall — a lamp planted right at a vertical
 // surface's own base aims almost straight up it, grazing the face at a
-// steep angle a Lambertian surface barely lights (confirmed live: even at
-// absurd intensity, the wall stayed dark while the merlon tops brightened
-// instead, since those top-facing surfaces catch that near-vertical ray
-// far better than the wall's own forward-facing one does). Standing the
-// fixture out from the wall, the way a real landscape uplight actually
-// would be, gives the ray a real forward component into the face it's
-// meant to light, not just an upward one.
+// steep angle a Lambertian surface barely lights, while the merlon tops'
+// near-horizontal, top-facing surfaces catch that same near-vertical ray
+// far better. Standing the fixture out from the wall, the way a real
+// landscape uplight actually would be, gives the ray a real forward
+// component into the face it's meant to light, not just an upward one.
 // x=-0.85, not -0.55 — same door-widened reasoning as `ArrowSlit`'s own
 // comment below: the door now spans ±0.65, so -0.55 would plant the lamp
 // inside the opening instead of on the sand beside it.
@@ -174,14 +172,12 @@ const LIGHT_PROP_POSITION: [number, number, number] = [-0.85, 0.03, 0.85];
 // ±CASTLE_DOOR_HALF_WIDTH (0.65), so a target inside that span aims into
 // the opening rather than the wall beside it; -0.925 lands at the centre
 // of the actual left wall segment (which spans -1.2 to -0.65), above the
-// lamp. y=0.75, not up near the crown (1.4) — a target that high put the
-// brightest part of the cone right at the merlon/crown edge, and what
-// read as "the wall lighting up" in screenshots turned out to be a
-// specular glint off the nearby round window/arrow-slit props (roughness
-// 0.4, glossy enough to catch a highlight from a weak light that barely
-// dents a diffuse flat surface), not real diffuse light on the wall
-// itself. 0.75 sits in a plain flat stretch of wall with no round prop
-// nearby to fake it.
+// lamp. y=0.75, not up near the crown (1.4) — a target that high puts the
+// brightest part of the cone right at the merlon/crown edge instead of
+// the flat wall, and a nearby round prop (roughness 0.4, glossy enough
+// for a highlight a diffuse flat surface wouldn't show) can read as "the
+// wall lighting up" on its own. 0.75 sits in a plain flat stretch of
+// wall with no round prop nearby to fake it.
 const LIGHT_PROP_TARGET: [number, number, number] = [-0.925, 0.75, 0.29];
 
 // Intensity at `light_intensity`'s default 100% — the value tuning
@@ -194,16 +190,8 @@ const GROUND_UPLIGHT_BASE_INTENSITY = 25;
  * visible source. `target` is a plain `Object3D` rather than a position
  * tuple because `SpotLight`'s own `target` property must be a scene
  * object, not a vector; set imperatively once both light and target refs
- * exist. Wide angle/penumbra and a real intensity bump (a first pass at
- * 4 barely registered once the tank-wide LED strip's own ambient wash
- * was in place) — a "flood," not a tight pin-spot.
- *
- * This is also what originally exposed `svgExtrude.ts`'s `extrude()`
- * mirrored-normal bug live: at a bright test colour/intensity, this light
- * visibly lit the keep's simple (non-extruded) adornments — the `Window`
- * sphere, the `ArrowSlit` boxes — while the extruded keep/merlon body
- * sharing that same function stayed dark, despite both catching the same
- * light. See `extrude()`'s own doc comment for the actual fix. */
+ * exist. Wide angle/penumbra and a real intensity margin over the tank-
+ * wide LED strip's own ambient wash — a "flood," not a tight pin-spot. */
 function GroundUplight() {
   // Setup's own intensity slider (JarSettings.light_intensity, a 0-200%
   // scale) — a separate knob from the tank-wide LED strip's light_on/
@@ -236,12 +224,11 @@ function GroundUplight() {
       <LightProp position={LIGHT_PROP_POSITION} quaternion={quaternion} />
       {/* No castShadow: this light's own source sits essentially at the
           surface of `LightProp`'s barrel mesh (deliberately, for the
-          "light genuinely comes from the lens" effect) — with shadows on,
-          that mesh immediately self-shadows its own light out almost
-          entirely, which is why an earlier pass here read as having no
-          effect on the wall even at absurd intensities. This fixture is a
-          small accent, not a primary shadow-casting light — the scene's
-          directionalLight already owns real shadows (§8.1's own note). */}
+          "light genuinely comes from the lens" effect) — with shadows
+          on, that mesh immediately self-shadows its own light out
+          almost entirely. This fixture is a small accent, not a primary
+          shadow-casting light — the scene's directionalLight already
+          owns real shadows (§8.1's own note). */}
       <spotLight
         ref={lightRef}
         position={[lensPosition.x, lensPosition.y, lensPosition.z]}
@@ -304,12 +291,10 @@ export function Castle() {
         />
       </group>
       <Window position={[0, 1.4, 0.29]} radius={0.09} />
-      {/* x=±0.9, not ±0.55 — the door widened (`decorLayout.ts`'s own
-          `CASTLE_DOOR_HALF_WIDTH` comment) after a Codex review round
-          caught it not actually clearing most fish colliders; ±0.55
-          would now sit inside the door opening instead of on the solid
-          wall beside it. ±0.9 lands near the centre of each wall
-          segment, which now spans ±0.65 to ±1.2. */}
+      {/* x=±0.9, not ±0.55 — `decorLayout.ts`'s `CASTLE_DOOR_HALF_WIDTH`
+          is 0.65, so ±0.55 would sit inside the door opening instead of
+          on the solid wall beside it. ±0.9 lands near the centre of each
+          wall segment, which spans ±0.65 to ±1.2. */}
       <ArrowSlit position={[-0.9, 1.0, 0.29]} />
       <ArrowSlit position={[0.9, 1.0, 0.29]} />
       <Flag position={[0, 2.0, 0]} />

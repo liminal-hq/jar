@@ -33,13 +33,11 @@ export const CASTLE_KEEP_HEIGHT = 1.7;
 
 /** The doorway's own clear opening — a real cut-through hole
  * (`castle.svg`), sized to comfortably clear most fish (the biggest, a
- * male Veil, occasionally brushes the frame; see this file's header). A
- * Codex review round on this feature's PR caught that this was actually
- * only clearing 1 of the 6 fin/sex adult-collider combinations at its
- * original 0.5 (`Fish.tsx`'s `colliderRadiusFor` diameters run
- * 0.91-1.45) — 0.65 clears 5 of 6 (only a male Veil, the single biggest
- * combination at 1.45, still occasionally brushes), matching what this
- * comment already claimed rather than actually delivering it. */
+ * male Veil, occasionally brushes the frame; see this file's header). At
+ * 0.65, 5 of the 6 fin/sex adult-collider combinations `Fish.tsx`'s
+ * `colliderRadiusFor` produces (diameters 0.91-1.45) fit through; only a
+ * male Veil, the single biggest at 1.45, still occasionally brushes the
+ * frame. */
 export const CASTLE_DOOR_HALF_WIDTH = 0.65;
 export const CASTLE_DOOR_HEIGHT = 1.15;
 
@@ -159,23 +157,34 @@ export const PLANT_LEFT_OF_KEEP_POSITION = { x: -0.9, y: FLOOR_TOP_Y, z: 0.25 };
 /** Pushes a point clear of `CASTLE_COLLIDER_BOXES` (each box expanded by
  * `margin` on every side) if it falls inside one, along whichever axis
  * needs the smallest push (the standard AABB minimum-translation
- * approach) — otherwise returns the point unchanged. Exists because a
- * critter's `favourite_spot` (`Fish.tsx`) is rolled in `jar-core`, which
- * has no knowledge of decor (`docs/architecture/rust-core.md`'s own
- * "no I/O, no render knowledge" boundary for the sim core) — nothing
+ * approach), and keeps it within `TANK_INNER_BOUNDS` (also shrunk by
+ * `margin`) throughout — otherwise returns the point unchanged. Exists
+ * because a critter's `favourite_spot` (`Fish.tsx`) is rolled in
+ * `jar-core`, which has no knowledge of decor (`docs/architecture/rust-core.md`'s
+ * own "no I/O, no render knowledge" boundary for the sim core) — nothing
  * upstream of the frontend can already avoid the castle, so a fish
  * spawning (or returning to rest) at a percent-rolled point that happens
  * to land inside one of these boxes would otherwise mount its RigidBody
  * already interpenetrating a fixed collider, which Rapier resolves with
  * an immediate pop/launch on the very first physics step rather than a
- * normal approach and stop. Loops a few times since resolving one box's
- * penetration can, in principle, push into an adjacent one. */
+ * normal approach and stop. The tank-bounds clamp runs every pass, not
+ * just at the end — a castle box near the tank wall (a tower sits close
+ * to the back wall) can push a point past that wall on its own, and a
+ * clamp applied only afterward could then walk it straight back into the
+ * castle box it was just pushed out of; alternating the two constraints
+ * across a few passes converges on a point that satisfies both. */
 export function keepClearOfCastle(
   point: { x: number; y: number; z: number },
   margin: number,
 ): { x: number; y: number; z: number } {
   let result = point;
   for (let pass = 0; pass < 4; pass++) {
+    result = {
+      x: clamp(result.x, -(TANK_INNER_BOUNDS.x - margin), TANK_INNER_BOUNDS.x - margin),
+      y: clamp(result.y, -(TANK_INNER_BOUNDS.y - margin), TANK_INNER_BOUNDS.y - margin),
+      z: clamp(result.z, -(TANK_INNER_BOUNDS.z - margin), TANK_INNER_BOUNDS.z - margin),
+    };
+
     let pushedThisPass = false;
     for (const box of CASTLE_COLLIDER_BOXES) {
       const boxWorld = {
@@ -199,16 +208,28 @@ export function keepClearOfCastle(
       const penetrationY = expanded.y - Math.abs(dy);
       const penetrationZ = expanded.z - Math.abs(dz);
       const sign = (n: number) => (n < 0 ? -1 : 1); // never 0 — a point exactly on the box's own centre plane still needs a direction to push
+      // A push landing exactly on the expanded boundary can still read as
+      // "inside" on the next pass's strict `<` check once floating-point
+      // rounding is involved, oscillating rather than converging — nudge
+      // past it by a hair so the next check is unambiguous.
+      const clearanceEpsilon = 1e-6;
       if (penetrationX <= penetrationY && penetrationX <= penetrationZ) {
-        result = { ...result, x: boxWorld.x + sign(dx) * expanded.x };
+        result = { ...result, x: boxWorld.x + sign(dx) * (expanded.x + clearanceEpsilon) };
       } else if (penetrationY <= penetrationX && penetrationY <= penetrationZ) {
-        result = { ...result, y: boxWorld.y + sign(dy) * expanded.y };
+        result = { ...result, y: boxWorld.y + sign(dy) * (expanded.y + clearanceEpsilon) };
       } else {
-        result = { ...result, z: boxWorld.z + sign(dz) * expanded.z };
+        result = { ...result, z: boxWorld.z + sign(dz) * (expanded.z + clearanceEpsilon) };
       }
       pushedThisPass = true;
     }
     if (!pushedThisPass) break;
   }
   return result;
+}
+
+/** `THREE.MathUtils.clamp`, without a three.js import — this file is
+ * deliberately three.js-free (see the header comment) so `decorLayout.test.ts`
+ * can unit-test it without a renderer. */
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }

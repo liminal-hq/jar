@@ -78,6 +78,22 @@ function maxColliderRadiusFor(critter: Critter): number {
   return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale;
 }
 
+/** `colliderRadiusFor` at its largest — a fry or juvenile's own radius,
+ * used to compute how much clearance a *fixed, one-time* spawn/favourite-
+ * spot nudge needs (`keepClearOfCastle`, only ever run once per critter
+ * per `Fish`'s own `useMemo`), understates how much clearance that spot
+ * will actually need once the fish grows into an adult and its
+ * `BallCollider` (sized fresh from the live `colliderRadiusFor` every
+ * render) grows to match — a spot safe for a fry could then overlap the
+ * castle. Life stage scaling only ever grows a collider, never shrinks
+ * it past adult size, so the adult radius is always the correct one-time
+ * margin regardless of age at spawn. */
+function adultColliderRadiusFor(critter: Critter): number {
+  const finType = critter.fin ?? 'Forked';
+  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
+  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale; // lifeStageScale omitted: always 1 at adult
+}
+
 interface FishProps {
   critter: Critter;
   livingPopulation: number;
@@ -138,7 +154,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       critter.favourite_spot.z,
       spotClearance,
     );
-    return keepClearOfCastle(p, colliderRadiusFor(critter));
+    return keepClearOfCastle(p, adultColliderRadiusFor(critter));
     // Favourite spot never changes after spawn (rust-core.md §6.4) — no
     // need to react to it.
     // eslint-disable-next-line react-hooks/exhaustive-deps

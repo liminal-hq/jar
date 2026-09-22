@@ -25,19 +25,13 @@ export function shapesFromSvg(svg: string): THREE.Shape[] {
  * *topology*, so nothing does that second half automatically — this does
  * it by hand.
  *
- * `THREE.ExtrudeGeometry` builds *non-indexed* geometry (confirmed live:
- * `geometry.index` is `null`), so an index-only implementation here is a
- * silent no-op for every caller — the exact bug a Codex review round
- * caught after an earlier version of this function shipped doing nothing,
- * despite live testing that looked like it worked (turned out to be a
- * stale automation-bridge connection returning blank screenshots that
- * masked genuine renders, and separately a color/ambient-light mixup that
- * masked the no-op — see PR discussion, not a rendering bug at all).
- * Every 3 consecutive vertices form one triangle in non-indexed geometry,
- * so "reverse the winding" here means swapping each attribute's own
- * values (position, normal, uv — whatever `ExtrudeGeometry` populated)
- * between a triangle's 2nd and 3rd vertex, not touching an index buffer
- * that doesn't exist. */
+ * `THREE.ExtrudeGeometry` builds *non-indexed* geometry (`geometry.index`
+ * is `null`), so an index-only implementation here would be a silent
+ * no-op for every caller. Every 3 consecutive vertices form one triangle
+ * in non-indexed geometry, so "reverse the winding" here means swapping
+ * each attribute's own values (position, normal, uv — whatever
+ * `ExtrudeGeometry` populated) between a triangle's 2nd and 3rd vertex,
+ * not touching an index buffer that doesn't exist. */
 function reverseWinding(geometry: THREE.BufferGeometry): void {
   const index = geometry.index;
   if (index) {
