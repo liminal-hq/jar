@@ -41,6 +41,7 @@ export function AquariumEnvironment() {
   const halfH = TANK_INNER_BOUNDS.y;
   const halfD = TANK_INNER_BOUNDS.z;
   const lightOn = useJarStore((s) => s.settings.light_on);
+  const lightColour = useJarStore((s) => s.settings.light_colour);
 
   return (
     <>
@@ -87,7 +88,7 @@ export function AquariumEnvironment() {
               depthWrite={false}
             />
           </mesh>
-          <LedLightStrip />
+          <LedLightStrip colour={lightColour} />
         </>
       )}
 

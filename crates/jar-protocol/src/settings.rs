@@ -34,6 +34,26 @@ pub enum DialogTheme {
     NeonTerminal,
 }
 
+/// The tank's hood light colour (`docs/architecture/3d-engine.md` §8.1's
+/// `LedLightStrip`) — presentation only, unlike `light_on` itself, which
+/// also feeds `jar-core::tick`'s mood formula (SPEC.md §5). Named after
+/// colours real aquarium hobbyist LED fixtures actually ship with: crisp
+/// daylight white and warm white as the two everyday choices, moonlight
+/// blue and reef purple/actinic as popular night/marine-tank looks, a
+/// planted-tank green, a sunrise/sunset amber, and one just-for-fun RGB
+/// cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum LightColour {
+    Daylight,
+    Warm,
+    Moonlight,
+    Reef,
+    Jungle,
+    Sunset,
+    Party,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct JarSettings {
@@ -48,6 +68,7 @@ pub struct JarSettings {
     /// variant pick (or the initial default below) writes to it.
     pub theme_variants: BTreeMap<DialogTheme, String>,
     pub light_on: bool,
+    pub light_colour: LightColour,
     pub ambient_particles_on: bool, // "Bubbles" (aquarium) / "Mist" (terrarium)
     pub sound_on: bool,
     /// 1-60, Real time = 1 (SPEC.md §5).
@@ -112,6 +133,7 @@ impl Default for JarSettings {
             dialog_theme: DialogTheme::Modern,
             theme_variants: default_theme_variants(),
             light_on: true,
+            light_colour: LightColour::Daylight,
             ambient_particles_on: true,
             sound_on: false,
             simulation_speed: 1,
@@ -136,6 +158,7 @@ mod tests {
         );
         assert_eq!(settings.theme_variants.len(), 6);
         assert!(settings.light_on);
+        assert_eq!(settings.light_colour, LightColour::Daylight);
         assert!(settings.ambient_particles_on);
         assert!(!settings.sound_on);
         assert_eq!(settings.simulation_speed, 1);

@@ -12,6 +12,7 @@ permissions = [
     "allow-set-toggle",
     "allow-set-theme",
     "allow-set-frame",
+    "allow-set-light-colour",
     "allow-get-snapshot",
     "allow-load-snapshot",
 ]

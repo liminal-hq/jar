@@ -7,9 +7,11 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use std::collections::BTreeMap;
+
 use jar_protocol::{
     default_theme_variants, known_theme_variant_names, Critter, CritterId, DialogTheme,
-    FavouriteSpot, FinType, JarSettings, Personality, Sex, Species, TankFrame,
+    FavouriteSpot, FinType, JarSettings, LightColour, Personality, Sex, Species, TankFrame,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -21,7 +23,7 @@ const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
 /// every time the current snapshot body changes shape.
-const CURRENT_VERSION: u16 = 3;
+const CURRENT_VERSION: u16 = 4;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
@@ -45,6 +47,14 @@ const CURRENT_VERSION: u16 = 3;
 // shape as it stood for both v1 and v2 (it never changed between them);
 // `migrate_v2` backfills `life_stage` by recomputing it from each
 // critter's own `age_sec`, same as `jar-core::tick::life_stage` does live.
+//
+// v4 (2026-09-22): `JarSettings` gained `light_colour: LightColour` (the
+// tank's hood light, `docs/architecture/3d-engine.md` §8.1's
+// `LedLightStrip`). Same "postcard isn't self-describing" problem as v2 —
+// `JarSettings`'s shape didn't actually change between v2 and v3 (only
+// `Critter` did), so `SettingsV3` below covers both: the frozen shape as it
+// stood through v3, changed here at v4. `migrate_v3` defaults `light_colour`
+// to `LightColour::Daylight` for anything saved before this field existed.
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -100,16 +110,41 @@ struct SnapshotV1 {
     settings: SettingsV1,
 }
 
+/// The pre-v4 `JarSettings` shape — see the v4 comment above. `JarSettings`
+/// didn't actually change shape between v2 and v3 (only `Critter` did), so
+/// this one frozen struct covers both `SnapshotV2` and `SnapshotV3` below.
+/// Not the live `jar_protocol::JarSettings`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct SettingsV3 {
+    mode: Species,
+    frame: TankFrame,
+    dialog_theme: DialogTheme,
+    theme_variants: BTreeMap<DialogTheme, String>,
+    light_on: bool,
+    ambient_particles_on: bool,
+    sound_on: bool,
+    simulation_speed: u8,
+    always_on_top: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV2 {
     critters: Vec<CritterV2>,
     sim_seconds: f64,
     speed: u8,
-    settings: JarSettings,
+    settings: SettingsV3,
 }
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotV3 {
+    critters: Vec<Critter>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: SettingsV3,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV4 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -133,7 +168,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV3 {
+    let body = SnapshotV4 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -169,7 +204,7 @@ fn migrate_v1(v1: SnapshotV1) -> SnapshotV2 {
         critters: v1.critters,
         sim_seconds: v1.sim_seconds,
         speed: v1.speed,
-        settings: JarSettings {
+        settings: SettingsV3 {
             mode: v1.settings.mode,
             frame: v1.settings.frame,
             dialog_theme: v1.settings.dialog_theme,
@@ -220,6 +255,30 @@ fn migrate_v2(v2: SnapshotV2) -> SnapshotV3 {
     }
 }
 
+/// Defaults `light_colour` to `LightColour::Daylight` — nothing saved
+/// before v4 ever chose one, so there's no real prior pick to preserve
+/// (unlike `migrate_v1`'s theme-variant carry-forward, where one often
+/// existed).
+fn migrate_v3(v3: SnapshotV3) -> SnapshotV4 {
+    SnapshotV4 {
+        critters: v3.critters,
+        sim_seconds: v3.sim_seconds,
+        speed: v3.speed,
+        settings: JarSettings {
+            mode: v3.settings.mode,
+            frame: v3.settings.frame,
+            dialog_theme: v3.settings.dialog_theme,
+            theme_variants: v3.settings.theme_variants,
+            light_on: v3.settings.light_on,
+            light_colour: LightColour::Daylight,
+            ambient_particles_on: v3.settings.ambient_particles_on,
+            sound_on: v3.settings.sound_on,
+            simulation_speed: v3.settings.simulation_speed,
+            always_on_top: v3.settings.always_on_top,
+        },
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
@@ -227,16 +286,20 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
         return Err(SnapshotError::BadMagic);
     }
 
-    let body: SnapshotV3 = match header.version {
+    let body: SnapshotV4 = match header.version {
         1 => {
             let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v2(migrate_v1(v1))
+            migrate_v3(migrate_v2(migrate_v1(v1)))
         }
         2 => {
             let v2: SnapshotV2 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v2(v2)
+            migrate_v3(migrate_v2(v2))
         }
-        3 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        3 => {
+            let v3: SnapshotV3 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v3(v3)
+        }
+        4 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
         other => return Err(SnapshotError::UnsupportedVersion(other)),
     };
 
@@ -420,7 +483,17 @@ mod tests {
             critters: vec![adult],
             sim_seconds: 700.0,
             speed: 1,
-            settings: JarSettings::default(),
+            settings: SettingsV3 {
+                mode: Species::Fish,
+                frame: TankFrame::Bevelled98,
+                dialog_theme: DialogTheme::Modern,
+                theme_variants: default_theme_variants(),
+                light_on: true,
+                ambient_particles_on: true,
+                sound_on: false,
+                simulation_speed: 1,
+                always_on_top: false,
+            },
         };
         let header = SnapshotHeader {
             magic: MAGIC,
@@ -439,5 +512,41 @@ mod tests {
         // Everything else carried across untouched.
         assert_eq!(restored.critters[0].name, "Pickle");
         assert_eq!(restored.critters[0].age_sec, 700.0);
+    }
+
+    #[test]
+    fn decode_defaults_light_colour_on_a_v2_snapshot_that_never_had_one() {
+        let v2 = SnapshotV2 {
+            critters: Vec::new(),
+            sim_seconds: 7.0,
+            speed: 2,
+            settings: SettingsV3 {
+                mode: Species::Gecko,
+                frame: TankFrame::RoundedGlass,
+                dialog_theme: DialogTheme::Modern,
+                theme_variants: default_theme_variants(),
+                light_on: true,
+                ambient_particles_on: false,
+                sound_on: true,
+                simulation_speed: 10,
+                always_on_top: false,
+            },
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 2,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v2).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        assert_eq!(restored.settings.light_colour, LightColour::Daylight);
+        // The rest of v2's settings and the clock carry over too.
+        assert_eq!(restored.settings.mode, Species::Gecko);
+        assert_eq!(restored.settings.frame, TankFrame::RoundedGlass);
+        assert_eq!(restored.settings.simulation_speed, 10);
+        assert_eq!(restored.clock.sim_seconds, 7.0);
+        assert_eq!(restored.clock.speed, 2);
     }
 }

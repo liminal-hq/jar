@@ -153,6 +153,7 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             commands::set_toggle,
             commands::set_theme,
             commands::set_frame,
+            commands::set_light_colour,
             commands::get_snapshot,
             commands::load_snapshot,
         ])

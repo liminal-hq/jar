@@ -11,6 +11,7 @@
     "NeonTerminal": "Magenta"
   },
   "light_on": true,
+  "light_colour": "Daylight",
   "ambient_particles_on": true,
   "sound_on": false,
   "simulation_speed": 1,

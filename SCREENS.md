@@ -19,7 +19,7 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
   - Frame: Bevelled 98 · Wood stand · Brushed metal · Rounded glass · Neon/CRT · Cardboard cutout
   - Dialog theme: Modern · Modern dark · Classic 98 · Paper notebook · Handheld LCD · Neon terminal
   - Variant (row changes with the theme; see `SPEC.md` §4)
-  - Tank toggles: Light, Bubbles/Mist, Critter sounds
+  - Tank toggles: Light (plus a colour chip picker while it's on — Daylight, Warm, Moonlight, Reef, Jungle, Sunset, Party), Bubbles/Mist, Critter sounds
   - Simulation speed: slider 1–60× with a **Real time** chip (snaps to 1×). Hint line explains the current jar-day length.
   - Jar clock line, `+ Add a critter`
   - (Build-only additions: always-on-top, show/hide, quit, reset jar)
