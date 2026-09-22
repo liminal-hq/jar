@@ -73,10 +73,42 @@ function Flag({ position }: { position: [number, number, number] }) {
   );
 }
 
-/** Aimed down at the castle from just under the water's surface — `target`
- * is a plain `Object3D` rather than a position tuple because `SpotLight`'s
- * own `target` property must be a scene object, not a vector; set
- * imperatively once both light and target refs exist. */
+const LAMP_HOUSING_COLOUR = '#4a3f45';
+const LAMP_BULB_COLOUR = '#fff4d6';
+
+/** A small ground-level uplighting fixture — a dark dome housing with a
+ * warm, glowing "bulb" cap (an emissive material, so it reads as lit even
+ * from angles the actual spotlight cone doesn't reach) — sitting on the
+ * sand just off to the side of the door, shining up the wall above it. Not
+ * a light source itself; `CastleSpotlight` below is the real light,
+ * positioned to originate from here. */
+function LightProp({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh castShadow receiveShadow raycast={() => null}>
+        <cylinderGeometry args={[0.09, 0.11, 0.06, 12]} />
+        <meshStandardMaterial color={LAMP_HOUSING_COLOUR} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.05, 0]} raycast={() => null}>
+        <sphereGeometry args={[0.05, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color={LAMP_BULB_COLOUR}
+          emissive={LAMP_BULB_COLOUR}
+          emissiveIntensity={1.2}
+          roughness={0.4}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+const LIGHT_PROP_POSITION: [number, number, number] = [0.55, 0.03, 0.42];
+
+/** A ground-level uplight, genuinely originating from `LightProp`'s bulb
+ * and aimed up the wall — not a light floating in space with no visible
+ * source. `target` is a plain `Object3D` rather than a position tuple
+ * because `SpotLight`'s own `target` property must be a scene object, not
+ * a vector; set imperatively once both light and target refs exist. */
 function CastleSpotlight() {
   const lightRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
@@ -87,22 +119,19 @@ function CastleSpotlight() {
   }, []);
   return (
     <>
-      {/* Positioned well out front and only modestly above the keep, not
-          nearly overhead — a steep-from-above angle grazes the front face
-          (the one the fixed camera actually sees) and mostly just lights
-          the thin roof-tops instead, which is invisible from here. */}
+      <LightProp position={LIGHT_PROP_POSITION} />
       <spotLight
         ref={lightRef}
-        position={[0, 1.3, 2.4]}
-        color="#bfe8ff"
-        intensity={5}
-        angle={0.55}
-        penumbra={0.5}
-        distance={6}
+        position={[LIGHT_PROP_POSITION[0], LIGHT_PROP_POSITION[1] + 0.08, LIGHT_PROP_POSITION[2]]}
+        color="#ffe9bd"
+        intensity={4}
+        angle={0.5}
+        penumbra={0.4}
+        distance={3}
         castShadow
         shadow-mapSize={[512, 512]}
       />
-      <object3D ref={targetRef} position={[0, 0.8, 0.28]} />
+      <object3D ref={targetRef} position={[0.35, 1.5, 0.29]} />
     </>
   );
 }
