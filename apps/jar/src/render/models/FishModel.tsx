@@ -35,16 +35,16 @@ interface FishModelProps {
   vehicle: YUKA.Vehicle;
 }
 
-/** The SVG artwork is authored at a `viewBox="-170 -110 340 220"` scale
- * (`NOTES.md`) — this brings it down to roughly the same on-screen size as
- * the model it replaces (whose body sphere had radius 0.18). Combined with
+/** The SVG artwork is authored at a `viewBox="-170 -110 340 220"` scale —
+ * this brings it down to roughly the same on-screen size as the model it
+ * replaces (whose body sphere had radius 0.18). Combined with
  * `lifeStageScale` on the root group, same single-scale-group pattern the
  * model already used. */
 const SVG_SCALE = 0.004;
 
 /** Eye and spot positions are plain sphere primitives, not extruded SVG
  * shapes (cheap, no reason to route something this simple through
- * `SVGLoader`) — `NOTES.md`'s coordinates, with y negated by hand since
+ * `SVGLoader`) — hand-picked coordinates, with y negated by hand since
  * these don't go through `fishGeometry.ts`'s `extrude()` (which does that
  * flip internally for the pieces that need it). */
 const EYE = { x: 68, y: 10, r: 7 };
@@ -62,7 +62,7 @@ const VEIL_BEND_AMPLITUDE = 0.5;
 const VEIL_PHASE_LAG = 1.1; // matches docs/architecture/3d-engine.md §6.6's per-segment stagger constant
 const PECTORAL_FLUTTER_AMPLITUDE = 0.18;
 const MOUTH_CYCLE_FREQUENCY = 0.9;
-const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside NOTES.md's ~20–25° sweet spot
+const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside a hand-picked ~20–25° sweet spot
 const BODY_BANK_AMPLITUDE = 0.05;
 const BODY_BOB_AMPLITUDE = 0.02;
 
@@ -220,10 +220,10 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
     if (pectoralFarPivotRef.current) pectoralFarPivotRef.current.rotation.z = flutter;
 
     // Mouth's own slower period — it doesn't open/close on the tail's
-    // beat. Rotates about Z (the hinge's own 2D plane, NOTES.md); sign
-    // verified by tracing the jaw tip's trajectory under rotation before
-    // this shipped (the tip moves toward the belly side, i.e. drops down,
-    // with this sign).
+    // beat. Rotates about Z (the hinge's own 2D plane); sign verified by
+    // tracing the jaw tip's trajectory under rotation before this shipped
+    // (the tip moves toward the belly side, i.e. drops down, with this
+    // sign).
     if (mouthPivotRef.current) {
       mouthPivotRef.current.rotation.z =
         -Math.max(0, Math.sin(t * MOUTH_CYCLE_FREQUENCY + phaseSeed)) * MOUTH_OPEN_AMPLITUDE;

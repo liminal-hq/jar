@@ -31,7 +31,7 @@ function shapesFromSvg(svg: string): THREE.Shape[] {
 }
 
 /** SVG's Y grows downward, three.js's Y grows upward — the standard flip
- * (`NOTES.md`) mirrors the geometry, which also reverses its face winding.
+ * here mirrors the geometry, which also reverses its face winding.
  * Rather than rebuild the index buffer to un-reverse it, every fish
  * material renders both faces (`side: THREE.DoubleSide`) — three.js's
  * shader already flips the shading normal per back-facing fragment, so
@@ -50,13 +50,13 @@ function extrude(shapes: THREE.Shape[], depth: number, bevel = 0.6): THREE.Buffe
   return geometry;
 }
 
-/** Body depth all other pieces' overlaps/welds are measured against
- * (`NOTES.md`'s "every attachment overlaps the body by ~4 units" rule). */
+/** Body depth all other pieces' overlaps/welds are measured against — every
+ * attachment overlaps the body by ~4 units. */
 export const BODY_DEPTH = 16;
 
 /** Hinge points, already converted into three.js's post-`extrude()`-flip
- * space (negate the SVG-authored y) — `NOTES.md`: tail pivot (−60,0),
- * pectoral root (52,10), mouth hinge (90,8). */
+ * space (negate the SVG-authored y): tail pivot (−60,0), pectoral root
+ * (52,10), mouth hinge (90,8). */
 export const TAIL_PIVOT = { x: -60, y: 0 };
 export const PECTORAL_HINGE = { x: 52, y: -10 };
 export const MOUTH_HINGE = { x: 90, y: -8 };
