@@ -1,9 +1,10 @@
 // Per-fish Yuka vehicle + behaviors — `docs/architecture/3d-engine.md`
 // §4.1: `WanderBehavior` + `SeparationBehavior` active by default
 // (deliberately not Cohesion/Alignment — individual pets, not a school),
-// plus an `ArriveBehavior` toward the favourite spot that
-// `useArriveRoll` (in `Fish.tsx`) switches on ~30% of the time a wander
-// cycle resolves.
+// an `ArriveBehavior` toward the favourite spot that `Fish.tsx`'s periodic
+// roll switches on ~30% of the time a wander cycle resolves, and a
+// `ChasePursuitBehaviour` toward a chase target that same roll occasionally
+// assigns instead (§4.1's chase-bursts paragraph).
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -12,6 +13,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as YUKA from 'yuka';
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
+import { ChasePursuitBehaviour } from './chasePursuitBehaviour';
 import { entityManager } from './entityManager';
 import type { FishMotionMode } from './motionState';
 import { maxSpeedFor, steeringParamsFor } from './steeringParams';
@@ -72,9 +74,18 @@ export function useFishSteering(
     separation.weight = MODE_WEIGHTS.active.separation;
     const containment = new TankContainmentBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
 
+    // Added after `containment` deliberately — Yuka's priority-budget
+    // accumulation (`SteeringManager`'s calculate order) gives earlier-added
+    // behaviors first claim on `vehicle.maxForce`, so containment keeps its
+    // share even while a chase's pursuit force is large. No evader yet
+    // (`ChasePursuitBehaviour`'s own null guard covers that until `Fish.tsx`
+    // assigns one).
+    const pursuit = new ChasePursuitBehaviour();
+    pursuit.weight = MODE_WEIGHTS.active.pursuit;
+
     const arrive = new YUKA.ArriveBehavior(favouriteSpotWorld, 3, 0.3);
     arrive.weight = MODE_WEIGHTS.active.arrive;
-    // `active` stays permanently `true` (Yuka's own default) on all three —
+    // `active` stays permanently `true` (Yuka's own default) on all four —
     // `setMode`/`rampWeights` below only ever move `.weight`, never flip
     // `active`, which is what turns a mode change into a fade instead of a
     // snap. `calculate()` still runs every frame regardless of weight
@@ -91,9 +102,10 @@ export function useFishSteering(
     vehicle.steering.add(containment);
     vehicle.steering.add(wander);
     vehicle.steering.add(separation);
+    vehicle.steering.add(pursuit);
     vehicle.steering.add(arrive);
 
-    return { vehicle, wander, separation, containment, arrive };
+    return { vehicle, wander, separation, containment, pursuit, arrive };
     // Created once per mounted fish instance; personality/params/
     // maxColliderRadius changes mid-life aren't expected (a critter's
     // personality/fin/sex never change after spawn per SPEC.md §5), so this
@@ -123,13 +135,19 @@ export function useFishSteering(
    * `setMode` changing weights directly. */
   const rampWeights = (delta: number) => {
     const next = computeRampedWeights(
-      { wander: rig.wander.weight, separation: rig.separation.weight, arrive: rig.arrive.weight },
+      {
+        wander: rig.wander.weight,
+        separation: rig.separation.weight,
+        arrive: rig.arrive.weight,
+        pursuit: rig.pursuit.weight,
+      },
       targetWeightsRef.current,
       delta,
     );
     rig.wander.weight = next.wander;
     rig.separation.weight = next.separation;
     rig.arrive.weight = next.arrive;
+    rig.pursuit.weight = next.pursuit;
   };
 
   return { ...rig, params, setMode, rampWeights, maxSpeedFor };

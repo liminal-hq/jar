@@ -18,6 +18,7 @@ import type * as YUKA from 'yuka';
 
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { lifeStageScale } from '../../domain/simConstants';
+import { burstOverdrive } from '../steering/chaseParams';
 import type { FishMotionMode } from '../steering/motionState';
 import { animationMulFor, maxSpeedFor } from '../steering/steeringParams';
 import {
@@ -48,6 +49,30 @@ interface FishModelProps {
    * for the standalone critter-card preview (`CritterPreview.tsx`), which
    * has no steering mode of its own — treated as always `'active'` there. */
   getMode?: () => FishMotionMode;
+  /** This fish's *actual* physical speed (the Rapier `RigidBody`'s real
+   * `linvel()` magnitude), read imperatively each frame — same rationale as
+   * `getMode`. Defaults to `vehicle.getSpeed()` (Yuka's internal steering
+   * *target*, not what the body is really doing) when absent, preserving
+   * the critter-card preview's behaviour (no physics body of its own).
+   *
+   * The two diverge because `SteeringSystem.tsx` applies the desired
+   * velocity to the body as a *damped, gain-limited impulse* rather than
+   * setting velocity directly (`VELOCITY_GAIN`, ~1.7s time constant) — a
+   * deliberate choice so wall/fish collisions can still push back rather
+   * than being overridden every frame. Normally that lag is small enough
+   * not to matter, but a speed ceiling that keeps moving (`breathingMultiplier`,
+   * a burst ramp) keeps the *target* itself in motion too, so the body can
+   * chronically trail it. Animating off `vehicle.getSpeed()` in that case
+   * reads as "tail flapping hard, barely moving" — animating off the real
+   * physical speed instead means the tail only works as hard as the fish is
+   * actually, physically working. */
+  getSpeed?: () => number;
+  /** This fish's current speed ceiling — `maxSpeedFor(energy)` raised
+   * during a chase burst (`Fish.tsx`'s `getSpeedCeiling`). Read imperatively
+   * each frame, same rationale as `getMode`. Defaults to the flat
+   * `maxSpeedFor(critter.energy)` when absent, so the critter-card preview
+   * (which has no burst state) is unaffected. */
+  getSpeedCeiling?: () => number;
   /** Called once per frame with this fish's animation state, for the fish
    * monitor window (`domain/fishDebug.ts`) — a callback rather than an
    * imperative handle since `Fish.tsx` just wants to stash the latest value
@@ -82,6 +107,57 @@ const scratchVelocity = new THREE.Vector3();
  * two, not a hard cutover. */
 const EXCITE_SPEED_NORM_LOW = 0.45;
 const EXCITE_SPEED_NORM_HIGH = 0.7;
+
+/** Tail-beat frequency (Hz) at the calm and excited ends of the cruise
+ * range, each itself lerped further by `speedNorm` within its own end —
+ * toned down from an earlier pass that let the excited ceiling reach 10Hz,
+ * which read as vibrating rather than swimming. */
+const CALM_FREQUENCY_BASE = 2.2;
+const CALM_FREQUENCY_SPEED_SCALE = 1.8;
+const EXCITED_FREQUENCY_BASE = 4;
+const EXCITED_FREQUENCY_SPEED_SCALE = 2.5;
+
+/** Base tail-beat amplitude at the calm and excited ends of the cruise
+ * range (before the turn/overdrive boosts below). */
+const CALM_AMPLITUDE = 0.08;
+const EXCITED_AMPLITUDE = 0.16;
+
+/** How much a turn adds to tail amplitude — kept well under
+ * `CALM_AMPLITUDE`/`EXCITED_AMPLITUDE` above (a fraction of the base range,
+ * not a comparable addition to it), so a turn reads as a slightly bigger
+ * tail sweep, not a faster/more frantic one. A live pass at `0.08`/cap `2`
+ * (max +0.16, matching the *entire* base range) still read as swishing too
+ * fast through a turn — halved again here. The old `turnRate * 0.25` with
+ * no practical cap could add up to 3-7x the base amplitude on an ordinary
+ * turn. */
+const TURN_RATE_AMPLITUDE_SCALE = 0.045;
+const TURN_RATE_AMPLITUDE_CAP = 1.5;
+
+/** A turn's amplitude boost above pairs with a *reduction* in frequency —
+ * the same stroke-length/cadence trade a swimmer makes: a bigger sweep
+ * covered at the same beat rate has a faster-moving tail tip and reads as
+ * "swishing faster," when the intent is just "swishing wider." At
+ * `TURN_RATE_AMPLITUDE_CAP` this trims frequency by ~18%. */
+const TURN_RATE_FREQUENCY_DAMP_SCALE = 0.12;
+
+/** A separate, real-speed-derived signal from `excite`/`speedNorm`: how
+ * *steady* the fish's actual speed is right now, not how fast. Speeding up
+ * or slowing down is the hardest part of this whole animation to sell (the
+ * body's own physical response lags the steering target, `getSpeed`'s doc
+ * comment above) — so amplitude gets no bonus while genuinely accelerating,
+ * and a modest one once speed has actually settled, rather than reading
+ * uniformly lively regardless of whether the fish is mid-transition. Smoothed
+ * (not raw per-frame delta-speed) so it doesn't flicker frame to frame. */
+const ACCEL_SMOOTHING_RATE = 3;
+const ACCEL_STEADY_THRESHOLD = 0.15;
+const ACCEL_BUSY_THRESHOLD = 1.0;
+const STEADY_AMPLITUDE_BONUS = 0.25;
+
+/** How much a burst's `burstOverdrive` term (`chaseParams.ts`) can further
+ * scale frequency/amplitude on top of everything above — halved from an
+ * earlier pass for the same "less flutter, more swim" reason. */
+const OVERDRIVE_FREQUENCY_SCALE = 0.3;
+const OVERDRIVE_AMPLITUDE_SCALE = 0.15;
 
 /** Real "not swimming" state, not just a quiet moment — speed has to stay
  * below `REST_ENTER_SPEED` for a full `REST_ENTER_DWELL_SEC` before rest
@@ -120,6 +196,8 @@ export function FishModel({
   vehicle,
   still = false,
   getMode,
+  getSpeed,
+  getSpeedCeiling,
   onDebugFrame,
 }: FishModelProps) {
   const rootRef = useRef<THREE.Group>(null);
@@ -138,6 +216,11 @@ export function FishModel({
   // invisible between polls. Decays fast enough to read as "just happened"
   // rather than a stuck reading.
   const peakTurnRateRef = useRef(0);
+
+  // Smoothed real-speed derivative, feeding the steady-state amplitude
+  // bonus above — see `ACCEL_SMOOTHING_RATE`'s doc comment.
+  const prevSpeedRef = useRef(0);
+  const smoothedAccelRef = useRef(0);
 
   // Idle/rest state — see the constants above for the hysteresis and blend
   // timing this drives.
@@ -256,7 +339,7 @@ export function FishModel({
   useFrame((state, delta) => {
     if (still) return;
 
-    const speed = vehicle.getSpeed();
+    const speed = getSpeed ? getSpeed() : vehicle.getSpeed();
 
     // turnRate drives "sharper turn -> bigger S-curve" (§6.6) — see
     // `turnRate.ts` for why it's gated below a minimum speed rather than
@@ -297,18 +380,55 @@ export function FishModel({
     // Speed-tiered intensity, normalized by *this fish's own* speed ceiling
     // rather than an absolute number — a tired fish at its (lower) cap
     // still visibly "works hard," which is what makes cruise vs excited
-    // read as distinct characters rather than one continuous dial.
-    const speedNorm = THREE.MathUtils.clamp(speed / maxSpeedFor(critter.energy), 0, 1);
+    // read as distinct characters rather than one continuous dial. The
+    // ceiling itself is the *raised* one during a chase burst
+    // (`getSpeedCeiling`), so normalizing against it doesn't just clamp
+    // straight to 1 — `overdrive` below is what makes a burst read as
+    // genuinely harder than normal top gear, not identical to it.
+    const baseCeiling = maxSpeedFor(critter.energy);
+    const speedCeiling = getSpeedCeiling ? getSpeedCeiling() : baseCeiling;
+    const speedNorm = THREE.MathUtils.clamp(speed / speedCeiling, 0, 1);
     const excite = THREE.MathUtils.smoothstep(
       speedNorm,
       EXCITE_SPEED_NORM_LOW,
       EXCITE_SPEED_NORM_HIGH,
     );
+    const overdrive = burstOverdrive(speed, baseCeiling);
     const { freqMul, ampMul } = animationMulFor(critter.personality, critter.mood);
+    const cappedTurnRate = Math.min(turnRate, TURN_RATE_AMPLITUDE_CAP);
+
+    // How steady (vs. actively changing) the fish's real speed is right
+    // now — smoothed so an isolated frame's noise doesn't flicker the
+    // bonus below on and off.
+    const rawAccel = delta > 0 ? (speed - prevSpeedRef.current) / delta : 0;
+    prevSpeedRef.current = speed;
+    smoothedAccelRef.current = THREE.MathUtils.lerp(
+      smoothedAccelRef.current,
+      rawAccel,
+      1 - Math.exp(-ACCEL_SMOOTHING_RATE * delta),
+    );
+    const steadiness =
+      1 -
+      THREE.MathUtils.smoothstep(
+        Math.abs(smoothedAccelRef.current),
+        ACCEL_STEADY_THRESHOLD,
+        ACCEL_BUSY_THRESHOLD,
+      );
     const activeFrequency =
-      THREE.MathUtils.lerp(2.5 + 2.5 * speedNorm, 6 + 4 * speedNorm, excite) * freqMul;
+      THREE.MathUtils.lerp(
+        CALM_FREQUENCY_BASE + CALM_FREQUENCY_SPEED_SCALE * speedNorm,
+        EXCITED_FREQUENCY_BASE + EXCITED_FREQUENCY_SPEED_SCALE * speedNorm,
+        excite,
+      ) *
+      freqMul *
+      (1 + OVERDRIVE_FREQUENCY_SCALE * overdrive) *
+      (1 - TURN_RATE_FREQUENCY_DAMP_SCALE * cappedTurnRate);
     const activeAmplitude =
-      (THREE.MathUtils.lerp(0.1, 0.22, excite) + Math.min(turnRate, 3) * 0.25) * ampMul;
+      (THREE.MathUtils.lerp(CALM_AMPLITUDE, EXCITED_AMPLITUDE, excite) +
+        cappedTurnRate * TURN_RATE_AMPLITUDE_SCALE) *
+      ampMul *
+      (1 + OVERDRIVE_AMPLITUDE_SCALE * overdrive) *
+      (1 + STEADY_AMPLITUDE_BONUS * steadiness);
 
     // Micro-flick while resting: an instant bump back toward cruise
     // amplitude that the blend below immediately starts decaying again —
@@ -399,9 +519,20 @@ export function FishModel({
     // true per-segment bend. Doesn't fight `Fish.tsx`'s `RigidBody`, which
     // owns the fish's actual world position/heading — this just adds a
     // small additional local transform nested inside that.
+    //
+    // Scaled by `excite` (real-speed-derived, same term the tail's own
+    // frequency/amplitude use) rather than following `frequency` at full
+    // strength unconditionally — `frequency` alone can spike well above
+    // what the body is actually doing (the overdrive term above reacts to a
+    // *raised ceiling*, not to genuine forward progress catching up to it),
+    // and with no bone rig to distribute that into a real swimming
+    // undulation, a fast bank/bob with little real motion under it reads as
+    // the whole fish vibrating in place rather than swimming hard.
+    const swayIntensity = THREE.MathUtils.lerp(0.3, 1, excite);
     if (rootRef.current) {
-      rootRef.current.rotation.z = Math.sin(phase) * BODY_BANK_AMPLITUDE;
-      rootRef.current.position.y = Math.sin(t * frequency * 0.5 + phaseSeed) * BODY_BOB_AMPLITUDE;
+      rootRef.current.rotation.z = Math.sin(phase) * BODY_BANK_AMPLITUDE * swayIntensity;
+      rootRef.current.position.y =
+        Math.sin(t * frequency * 0.5 + phaseSeed) * BODY_BOB_AMPLITUDE * swayIntensity;
     }
   });
 
