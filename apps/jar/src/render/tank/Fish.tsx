@@ -42,6 +42,19 @@ function colliderRadiusFor(critter: Critter): number {
   return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale * lifeStageScale(critter.age_sec);
 }
 
+/** Same tail-tip sizing as `colliderRadiusFor`, but always at this fish's
+ * eventual adult/elder scale (`lifeStageScale` maxes out at `1`) rather
+ * than its current age. `favourite_spot` is rolled once at spawn and never
+ * revisited (`rust-core.md` §6.4), so the clearance reserved around it has
+ * to stay clear of whatever size this fish will grow into — a fry-sized
+ * reservation would leave an adult's much larger collider overlapping the
+ * wall by the time it actually arrives there. */
+function maxColliderRadiusFor(critter: Critter): number {
+  const finType = critter.fin ?? 'Forked';
+  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
+  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale;
+}
+
 interface FishProps {
   critter: Critter;
   livingPopulation: number;
@@ -61,12 +74,14 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const registry = useSteeringRegistry();
 
-  // How much room this fish's own collider (plus the wall collider's own
-  // half-thickness) needs reserved inside `TANK_INNER_BOUNDS` — see
-  // `simPercentToWorld`'s own comment for why mapping onto that bound alone
-  // still lets a fish's collider overlap the wall.
+  // How much room this fish's eventual adult-sized collider (plus the wall
+  // collider's own half-thickness) needs reserved inside
+  // `TANK_INNER_BOUNDS` — see `simPercentToWorld`'s own comment for why
+  // mapping onto that bound alone still lets a fish's collider overlap the
+  // wall, and `maxColliderRadiusFor`'s own comment for why this has to be
+  // the fish's eventual size, not its size at spawn.
   const spotClearance = useMemo(
-    () => WALL_THICKNESS / 2 + colliderRadiusFor(critter),
+    () => WALL_THICKNESS / 2 + maxColliderRadiusFor(critter),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
