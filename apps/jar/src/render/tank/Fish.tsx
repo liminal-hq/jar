@@ -17,7 +17,7 @@ import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
 import { FishModel } from '../models/FishModel';
 import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
-import { simPercentToWorld } from '../physics/coordinates';
+import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
 import { useSteeringRegistry } from '../steering/SteeringSystem';
 import { useFishSteering } from '../steering/useFishSteering';
 
@@ -61,11 +61,22 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
   const registry = useSteeringRegistry();
 
+  // How much room this fish's own collider (plus the wall collider's own
+  // half-thickness) needs reserved inside `TANK_INNER_BOUNDS` — see
+  // `simPercentToWorld`'s own comment for why mapping onto that bound alone
+  // still lets a fish's collider overlap the wall.
+  const spotClearance = useMemo(
+    () => WALL_THICKNESS / 2 + colliderRadiusFor(critter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const favouriteSpotWorld = useMemo(() => {
     const p = simPercentToWorld(
       critter.favourite_spot.x,
       critter.favourite_spot.y,
       critter.favourite_spot.z,
+      spotClearance,
     );
     return new YUKA.Vector3(p.x, p.y, p.z);
     // Favourite spot never changes after spawn (rust-core.md §6.4) — no
@@ -79,6 +90,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
         critter.favourite_spot.x,
         critter.favourite_spot.y,
         critter.favourite_spot.z,
+        spotClearance,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
