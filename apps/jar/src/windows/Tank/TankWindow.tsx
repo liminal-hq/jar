@@ -16,7 +16,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Drawer } from '../../components/Drawer';
-import { MouseDebugOverlay } from '../../components/MouseDebugOverlay';
+import { MouseDebugCapture } from '../../components/MouseDebugCapture';
 import { ToastLayer } from '../../components/Toast';
 import { useMouseOverlayEnabled } from '../../domain/devSettings';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
@@ -176,8 +176,8 @@ export function TankWindow() {
   // `onFocusChanged`) can ever fire for it. Crossing an *internal* DOM
   // boundary, e.g. canvas into the drawer area, fires all of those
   // correctly — it's specifically the window's own edge that's silent.
-  // (`MouseDebugOverlay`, toggled from the Dev settings window, logs raw
-  // mouse events live for diagnosing this class of platform quirk.) A
+  // (`MouseDebugCapture`, toggled from the Dev settings window, relays raw
+  // mouse events there live for diagnosing this class of platform quirk.) A
   // click is always delivered correctly regardless, so open/close is a
   // deliberate click on the tank instead of a passive hover.
   const toggleDrawer = () => {
@@ -275,7 +275,7 @@ export function TankWindow() {
     // No `data-frame` attribute — see this file's header on why the tank
     // doesn't apply frame chrome.
     <div className={styles.bezel} data-tauri-drag-region>
-      {mouseOverlayEnabled && <MouseDebugOverlay />}
+      {mouseOverlayEnabled && <MouseDebugCapture />}
       <div
         className={styles.tankInterior}
         style={
