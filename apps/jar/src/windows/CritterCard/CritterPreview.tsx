@@ -18,6 +18,7 @@ import * as YUKA from 'yuka';
 
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { FishModel } from '../../render/models/FishModel';
+import { useRenderLoopPolicy } from '../../render/tank/useRenderLoopPolicy';
 
 interface CritterPreviewProps {
   critter: Critter;
@@ -38,6 +39,11 @@ export function CritterPreview({ critter, passed = false }: CritterPreviewProps)
   // needs cleanup. `FishModel` only ever reads its speed/velocity.
   const idleVehicle = useMemo(() => new YUKA.Vehicle(), []);
 
+  // §1.3's render-loop policy, reused here: this `Canvas` lives in its own
+  // WebviewWindow (the critter card), independent of the tank's own, so it
+  // needs its own visibility-driven frameloop rather than inheriting one.
+  const frameloop = useRenderLoopPolicy();
+
   return (
     <div
       style={{
@@ -52,13 +58,22 @@ export function CritterPreview({ critter, passed = false }: CritterPreviewProps)
       }}
     >
       <Canvas
+        frameloop={frameloop}
         camera={{ fov: 32, position: [0, 0.05, 2.4] }}
         gl={{ alpha: true, antialias: true }}
         onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
       >
         <ambientLight intensity={0.7} />
         <directionalLight position={[2, 4, 3]} intensity={0.9} />
-        <FishModel critter={critter} vehicle={idleVehicle} still={passed} />
+        {/* Keyed by critter id: `FishModel` memoizes gene-derived geometry
+            (`finType`, etc.) once at mount and keeps animation state in
+            refs, neither of which reacts to `critter` changing identity —
+            correct for a real `<Fish>`, which never gets retargeted to a
+            different critter, but this preview does (`CritterCardWindow`
+            swapping which critter is selected). A fresh key forces a clean
+            remount instead of carrying over the previous critter's tail
+            geometry or a frozen mid-swim pose. */}
+        <FishModel key={critter.id} critter={critter} vehicle={idleVehicle} still={passed} />
         <OrbitControls
           enablePan={false}
           enableZoom={false}
