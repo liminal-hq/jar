@@ -10,12 +10,27 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+/// Windows excluded from `tauri-plugin-window-state` below. `SPEC.md` §6
+/// requires window positions/sizes to persist, and that covers every
+/// window in the documented screen inventory (`SCREENS.md`'s W1-W4) —
+/// `critter-card`, `family-tree` and `setup` are on-demand
+/// (`domain/windows.ts`'s `SPECS`) but still user-facing, tracked windows,
+/// so only `dev-settings` (a debug-only tool, explicitly "not part of
+/// `SPEC.md`/`SCREENS.md`" per its own `SPECS` entry) is denylisted here —
+/// it's meant to spawn fresh every time rather than remember where a dev
+/// last left it.
+const EPHEMERAL_WINDOW_LABELS: &[&str] = &["dev-settings"];
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_denylist(EPHEMERAL_WINDOW_LABELS)
+                .build(),
+        )
         .plugin(tauri_plugin_jar::init());
 
     // Debug-only automation bridge for driving/screenshotting the running

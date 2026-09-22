@@ -14,9 +14,23 @@ import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { onCritterSelected } from '../../domain/selection';
 import { lifeStageOf, SECONDS_PER_JAR_DAY } from '../../domain/simConstants';
+import { CritterPreview } from './CritterPreview';
+
+/** Reads the `critterId` this window was created with (`domain/selection.ts`'s
+ * `openSatelliteWindow` call) — the window's very first selection, which
+ * can't rely on the `jar://critter-selected` event: that's emitted right
+ * after the window is created, with no guarantee this component has
+ * mounted and subscribed yet, so a fresh window's first selection would
+ * otherwise be silently dropped. */
+function initialCritterIdFromUrl(): CritterId | null {
+  const raw = new URLSearchParams(window.location.search).get('critterId');
+  if (raw === null) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) ? id : null;
+}
 
 export function CritterCardWindow() {
-  const [selectedId, setSelectedId] = useState<CritterId | null>(null);
+  const [selectedId, setSelectedId] = useState<CritterId | null>(initialCritterIdFromUrl);
   const critter = useJarStore((s) => (selectedId !== null ? s.critters[selectedId] : undefined));
 
   useEffect(() => {
@@ -34,6 +48,7 @@ export function CritterCardWindow() {
   if (!critter.alive) {
     return (
       <DialogShell windowTitle="Critter card" title={critter.name}>
+        {critter.species === 'Fish' && <CritterPreview critter={critter} passed />}
         <p style={{ fontStyle: 'italic' }}>Remembered fondly — this one has passed on.</p>
       </DialogShell>
     );
@@ -61,6 +76,10 @@ export function CritterCardWindow() {
         />
       }
     >
+      {/* Gecko/terrarium rendering isn't built yet (NEXT_STEPS.md) — this
+          panel only knows how to render `FishModel`. */}
+      {critter.species === 'Fish' && <CritterPreview critter={critter} />}
+
       <p>
         {critter.species} · {stage} · {ageDays} days old
       </p>

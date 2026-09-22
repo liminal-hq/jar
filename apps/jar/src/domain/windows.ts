@@ -22,7 +22,10 @@ const SPECS: Record<
   'critter-card' | 'family-tree' | 'setup' | 'dev-settings',
   SatelliteWindowSpec
 > = {
-  'critter-card': { label: 'critter-card', title: 'Critter card', width: 280, height: 360 },
+  // Tall enough for the 3D preview panel (a square that scales with width,
+  // `CritterPreview.tsx`) plus the name field, stat bars and genetics list
+  // below it without scrolling.
+  'critter-card': { label: 'critter-card', title: 'Critter card', width: 320, height: 560 },
   'family-tree': { label: 'family-tree', title: 'Family tree', width: 360, height: 420 },
   // Tall enough for every row incl. the variant chip row (SPEC.md §4) and
   // TitleBar's 32px without scrolling — re-check if Setup grows more rows.
@@ -35,8 +38,21 @@ const SPECS: Record<
 /** Focuses the window if it's already open, otherwise creates it
  * positioned just to the right of the tank window (a simple placement
  * rule — replace with real "beside the tank, flip if no room" layout logic
- * per SPEC.md §2 when the real windows are built out). */
-export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<void> {
+ * per SPEC.md §2 when the real windows are built out).
+ *
+ * `initialQuery` (e.g. `"critterId=7"`) is only used when actually
+ * creating the window — it's how a caller hands a freshly-created window
+ * its starting state without racing a plain `emit()` against that window's
+ * own JS finishing loading and subscribing (`domain/selection.ts`'s own
+ * comment: an `emit()` fired right after this resolves can arrive before
+ * the new window's listener is registered, dropping the very first
+ * selection silently). An already-open window ignores it — it keeps
+ * whatever state it already has, and a caller that also wants to retarget
+ * an existing window still needs its own event for that case. */
+export async function openSatelliteWindow(
+  kind: keyof typeof SPECS,
+  initialQuery?: string,
+): Promise<void> {
   const spec = SPECS[kind];
   const existing = await WebviewWindow.getByLabel(spec.label);
   if (existing) {
@@ -57,7 +73,7 @@ export async function openSatelliteWindow(kind: keyof typeof SPECS): Promise<voi
   ]);
 
   const win = new WebviewWindow(spec.label, {
-    url: 'index.html',
+    url: initialQuery ? `index.html?${initialQuery}` : 'index.html',
     title: spec.title,
     width: spec.width,
     height: spec.height,

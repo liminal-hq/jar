@@ -27,7 +27,7 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
 ## W2 · Critter card
 
 - Spawns on clicking a critter (tank, tree, or phone list). One card at a time; clicking another critter retargets it.
-- Portrait on a habitat swatch · **name field (inline rename, dashed underline)** · species · life stage · age in days.
+- Rotatable 3D preview (drag to orbit, the same model/hue/genes the tank renders — a memorial critter's preview holds a still, badge-marked pose instead of an idle swim) · **name field (inline rename, dashed underline)** · species · life stage · age in days.
 - Live bars: Mood (green > 60, amber > 35, red) and Energy. Italic one-liner of what they're doing.
 - Grid: Trait + one-line description · Genetics (hue swatch, hue°, sex, tail type / body pattern, spotted/plain) · Favourite spot (left/middle/right + depth) · Lineage (generation, "child of A & B" or "original resident").
 - Memorial state after passing: bars replaced by a quiet note; card stays openable from the tree.
