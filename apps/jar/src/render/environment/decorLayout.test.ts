@@ -198,4 +198,21 @@ describe('keepClearOfCastle', () => {
     expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - MARGIN + 1e-9);
     expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - MARGIN + 1e-9);
   });
+
+  it('converges even when the cheapest push axis would land past the tank wall', () => {
+    // A female Forked fish's adult-collider margin, starting inside the
+    // right wall segment's expanded box close enough to the back wall that
+    // the smallest-penetration axis (z) pushes past `TANK_INNER_BOUNDS.z`,
+    // which the next pass's clamp then pulls straight back inside the box
+    // on that same axis — an infinite oscillation unless the axis choice
+    // itself accounts for tank-bounds feasibility.
+    const margin = 0.456;
+    const start = { x: 1.4, y: -1.1, z: -0.5 };
+    const pushed = keepClearOfCastle(start, margin);
+
+    expect(isOutsideEveryColliderBox(pushed, margin)).toBe(true);
+    expect(Math.abs(pushed.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x - margin + 1e-9);
+    expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - margin + 1e-9);
+    expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - margin + 1e-9);
+  });
 });

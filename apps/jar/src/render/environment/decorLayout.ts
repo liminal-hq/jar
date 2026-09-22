@@ -204,22 +204,49 @@ export function keepClearOfCastle(
         Math.abs(dx) < expanded.x && Math.abs(dy) < expanded.y && Math.abs(dz) < expanded.z;
       if (!inside) continue;
 
-      const penetrationX = expanded.x - Math.abs(dx);
-      const penetrationY = expanded.y - Math.abs(dy);
-      const penetrationZ = expanded.z - Math.abs(dz);
       const sign = (n: number) => (n < 0 ? -1 : 1); // never 0 — a point exactly on the box's own centre plane still needs a direction to push
       // A push landing exactly on the expanded boundary can still read as
       // "inside" on the next pass's strict `<` check once floating-point
       // rounding is involved, oscillating rather than converging — nudge
       // past it by a hair so the next check is unambiguous.
       const clearanceEpsilon = 1e-6;
-      if (penetrationX <= penetrationY && penetrationX <= penetrationZ) {
-        result = { ...result, x: boxWorld.x + sign(dx) * (expanded.x + clearanceEpsilon) };
-      } else if (penetrationY <= penetrationX && penetrationY <= penetrationZ) {
-        result = { ...result, y: boxWorld.y + sign(dy) * (expanded.y + clearanceEpsilon) };
-      } else {
-        result = { ...result, z: boxWorld.z + sign(dz) * (expanded.z + clearanceEpsilon) };
-      }
+      const axisBound = {
+        x: TANK_INNER_BOUNDS.x - margin,
+        y: TANK_INNER_BOUNDS.y - margin,
+        z: TANK_INNER_BOUNDS.z - margin,
+      };
+      const candidates = [
+        {
+          axis: 'x' as const,
+          penetration: expanded.x - Math.abs(dx),
+          target: boxWorld.x + sign(dx) * (expanded.x + clearanceEpsilon),
+          bound: axisBound.x,
+        },
+        {
+          axis: 'y' as const,
+          penetration: expanded.y - Math.abs(dy),
+          target: boxWorld.y + sign(dy) * (expanded.y + clearanceEpsilon),
+          bound: axisBound.y,
+        },
+        {
+          axis: 'z' as const,
+          penetration: expanded.z - Math.abs(dz),
+          target: boxWorld.z + sign(dz) * (expanded.z + clearanceEpsilon),
+          bound: axisBound.z,
+        },
+      ];
+      // The cheapest (min-penetration) axis to push along isn't necessarily
+      // one whose destination actually fits inside the shrunken tank bounds
+      // — a box sitting close to a wall can make the "cheap" axis land past
+      // that wall, which the next pass's clamp then pulls straight back
+      // into the box, oscillating between the two constraints forever.
+      // Restrict the choice to axes whose push target is actually in-bounds
+      // first, and only fall back to the unrestricted minimum if none of
+      // the three qualify (a box too large for the tank to clear at all).
+      const feasible = candidates.filter((c) => Math.abs(c.target) <= c.bound);
+      const pool = feasible.length > 0 ? feasible : candidates;
+      const chosen = pool.reduce((best, c) => (c.penetration < best.penetration ? c : best));
+      result = { ...result, [chosen.axis]: chosen.target };
       pushedThisPass = true;
     }
     if (!pushedThisPass) break;
