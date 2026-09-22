@@ -21,9 +21,9 @@ describe('advanceTailPhase', () => {
   });
 
   it('advances by only the current step, regardless of elapsed session length', () => {
-    // Reproduces the actual bug: under the old `phase = elapsedTime *
-    // frequency` formula, a changing frequency late in a long session
-    // produced a per-step jump proportional to elapsed time
+    // The regression this guards: deriving phase as `elapsedTime * frequency`
+    // instead of accumulating it means a changing frequency late in a long
+    // session produces a per-step jump proportional to elapsed time
     // (frequency + elapsedTime * dFrequency/dt), not just frequency * delta.
     // A real accumulator can't do that — each step only ever depends on
     // this step's own frequency and delta.

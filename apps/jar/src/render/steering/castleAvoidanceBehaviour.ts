@@ -4,12 +4,9 @@
 // philosophy `TankContainmentBehaviour` uses for the glass: without this,
 // `WanderBehavior` has no notion the castle exists at all, and a fish
 // committed to wandering straight into it just fights its own physical
-// collision response every frame. Video-confirmed as the dominant cause of
-// fish appearing to shake/spin in place near the castle: a fish can get
-// pinned against a tower or the doorway indefinitely (one traced across a
-// full recording never moved more than ~1% of the tank's width) while
-// `WanderBehavior` keeps handing it a fresh, obstacle-blind heading every
-// frame.
+// collision response every frame — a fish can get pinned against a tower
+// or the doorway indefinitely, barely moving, while `WanderBehavior` keeps
+// handing it a fresh, obstacle-blind heading every frame.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -84,11 +81,17 @@ export function isInsideBox(
 }
 
 export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
-  /** Same margin-derivation contract as `TankContainmentBehaviour` — the
+  /** `margin`: same derivation contract as `TankContainmentBehaviour` — the
    * caller (`useFishSteering.ts`) passes this fish's own collider radius
    * plus a buffer, so the turn away happens before the body itself is
-   * close enough to actually touch the castle. */
-  constructor(private readonly margin: number) {
+   * close enough to actually touch the castle. `colliderRadius`: the same
+   * fish's real physical radius alone, with no anticipatory buffer — used
+   * only to size the doorway exemption below, where the full `margin`
+   * would be too strict a fit for the opening's own real width. */
+  constructor(
+    private readonly margin: number,
+    private readonly colliderRadius: number,
+  ) {
     super();
   }
 
@@ -101,13 +104,29 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
     // A fish lined up with the doorway is meant to be there — exempt it
     // entirely rather than merely softening the push, or it still gets
     // deflected before threading the actual opening (see
-    // `CASTLE_DOORWAY_CORRIDOR`'s own comment).
+    // `CASTLE_DOORWAY_CORRIDOR`'s own comment). The exemption box itself is
+    // shrunk by this fish's own collider radius on the axes that actually
+    // border a wall (x: the flanking wall segments; y: the lintel above) —
+    // checking only the *centre* against the corridor's full width would
+    // exempt a fish whose real body already pokes past the doorway's edge
+    // into the solid wall, avoidance fully off while the body clips. z is
+    // left alone: nothing borders the corridor in that direction. A fish
+    // whose collider radius alone exceeds the door's own half-width (the
+    // single largest fin/sex combination, which the doorway was already
+    // sized knowing wouldn't perfectly fit) gets no exemption at all —
+    // avoidance stays on and it may still brush the frame, the same
+    // documented trade-off `decorLayout.ts` already accepts, not a new one.
     const corridorCenter = {
       x: CASTLE_POSITION.x + CASTLE_DOORWAY_CORRIDOR.position.x,
       y: CASTLE_POSITION.y + CASTLE_DOORWAY_CORRIDOR.position.y,
       z: CASTLE_POSITION.z + CASTLE_DOORWAY_CORRIDOR.position.z,
     };
-    if (isInsideBox(position, corridorCenter, CASTLE_DOORWAY_CORRIDOR.halfExtents)) {
+    const corridorHalfExtents = {
+      x: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.x - this.colliderRadius),
+      y: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.y - this.colliderRadius),
+      z: CASTLE_DOORWAY_CORRIDOR.halfExtents.z,
+    };
+    if (isInsideBox(position, corridorCenter, corridorHalfExtents)) {
       return force;
     }
 

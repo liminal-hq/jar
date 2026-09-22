@@ -221,6 +221,21 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       if (scratchVelocity.lengthSq() >= MIN_VELOCITY_SQ) {
         const lv = body.linvel();
         scratchLinvel.set(lv.x, lv.y, lv.z);
+        // `getThrustEnvelope()`'s own mean-normalization only guarantees
+        // this multiplier's time-average is 1 — it does not, on its own,
+        // guarantee the resulting body motion's mean speed matches the
+        // unpulsed controller. This is a closed-loop correction (∝ the
+        // instantaneous `desired − actual` error), not an open-loop force:
+        // pulsing it correlates the multiplier with the error itself under
+        // `linearDamping`, so `E[multiplier] = 1` doesn't imply the same
+        // mean impulse, and thus not the same cruise/arrival/chase-catch
+        // timing either. The true compensation, if this drifts noticeably
+        // in practice, is frequency-dependent (how fast the pulse cycles
+        // relative to `linearDamping`'s own timescale, which itself varies
+        // continuously with the fish's current tail-beat frequency) — not
+        // a single constant derivable here. Retune `VELOCITY_GAIN` by eye
+        // against real cruise/arrival timing if it's needed, rather than
+        // trying to correct it through the envelope's own math.
         scratchImpulse
           .copy(scratchVelocity)
           .sub(scratchLinvel)

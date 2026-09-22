@@ -74,7 +74,10 @@ export function useFishSteering(
     const separation = new YUKA.SeparationBehavior();
     separation.weight = MODE_WEIGHTS.active.separation;
     const containment = new TankContainmentBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
-    const castleAvoidance = new CastleAvoidanceBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
+    const castleAvoidance = new CastleAvoidanceBehaviour(
+      maxColliderRadius + CONTAINMENT_BUFFER,
+      maxColliderRadius,
+    );
 
     // Added after `containment` deliberately — Yuka's priority-budget
     // accumulation (`SteeringManager`'s calculate order) gives earlier-added
@@ -96,12 +99,12 @@ export function useFishSteering(
 
     // `containment`/`castleAvoidance` go first: Yuka's `SteeringManager`
     // accumulates each behaviour's force in insertion order and stops once
-    // the running total already reaches `vehicle.maxForce` — added last (as
-    // containment used to be), a fish committed to wandering straight at an
-    // obstacle could exhaust the whole force budget on `wander`/`separation`
-    // before either avoidance behaviour ever got a chance to contribute,
-    // letting it collide and jitter against the glass or the castle despite
-    // their own strength nominally out-voting the others.
+    // the running total already reaches `vehicle.maxForce` — added last, a
+    // fish committed to wandering straight at an obstacle could exhaust the
+    // whole force budget on `wander`/`separation` before either avoidance
+    // behaviour ever got a chance to contribute, letting it collide and
+    // jitter against the glass or the castle despite their own strength
+    // nominally out-voting the others.
     vehicle.steering.add(containment);
     vehicle.steering.add(castleAvoidance);
     vehicle.steering.add(wander);
