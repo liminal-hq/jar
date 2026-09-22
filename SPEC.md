@@ -78,7 +78,7 @@ The discrete rules below (aging, mood/energy, breeding, genetics, passing, namin
 
 ## 6. Persistence
 
-Saved every tick to app data: full population (both species, including the passed), sim clock, simulation speed, mode, frame, dialog theme + variant per theme, light, bubbles, sound, window positions/sizes, always-on-top. On relaunch the jar resumes; elapsed real time while closed is **not** simulated (the jar was asleep).
+Saved every tick to app data: full population (both species, including the passed), sim clock, simulation speed, mode, frame, dialog theme + variant per theme, light + light colour + castle light intensity, bubbles + bubble intensity, sound, window positions/sizes, always-on-top. On relaunch the jar resumes; elapsed real time while closed is **not** simulated (the jar was asleep).
 
 Window position/size/always-on-top persistence is handled by the official `tauri-plugin-window-state` plugin, not the simulation core — see `docs/architecture/rust-core.md` §5.4. Everything else in this list is a simulation-core snapshot, autosaved periodically per that document's §5.3.
 

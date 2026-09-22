@@ -27,9 +27,12 @@ bun run test:js       # vitest only
 bun run test:rust     # cargo nextest only
 bun run dev           # web app in dev mode
 bun run tauri dev     # desktop shell
+bun run tauri:dev     # desktop shell, MCP-drivable (see below) — use this one for agent automation
 ```
 
 If host Rust tooling is unavailable, run commands in a container with the Rust/Tauri toolchain preinstalled against the checked-out workspace.
+
+**Driving the running app (MCP automation bridge)**: use `bun run tauri:dev`, NOT plain `bun run tauri dev` — this is easy to forget after a context compact, so check it first whenever JS-eval MCP calls are timing out. `tauri:dev` applies `tauri.conf.dev.json`, which sets `"withGlobalTauri": true`; without it, `window.__TAURI__` never exists in the page and the bridge's JS-eval callback (which phones its result back through that global) can never fire, so `webview_execute_js`/screenshots/DOM snapshots/`webview_wait_for` hang and time out while non-JS calls (`ipc_get_backend_state`, `manage_window`) keep working fine and mask the problem. Full details, plus a separate stale-connection-leak failure mode, in AGENTS.md's "MCP Automation Bridge" section.
 
 ## Architecture — the key things to understand
 

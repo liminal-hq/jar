@@ -12,6 +12,9 @@ permissions = [
     "allow-set-toggle",
     "allow-set-theme",
     "allow-set-frame",
+    "allow-set-light-colour",
+    "allow-set-light-intensity",
+    "allow-set-bubble-intensity",
     "allow-get-snapshot",
     "allow-load-snapshot",
 ]

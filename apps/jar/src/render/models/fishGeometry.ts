@@ -13,7 +13,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';
-import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 
 import bodySvg from './fish-svg/body.svg?raw';
 import dorsalSvg from './fish-svg/dorsal-fin.svg?raw';
@@ -23,32 +22,7 @@ import pectoralSvg from './fish-svg/pectoral-fin.svg?raw';
 import tailFanSvg from './fish-svg/tail-fan.svg?raw';
 import tailForkedSvg from './fish-svg/tail-forked.svg?raw';
 import tailVeilSvg from './fish-svg/tail-veil.svg?raw';
-
-const loader = new SVGLoader();
-
-function shapesFromSvg(svg: string): THREE.Shape[] {
-  return loader.parse(svg).paths.flatMap((p) => p.toShapes(true));
-}
-
-/** SVG's Y grows downward, three.js's Y grows upward — the standard flip
- * here mirrors the geometry, which also reverses its face winding.
- * Rather than rebuild the index buffer to un-reverse it, every fish
- * material renders both faces (`side: THREE.DoubleSide`) — three.js's
- * shader already flips the shading normal per back-facing fragment, so
- * lighting reads correctly without touching winding by hand. */
-function extrude(shapes: THREE.Shape[], depth: number, bevel = 0.6): THREE.BufferGeometry {
-  const geometry = new THREE.ExtrudeGeometry(shapes, {
-    depth,
-    bevelEnabled: bevel > 0,
-    bevelThickness: bevel,
-    bevelSize: bevel,
-    bevelSegments: 2,
-    curveSegments: 20,
-  });
-  geometry.translate(0, 0, -depth / 2);
-  geometry.scale(1, -1, 1);
-  return geometry;
-}
+import { extrude, shapesFromSvg, svgLoader } from './svgExtrude';
 
 /** Body depth all other pieces' overlaps/welds are measured against — every
  * attachment overlaps the body by ~4 units. */
@@ -104,7 +78,7 @@ function extrudeAtHinge(shapes: THREE.Shape[], depth: number, hingeX: number, hi
 // `ShapePath.userData`, so one parse of the file can be filtered by id
 // rather than needing three separate SVG files for one silhouette. Parse
 // once up front and reuse the result.
-const bodyParsed = loader.parse(bodySvg);
+const bodyParsed = svgLoader.parse(bodySvg);
 function bodyShapesById(id: string): THREE.Shape[] {
   return bodyParsed.paths
     .filter((p) => p.userData?.node.id === id)
@@ -154,6 +128,7 @@ export function wrapInPivot(
   hingeY: number,
 ): THREE.Group {
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
   const pivot = new THREE.Group();
   pivot.position.set(hingeX, hingeY, 0);
   pivot.add(mesh);

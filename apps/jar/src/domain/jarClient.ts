@@ -45,6 +45,7 @@ import type { Critter } from './protocol/generated/Critter';
 import type { CritterId } from './protocol/generated/CritterId';
 import type { DialogTheme } from './protocol/generated/DialogTheme';
 import type { JarSettings } from './protocol/generated/JarSettings';
+import type { LightColour } from './protocol/generated/LightColour';
 import type { SimEvent } from './protocol/generated/SimEvent';
 import type { Species } from './protocol/generated/Species';
 import type { TankFrame } from './protocol/generated/TankFrame';
@@ -65,7 +66,10 @@ export const DEFAULT_SETTINGS: JarSettings = {
     NeonTerminal: 'Magenta',
   },
   light_on: true,
+  light_colour: 'Daylight',
+  light_intensity: 100,
   ambient_particles_on: true,
+  bubble_intensity: 100,
   sound_on: false,
   simulation_speed: 1,
   always_on_top: false,
@@ -250,4 +254,7 @@ export const jar = {
     pluginApi.setToggle(toggle, on),
   setTheme: (theme: DialogTheme, variant: string) => pluginApi.setTheme(theme, variant),
   setFrame: (frame: TankFrame) => pluginApi.setFrame(frame),
+  setLightColour: (colour: LightColour) => pluginApi.setLightColour(colour),
+  setLightIntensity: (intensity: number) => pluginApi.setLightIntensity(intensity),
+  setBubbleIntensity: (intensity: number) => pluginApi.setBubbleIntensity(intensity),
 };

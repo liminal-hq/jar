@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -200 60 200">
+  <!-- Jar kelp blade: tapered ribbon, one lazy S-curve, rounded tip.
+       Base centred at origin (y=0), tip near y=-190. Fill is a
+       placeholder: colour is applied at runtime via material. -->
+  <path id="blade-kelp" fill="#4f9d6b" d="
+    M -11.5 0
+    C 17 -63, -34 -122, -1 -191
+    A 7.6 7.6 0 0 1 13.9 -189
+    C -17 -118, 34 -59, 11.5 0
+    Z"/>
+</svg>

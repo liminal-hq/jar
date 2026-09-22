@@ -16,6 +16,9 @@ const COMMANDS: &[&str] = &[
     "set_toggle",
     "set_theme",
     "set_frame",
+    "set_light_colour",
+    "set_light_intensity",
+    "set_bubble_intensity",
     "get_snapshot",
     "load_snapshot",
 ];

@@ -7,7 +7,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use chrono::Timelike;
-use jar_protocol::{Critter, CritterId, DialogTheme, JarSettings, SimEvent, Species, TankFrame};
+use jar_protocol::{
+    Critter, CritterId, DialogTheme, JarSettings, LightColour, SimEvent, Species, TankFrame,
+};
 use serde::Deserialize;
 use tauri::ipc::Channel;
 use tauri::{command, AppHandle, Runtime, State};
@@ -163,6 +165,36 @@ pub fn set_theme(plugin: State<'_, JarPlugin>, theme: DialogTheme, variant: Stri
 pub fn set_frame(plugin: State<'_, JarPlugin>, frame: TankFrame) -> Result<()> {
     let settings = with_jar(&plugin, |jar| {
         jar.settings.frame = frame;
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
+}
+
+#[command]
+pub fn set_light_colour(plugin: State<'_, JarPlugin>, colour: LightColour) -> Result<()> {
+    let settings = with_jar(&plugin, |jar| {
+        jar.settings.light_colour = colour;
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
+}
+
+#[command]
+pub fn set_light_intensity(plugin: State<'_, JarPlugin>, intensity: u8) -> Result<()> {
+    let settings = with_jar(&plugin, |jar| {
+        jar.settings.light_intensity = intensity.min(200);
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
+}
+
+#[command]
+pub fn set_bubble_intensity(plugin: State<'_, JarPlugin>, intensity: u8) -> Result<()> {
+    let settings = with_jar(&plugin, |jar| {
+        jar.settings.bubble_intensity = intensity.min(200);
         Ok(jar.settings.clone())
     })?;
     push_event(&plugin, SimEvent::SettingsChanged { settings });

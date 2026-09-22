@@ -13,6 +13,9 @@ Default permissions for the jar simulation plugin. Grants every command the app 
 - `allow-set-toggle`
 - `allow-set-theme`
 - `allow-set-frame`
+- `allow-set-light-colour`
+- `allow-set-light-intensity`
+- `allow-set-bubble-intensity`
 - `allow-get-snapshot`
 - `allow-load-snapshot`
 
@@ -132,6 +135,32 @@ Denies the rename_critter command without any pre-configured scope.
 <tr>
 <td>
 
+`jar:allow-set-bubble-intensity`
+
+</td>
+<td>
+
+Enables the set_bubble_intensity command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-set-bubble-intensity`
+
+</td>
+<td>
+
+Denies the set_bubble_intensity command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `jar:allow-set-frame`
 
 </td>
@@ -151,6 +180,58 @@ Enables the set_frame command without any pre-configured scope.
 <td>
 
 Denies the set_frame command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:allow-set-light-colour`
+
+</td>
+<td>
+
+Enables the set_light_colour command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-set-light-colour`
+
+</td>
+<td>
+
+Denies the set_light_colour command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:allow-set-light-intensity`
+
+</td>
+<td>
+
+Enables the set_light_intensity command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-set-light-intensity`
+
+</td>
+<td>
+
+Denies the set_light_intensity command without any pre-configured scope.
 
 </td>
 </tr>

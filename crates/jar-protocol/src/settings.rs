@@ -34,6 +34,26 @@ pub enum DialogTheme {
     NeonTerminal,
 }
 
+/// The tank's hood light colour (`docs/architecture/3d-engine.md` §8.1's
+/// `LedLightStrip`) — presentation only, unlike `light_on` itself, which
+/// also feeds `jar-core::tick`'s mood formula (SPEC.md §5). Named after
+/// colours real aquarium hobbyist LED fixtures actually ship with: crisp
+/// daylight white and warm white as the two everyday choices, moonlight
+/// blue and reef purple/actinic as popular night/marine-tank looks, a
+/// planted-tank green, a sunrise/sunset amber, and one just-for-fun RGB
+/// cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum LightColour {
+    Daylight,
+    Warm,
+    Moonlight,
+    Reef,
+    Jungle,
+    Sunset,
+    Party,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct JarSettings {
@@ -48,7 +68,19 @@ pub struct JarSettings {
     /// variant pick (or the initial default below) writes to it.
     pub theme_variants: BTreeMap<DialogTheme, String>,
     pub light_on: bool,
+    pub light_colour: LightColour,
+    /// Percentage scale (0-200, 100 = the fixture's own designed default)
+    /// applied to the castle's ground-level uplight (`Castle.tsx`'s
+    /// `GroundUplight`) — a separate knob from `light_on`/`light_colour`,
+    /// which drive the tank-wide LED strip; this one only tunes the
+    /// castle's own always-on accent light.
+    pub light_intensity: u8,
     pub ambient_particles_on: bool, // "Bubbles" (aquarium) / "Mist" (terrarium)
+    /// Percentage scale (0-200, 100 = the current default bubble count)
+    /// applied to `Bubbles.tsx`'s particle count — a separate knob from
+    /// `ambient_particles_on`, which is the on/off toggle this only takes
+    /// effect underneath.
+    pub bubble_intensity: u8,
     pub sound_on: bool,
     /// 1-60, Real time = 1 (SPEC.md §5).
     pub simulation_speed: u8,
@@ -112,7 +144,10 @@ impl Default for JarSettings {
             dialog_theme: DialogTheme::Modern,
             theme_variants: default_theme_variants(),
             light_on: true,
+            light_colour: LightColour::Daylight,
+            light_intensity: 100,
             ambient_particles_on: true,
+            bubble_intensity: 100,
             sound_on: false,
             simulation_speed: 1,
             always_on_top: false,
@@ -136,6 +171,9 @@ mod tests {
         );
         assert_eq!(settings.theme_variants.len(), 6);
         assert!(settings.light_on);
+        assert_eq!(settings.light_colour, LightColour::Daylight);
+        assert_eq!(settings.light_intensity, 100);
+        assert_eq!(settings.bubble_intensity, 100);
         assert!(settings.ambient_particles_on);
         assert!(!settings.sound_on);
         assert_eq!(settings.simulation_speed, 1);

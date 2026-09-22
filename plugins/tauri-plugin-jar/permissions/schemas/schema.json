@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the rename_critter command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_bubble_intensity command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-bubble-intensity",
+          "markdownDescription": "Enables the set_bubble_intensity command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_bubble_intensity command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-bubble-intensity",
+          "markdownDescription": "Denies the set_bubble_intensity command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_frame command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-frame",
@@ -353,6 +365,30 @@
           "type": "string",
           "const": "deny-set-frame",
           "markdownDescription": "Denies the set_frame command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_light_colour command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-light-colour",
+          "markdownDescription": "Enables the set_light_colour command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_light_colour command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-light-colour",
+          "markdownDescription": "Denies the set_light_colour command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_light_intensity command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-light-intensity",
+          "markdownDescription": "Enables the set_light_intensity command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_light_intensity command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-light-intensity",
+          "markdownDescription": "Denies the set_light_intensity command without any pre-configured scope."
         },
         {
           "description": "Enables the set_mode command without any pre-configured scope.",
@@ -427,10 +463,10 @@
           "markdownDescription": "Denies the stop command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the jar simulation plugin. Grants every command the app itself needs — this plugin is not exposed to any untrusted webview content, so a broad default is appropriate here (contrast with a plugin embedding third-party web content, which should default to nothing and opt in per command).\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-set-speed`\n- `allow-set-mode`\n- `allow-add-critter`\n- `allow-rename-critter`\n- `allow-set-toggle`\n- `allow-set-theme`\n- `allow-set-frame`\n- `allow-get-snapshot`\n- `allow-load-snapshot`",
+          "description": "Default permissions for the jar simulation plugin. Grants every command the app itself needs — this plugin is not exposed to any untrusted webview content, so a broad default is appropriate here (contrast with a plugin embedding third-party web content, which should default to nothing and opt in per command).\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-set-speed`\n- `allow-set-mode`\n- `allow-add-critter`\n- `allow-rename-critter`\n- `allow-set-toggle`\n- `allow-set-theme`\n- `allow-set-frame`\n- `allow-set-light-colour`\n- `allow-set-light-intensity`\n- `allow-set-bubble-intensity`\n- `allow-get-snapshot`\n- `allow-load-snapshot`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the jar simulation plugin. Grants every command the app itself needs — this plugin is not exposed to any untrusted webview content, so a broad default is appropriate here (contrast with a plugin embedding third-party web content, which should default to nothing and opt in per command).\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-set-speed`\n- `allow-set-mode`\n- `allow-add-critter`\n- `allow-rename-critter`\n- `allow-set-toggle`\n- `allow-set-theme`\n- `allow-set-frame`\n- `allow-get-snapshot`\n- `allow-load-snapshot`"
+          "markdownDescription": "Default permissions for the jar simulation plugin. Grants every command the app itself needs — this plugin is not exposed to any untrusted webview content, so a broad default is appropriate here (contrast with a plugin embedding third-party web content, which should default to nothing and opt in per command).\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-stop`\n- `allow-set-speed`\n- `allow-set-mode`\n- `allow-add-critter`\n- `allow-rename-critter`\n- `allow-set-toggle`\n- `allow-set-theme`\n- `allow-set-frame`\n- `allow-set-light-colour`\n- `allow-set-light-intensity`\n- `allow-set-bubble-intensity`\n- `allow-get-snapshot`\n- `allow-load-snapshot`"
         }
       ]
     }

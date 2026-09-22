@@ -538,18 +538,18 @@ export function FishModel({
 
   return (
     <group ref={rootRef} scale={scale}>
-      <mesh geometry={bodyGeometry}>
+      <mesh geometry={bodyGeometry} castShadow receiveShadow>
         <meshStandardMaterial vertexColors roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
-      <mesh geometry={SHARED_GEOMETRY.dorsal}>
+      <mesh geometry={SHARED_GEOMETRY.dorsal} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
-      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]}>
+      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
-      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]}>
+      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
@@ -563,7 +563,7 @@ export function FishModel({
       </mesh>
 
       <group ref={tailPivotRef} position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]} scale={tailScale}>
-        <mesh geometry={tailGeometry}>
+        <mesh geometry={tailGeometry} castShadow>
           <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
         </mesh>
       </group>

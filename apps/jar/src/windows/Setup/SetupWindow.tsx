@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { DialogShell } from '../../components/DialogShell';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { DialogTheme } from '../../domain/protocol/generated/DialogTheme';
+import type { LightColour } from '../../domain/protocol/generated/LightColour';
 import type { Species } from '../../domain/protocol/generated/Species';
 import type { TankFrame } from '../../domain/protocol/generated/TankFrame';
 import { defaultVariantOf, variantNamesFor } from '../../theme/theme';
@@ -31,6 +32,33 @@ const THEMES: DialogTheme[] = [
   'HandheldLcd',
   'NeonTerminal',
 ];
+
+const LIGHT_COLOURS: LightColour[] = [
+  'Daylight',
+  'Warm',
+  'Moonlight',
+  'Reef',
+  'Jungle',
+  'Sunset',
+  'Party',
+];
+
+/** Swatch dot per option — a standalone copy of the hues
+ * `LedLightStrip.tsx` actually renders with, not an import from it: this
+ * window has no reason to pull in the R3F/three.js render stack just to
+ * borrow a handful of hex strings, the same "presentation tokens live on
+ * each side separately" precedent `theme.ts`'s dialog-theme swatches
+ * already set. `Party` gets a gradient instead of one hex, hinting at its
+ * own colour-cycling rather than implying a fixed hue. */
+const LIGHT_COLOUR_SWATCHES: Record<LightColour, string> = {
+  Daylight: '#eaf6ff',
+  Warm: '#ffd8a3',
+  Moonlight: '#6f8fef',
+  Reef: '#b46dff',
+  Jungle: '#7be08f',
+  Sunset: '#ff8c52',
+  Party: 'linear-gradient(135deg, #ff5e5e, #ffe45e, #5eff8f, #5ecbff, #b45eff)',
+};
 
 export function SetupWindow() {
   const settings = useJarStore((s) => s.settings);
@@ -121,6 +149,55 @@ export function SetupWindow() {
           />{' '}
           Light
         </label>
+        {settings.light_on && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {LIGHT_COLOURS.map((colour) => {
+              const active = settings.light_colour === colour;
+              return (
+                <button
+                  key={colour}
+                  onClick={() => void jar.setLightColour(colour)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: active ? '2px solid var(--jar-accent)' : '1px solid var(--jar-ink)',
+                    background: active ? 'var(--jar-accent)' : 'transparent',
+                    color: active ? 'var(--jar-bg)' : 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      background: LIGHT_COLOUR_SWATCHES[colour],
+                      border: '1px solid rgba(0, 0, 0, 0.2)',
+                    }}
+                  />
+                  {colour}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <label>
+          Castle light: {settings.light_intensity}%
+          {/* Deliberately not gated on settings.light_on — the castle's own
+              ground-level uplight fixture (Castle.tsx's GroundUplight) is
+              always on, independent of the tank-wide LED strip toggle
+              above. */}
+          <input
+            type="range"
+            min={0}
+            max={200}
+            value={settings.light_intensity}
+            onChange={(e) => void jar.setLightIntensity(Number(e.target.value))}
+          />
+        </label>
         <label>
           <input
             type="checkbox"
@@ -129,6 +206,21 @@ export function SetupWindow() {
           />{' '}
           {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}
         </label>
+        {/* Fish-mode only — terrarium's "Mist" doesn't exist yet, so this
+            slider (Bubbles.tsx's own particle count) has nothing to affect
+            in Gecko mode. */}
+        {settings.ambient_particles_on && settings.mode === 'Fish' && (
+          <label>
+            Bubble intensity: {settings.bubble_intensity}%
+            <input
+              type="range"
+              min={0}
+              max={200}
+              value={settings.bubble_intensity}
+              onChange={(e) => void jar.setBubbleIntensity(Number(e.target.value))}
+            />
+          </label>
+        )}
         <label>
           <input
             type="checkbox"

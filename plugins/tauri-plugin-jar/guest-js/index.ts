@@ -52,6 +52,18 @@ export function setFrame(frame: unknown): Promise<void> {
   return invoke(`${COMMAND_PREFIX}set_frame`, { frame });
 }
 
+export function setLightColour(colour: unknown): Promise<void> {
+  return invoke(`${COMMAND_PREFIX}set_light_colour`, { colour });
+}
+
+export function setLightIntensity(intensity: number): Promise<void> {
+  return invoke(`${COMMAND_PREFIX}set_light_intensity`, { intensity });
+}
+
+export function setBubbleIntensity(intensity: number): Promise<void> {
+  return invoke(`${COMMAND_PREFIX}set_bubble_intensity`, { intensity });
+}
+
 export function getSnapshot(): Promise<unknown> {
   return invoke(`${COMMAND_PREFIX}get_snapshot`);
 }
