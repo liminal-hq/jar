@@ -36,12 +36,19 @@ export function lifeStageScale(ageSec: number): number {
   }
 }
 
-/** SPEC.md §5: "Night = 21:00-07:00". Mirrors `clock.rs`'s `is_night`
- * exactly (jar-day fraction outside `[7/24, 21/24)`) — the jar clock's own
- * notion of night, not the system clock (`clock.rs`'s own doc comment
- * notes that substitution, if ever made, is a presentation-layer decision
- * this function doesn't make). */
-export function isNight(simSeconds: number): boolean {
+/** SPEC.md §5: "Night = 21:00-07:00" *on whichever clock is active*: at
+ * Real time (1×) that's the system clock's local hour; at any faster speed
+ * the jar's own day/night cycle takes over (`clock.rs`'s `is_night`,
+ * mirrored in the `else` branch below — jar-day fraction outside
+ * `[7/24, 21/24)`) — `clock.rs`'s own doc comment notes this system-clock
+ * substitution at 1× is exactly the presentation-layer decision it defers
+ * to the frontend. `localHour` is injected (the caller's `new
+ * Date().getHours()`) rather than read from `Date` internally, so this
+ * stays a pure, deterministically-testable function. */
+export function isNight(simSeconds: number, simulationSpeed: number, localHour: number): boolean {
+  if (simulationSpeed === 1) {
+    return localHour >= 21 || localHour < 7;
+  }
   const fraction = (simSeconds / SECONDS_PER_JAR_DAY) % 1;
   return !(fraction >= 7 / 24 && fraction < 21 / 24);
 }

@@ -49,27 +49,58 @@ describe('lifeStageScale', () => {
 });
 
 describe('isNight', () => {
-  // Boundary values mirrored exactly from `clock.rs`'s own
-  // `is_night_at_the_day_start_boundary` / `is_night_at_the_night_start_boundary`
-  // / `is_night_wraps_across_midnight` tests.
-  it('is night just before the day-start boundary (7:00, 35/120 of a jar-day)', () => {
-    expect(isNight(34)).toBe(true);
+  // `localHour` is irrelevant on this branch — any value works, since
+  // `simulationSpeed !== 1` selects the jar-day-cycle path.
+  const ARBITRARY_HOUR = 12;
+
+  describe('at any speed above 1x, the jar day/night cycle', () => {
+    // Boundary values mirrored exactly from `clock.rs`'s own
+    // `is_night_at_the_day_start_boundary` / `is_night_at_the_night_start_boundary`
+    // / `is_night_wraps_across_midnight` tests.
+    it('is night just before the day-start boundary (7:00, 35/120 of a jar-day)', () => {
+      expect(isNight(34, 2, ARBITRARY_HOUR)).toBe(true);
+    });
+
+    it('becomes day at exactly the day-start boundary', () => {
+      expect(isNight(35, 2, ARBITRARY_HOUR)).toBe(false);
+    });
+
+    it('is day just before the night-start boundary (21:00, 105/120 of a jar-day)', () => {
+      expect(isNight(104, 2, ARBITRARY_HOUR)).toBe(false);
+    });
+
+    it('becomes night at exactly the night-start boundary', () => {
+      expect(isNight(105, 2, ARBITRARY_HOUR)).toBe(true);
+    });
+
+    it('wraps correctly across midnight (jar-day boundary at multiples of 120)', () => {
+      expect(isNight(0, 2, ARBITRARY_HOUR)).toBe(true);
+      expect(isNight(120, 2, ARBITRARY_HOUR)).toBe(true); // one full jar-day later
+    });
+
+    it('uses the jar-day cycle at every accelerated speed, not just 2x', () => {
+      expect(isNight(34, 60, ARBITRARY_HOUR)).toBe(true);
+      expect(isNight(35, 60, ARBITRARY_HOUR)).toBe(false);
+    });
   });
 
-  it('becomes day at exactly the day-start boundary', () => {
-    expect(isNight(35)).toBe(false);
-  });
+  describe("at Real time (1x), the system clock's local hour", () => {
+    // `simSeconds` is irrelevant on this branch.
+    const ARBITRARY_SIM_SECONDS = 60;
 
-  it('is day just before the night-start boundary (21:00, 105/120 of a jar-day)', () => {
-    expect(isNight(104)).toBe(false);
-  });
+    it('is night at 21:00 local and after', () => {
+      expect(isNight(ARBITRARY_SIM_SECONDS, 1, 21)).toBe(true);
+      expect(isNight(ARBITRARY_SIM_SECONDS, 1, 23)).toBe(true);
+    });
 
-  it('becomes night at exactly the night-start boundary', () => {
-    expect(isNight(105)).toBe(true);
-  });
+    it('is night before 07:00 local', () => {
+      expect(isNight(ARBITRARY_SIM_SECONDS, 1, 0)).toBe(true);
+      expect(isNight(ARBITRARY_SIM_SECONDS, 1, 6)).toBe(true);
+    });
 
-  it('wraps correctly across midnight (jar-day boundary at multiples of 120)', () => {
-    expect(isNight(0)).toBe(true);
-    expect(isNight(120)).toBe(true); // one full jar-day later
+    it('is day from 07:00 local up to (not including) 21:00', () => {
+      expect(isNight(ARBITRARY_SIM_SECONDS, 1, 7)).toBe(false);
+      expect(isNight(ARBITRARY_SIM_SECONDS, 1, 20)).toBe(false);
+    });
   });
 });

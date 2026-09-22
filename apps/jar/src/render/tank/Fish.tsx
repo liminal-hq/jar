@@ -126,7 +126,9 @@ export function Fish({ critter, livingPopulation }: FishProps) {
 
   const steering = useFishSteering(critter.personality, livingPopulation, favouriteSpotWorld);
 
-  const simNight = useJarStore((s) => isNight(s.simSeconds));
+  const simNight = useJarStore((s) =>
+    isNight(s.simSeconds, s.settings.simulation_speed, new Date().getHours()),
+  );
   // Dev-only override (`windows/FishMonitor/FishMonitorWindow.tsx`) to pin
   // day or night on demand rather than wait out a real day/night cycle —
   // `'auto'` (the real jar clock) in production builds, where the toggle

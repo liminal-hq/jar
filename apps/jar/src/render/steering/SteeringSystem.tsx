@@ -133,9 +133,12 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
   const registryRef = useRef<Registry>(new Map());
   const monitorEnabled = useFishMonitorEnabled();
   const simSeconds = useJarStore((s) => s.simSeconds);
+  const simulationSpeed = useJarStore((s) => s.settings.simulation_speed);
   const dayNightOverride = useDayNightOverride();
   const effectiveIsNight =
-    dayNightOverride === 'auto' ? isNight(simSeconds) : dayNightOverride === 'night';
+    dayNightOverride === 'auto'
+      ? isNight(simSeconds, simulationSpeed, new Date().getHours())
+      : dayNightOverride === 'night';
   const publishElapsedRef = useRef(0);
 
   // A ref, not read directly in `useFrame` — the toggle can flip mid-session
