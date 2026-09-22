@@ -1,8 +1,9 @@
-// Dev-only window (opened from the drawer's "Dev" button, itself only
-// shown in dev builds — see `Drawer.tsx`) for toggling debugging aids that
-// live in `localStorage` rather than the wire protocol
-// (`domain/devSettings.ts`) — not part of SPEC.md/SCREENS.md, since
-// there's nothing here a shipped build ever shows a real user. Also where
+// Window (opened from the drawer's always-available "Dev" button,
+// `Drawer.tsx`) for toggling debugging aids that live in `localStorage`
+// rather than the wire protocol (`domain/devSettings.ts`) — not part of
+// SPEC.md/SCREENS.md, since it's supplementary tooling rather than a core
+// product screen, but not gated behind a dev build either: every toggle
+// here only affects local debug overlays, nothing product-facing. Also where
 // both aids' captured data actually gets *displayed*: the tank window
 // captures it (mouse events at its own boundary; live fish RigidBody
 // positions), but an in-tank overlay would cover the very content it's

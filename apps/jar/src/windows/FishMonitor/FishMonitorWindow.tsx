@@ -1,9 +1,12 @@
-// Dev-only fish tuning rig (opened via the drawer's "Fish monitor" button,
-// itself only shown in dev builds — see `Drawer.tsx`) — a live table plus
-// top-down and front maps of every fish's steering/animation state, for
-// tuning wander/rest/pause behaviour against real numbers instead of
-// guessing from screen recordings. Not part of SPEC.md/SCREENS.md, since
-// there's nothing here a shipped build ever shows a real user.
+// Fish tuning rig (opened via the drawer's always-available "Fish monitor"
+// button, `Drawer.tsx`) — a live table plus top-down and front maps of
+// every fish's steering/animation state, for tuning wander/rest/pause
+// behaviour against real numbers instead of guessing from screen
+// recordings. Not part of SPEC.md/SCREENS.md — supplementary tooling
+// rather than a core product screen, but not gated behind a dev build
+// either: it's self-contained (opening it is what turns telemetry
+// publishing on, via the mount effect below) and just as useful for a
+// curious owner as for tuning.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
