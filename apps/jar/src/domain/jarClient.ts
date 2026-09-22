@@ -234,22 +234,30 @@ export function ensureJarClientStarted(settings: JarSettings = firstRunSettings(
 async function doStart(settings: JarSettings): Promise<void> {
   const isTank = getCurrentWindow().label === TANK_WINDOW_LABEL;
 
-  // Set right before a reconciliation `getSnapshot()` call and checked right
-  // after it resolves — if a `Born`/`Passed`/`Added` event (the ones that
-  // change *which* critters exist, unlike `TickUpdate`'s far more frequent
-  // stat-only updates) lands while that request is in flight, the snapshot
-  // it resolves with is already stale relative to the store: applying it
-  // would roll population state backwards, e.g. a `Passed` event marking a
-  // critter dead, then this reconciler's now-stale response reviving it
-  // with `alive: true` again. Skipping a raced reconciliation is harmless —
-  // the next one fires in `RECONCILE_INTERVAL_MS` against a snapshot that
+  // Bumped on every event, of every type — `hydrate()` overwrites
+  // `critters`, `settings` *and* `simSeconds` all at once, so a
+  // `SettingsChanged`/`Renamed`/`TickUpdate` landing mid-request is just as
+  // capable of getting silently rolled back by a stale reconciliation
+  // response as a `Born`/`Passed`/`Added` is; nothing here is exempt.
+  // Each reconciliation attempt captures this counter right before firing
+  // its own `getSnapshot()` and compares it again right after that request
+  // resolves — if it moved, some event arrived during this specific
+  // request's flight, so its response is already stale relative to the
+  // store and applying it would roll state backwards (e.g. a `Passed`
+  // event marking a critter dead, then a stale response reviving it with
+  // `alive: true` again). Capturing the counter per request, rather than
+  // one flag shared across every reconciliation attempt, is what keeps two
+  // overlapping requests (a `getSnapshot()` slower than
+  // `RECONCILE_INTERVAL_MS`, so the next interval fires before the last
+  // one resolved) from interfering with each other's staleness check —
+  // one request finishing doesn't reset the flag out from under another
+  // still in flight. Skipping a raced reconciliation is harmless — the
+  // next one fires in `RECONCILE_INTERVAL_MS` against a snapshot that
   // isn't racing anything.
-  let populationEventDuringResync = false;
+  let eventGeneration = 0;
 
   const onEvent = (simEvent: SimEvent) => {
-    if (simEvent.type === 'Born' || simEvent.type === 'Passed' || simEvent.type === 'Added') {
-      populationEventDuringResync = true;
-    }
+    eventGeneration++;
     handleEvent(simEvent);
   };
 
@@ -276,13 +284,14 @@ async function doStart(settings: JarSettings): Promise<void> {
 
   setInterval(() => {
     void (async () => {
-      populationEventDuringResync = false;
+      const requestGeneration = eventGeneration;
       const resync = (await pluginApi.getSnapshot()) as {
         critters: Critter[];
         settings: JarSettings;
         sim_seconds: number;
+        is_night: boolean;
       };
-      if (populationEventDuringResync) return;
+      if (eventGeneration !== requestGeneration) return;
       useJarStore.getState().hydrate(resync);
     })();
   }, RECONCILE_INTERVAL_MS);

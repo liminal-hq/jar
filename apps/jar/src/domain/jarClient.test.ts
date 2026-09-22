@@ -337,4 +337,108 @@ describe('ensureJarClientStarted — reconciliation race guard', () => {
 
     vi.useRealTimers();
   });
+
+  it('discards a resync response that resolves after a Renamed event it raced', async () => {
+    // `hydrate()` overwrites `critters` wholesale, so a `Renamed` landing
+    // mid-request is just as capable of getting silently rolled back as a
+    // `Passed` is — the race guard has to cover every event type `hydrate`
+    // touches, not just the population-changing ones.
+    vi.resetModules();
+    vi.useFakeTimers();
+
+    const pluginApi = await import('tauri-plugin-jar-api');
+    const critter = makeCritter({ id: 7, name: 'Pickle', alive: true });
+    const initialSnapshot = { critters: [critter], settings: DEFAULT_SETTINGS, sim_seconds: 0 };
+
+    let capturedOnEvent: ((event: SimEvent) => void) | undefined;
+    vi.mocked(pluginApi.start).mockImplementation(async (_settings, onEvent) => {
+      capturedOnEvent = onEvent as (event: SimEvent) => void;
+    });
+
+    let resolveResync: ((value: typeof initialSnapshot) => void) | undefined;
+    vi.mocked(pluginApi.getSnapshot)
+      .mockResolvedValueOnce(initialSnapshot)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveResync = resolve;
+          }),
+      );
+
+    const freshModule = await import('./jarClient');
+    await freshModule.ensureJarClientStarted();
+
+    await vi.advanceTimersByTimeAsync(RECONCILE_INTERVAL_MS);
+
+    capturedOnEvent?.({ type: 'Renamed', id: 7, name: 'Noodle' });
+    expect(freshModule.useJarStore.getState().critters[7]?.name).toBe('Noodle');
+
+    // The stale snapshot — captured before the rename — resolves now. It
+    // must not roll the name back.
+    resolveResync?.(initialSnapshot);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(freshModule.useJarStore.getState().critters[7]?.name).toBe('Noodle');
+
+    vi.useRealTimers();
+  });
+
+  it("doesn't let a newer reconciliation attempt clear an older one's own race guard", async () => {
+    // A `getSnapshot()` slower than `RECONCILE_INTERVAL_MS` leaves an
+    // earlier request still in flight when the next interval fires a second
+    // one. The guard is captured per request, not a single flag shared
+    // across every attempt — the second request starting must not blind the
+    // first request's own staleness check when it finally resolves.
+    vi.resetModules();
+    vi.useFakeTimers();
+
+    const pluginApi = await import('tauri-plugin-jar-api');
+    const critter = makeCritter({ id: 3, alive: true });
+    const initialSnapshot = { critters: [critter], settings: DEFAULT_SETTINGS, sim_seconds: 0 };
+
+    let capturedOnEvent: ((event: SimEvent) => void) | undefined;
+    vi.mocked(pluginApi.start).mockImplementation(async (_settings, onEvent) => {
+      capturedOnEvent = onEvent as (event: SimEvent) => void;
+    });
+
+    let resolveFirstResync: ((value: typeof initialSnapshot) => void) | undefined;
+    vi.mocked(pluginApi.getSnapshot)
+      .mockResolvedValueOnce(initialSnapshot)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstResync = resolve;
+          }),
+      )
+      // The second reconciliation's own request — never resolved in this
+      // test, only its firing matters (see below).
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    const freshModule = await import('./jarClient');
+    await freshModule.ensureJarClientStarted();
+
+    // First reconciliation fires and starts a request that never resolves
+    // within this test's timeline.
+    await vi.advanceTimersByTimeAsync(RECONCILE_INTERVAL_MS);
+
+    // A Passed event lands while that first request is still outstanding.
+    capturedOnEvent?.({ type: 'Passed', id: 3 });
+    expect(freshModule.useJarStore.getState().critters[3]?.alive).toBe(false);
+
+    // A second reconciliation fires before the first resolved — this is
+    // the moment the old shared-boolean implementation would have reset
+    // the guard out from under the still-outstanding first request. Leave
+    // it unresolved; only the first request's own resolution matters here.
+    await vi.advanceTimersByTimeAsync(RECONCILE_INTERVAL_MS);
+
+    // The first request's snapshot — captured before the death — finally
+    // resolves. The second interval firing in between must not have reset
+    // its guard: this must still be discarded, not revive the critter.
+    resolveFirstResync?.(initialSnapshot);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(freshModule.useJarStore.getState().critters[3]?.alive).toBe(false);
+
+    vi.useRealTimers();
+  });
 });
