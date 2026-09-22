@@ -168,6 +168,22 @@ export function FishModel({ critter, vehicle }: FishModelProps) {
     [mouthMaterial],
   );
 
+  // Per-fish geometry clones and manually constructed materials aren't
+  // JSX-owned, so R3F never disposes them on its own — over a long-running
+  // app's worth of `Born`/`Passed` cycles that would otherwise leak a
+  // `BufferGeometry` and two `Material`s per fish. `SHARED_GEOMETRY` and
+  // the JSX-declared `<meshStandardMaterial>`s elsewhere in this component
+  // are excluded on purpose: the former is shared read-only across every
+  // fish instance, and the latter are already R3F-managed.
+  useEffect(() => {
+    return () => {
+      bodyGeometry.dispose();
+      veilGeometry?.dispose();
+      pectoralMaterial.dispose();
+      mouthMaterial.dispose();
+    };
+  }, [bodyGeometry, veilGeometry, pectoralMaterial, mouthMaterial]);
+
   useFrame((state, delta) => {
     const speed = vehicle.getSpeed();
     const direction =
