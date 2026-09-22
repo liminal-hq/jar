@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use chrono::Timelike;
 use jar_core::rng::JarRng;
 use jar_core::JarState;
 use jar_protocol::{JarSettings, SimEvent};
@@ -110,8 +111,13 @@ fn spawn_background_loop<R: Runtime>(app: AppHandle<R>) {
             };
 
             let ticks = jar.clock.accumulate(elapsed.as_secs_f64());
+            // Read once per batch, not per tick — real time doesn't move
+            // fast enough within one `LOOP_INTERVAL` wake-up for repeated
+            // reads to matter, and `jar_core::clock::JarClock::is_night`
+            // only consults this at Real time (1×) anyway.
+            let local_hour = chrono::Local::now().hour() as u8;
             for _ in 0..ticks {
-                let outcome = jar_core::tick::tick(jar, rng);
+                let outcome = jar_core::tick::tick(jar, rng, local_hour);
                 let events = jar_core::events::events_for_tick(jar, &outcome);
                 if let Some(channel) = channel {
                     for event in events {
@@ -178,7 +184,24 @@ pub(crate) fn load_or_new<R: Runtime>(
     let path = snapshot_path(app)?;
     match std::fs::read(&path) {
         Ok(bytes) => Ok(jar_core::snapshot::decode(&bytes)?),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(JarState::new(settings)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(new_jar_seeded_from_now(settings)),
         Err(e) => Err(Error::Io(e)),
     }
+}
+
+/// A genuinely fresh jar (no snapshot on disk yet) — SPEC.md §5: "24
+/// jar-hours per jar-day, seeded from the system time when the app
+/// started," so accelerated speeds cycle through nights on jar time in
+/// step with when the jar was actually created, rather than every fresh
+/// jar starting at jar-midnight regardless of when it was opened. Seeding
+/// only touches `sim_seconds`/`jar_day_fraction`; nothing else reads
+/// `sim_seconds` as an absolute age (critter `age_sec` is its own
+/// independent per-tick counter, `tick.rs`), so this can't perturb
+/// aging/lifespan. Resuming an existing jar (the `Ok(bytes)` branch above)
+/// never re-seeds — only this one-time, no-snapshot-yet path does.
+fn new_jar_seeded_from_now(settings: JarSettings) -> JarState {
+    let mut state = JarState::new(settings);
+    let day_fraction = chrono::Local::now().num_seconds_from_midnight() as f64 / 86400.0;
+    state.clock.sim_seconds = day_fraction * jar_core::clock::SECONDS_PER_JAR_DAY;
+    state
 }

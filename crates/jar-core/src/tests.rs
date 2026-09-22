@@ -31,7 +31,7 @@ fn ticking_ages_every_living_critter_by_one_second() {
     let critter = crate::genetics::roll_original(id, Species::Fish, 1, 0.0, &mut rng, &[]);
     state.critters.push(critter);
 
-    tick(&mut state, &mut rng);
+    tick(&mut state, &mut rng, 12);
 
     assert_eq!(state.critters[0].age_sec, 1.0);
     assert_eq!(state.clock.sim_seconds, 1.0);
@@ -46,7 +46,7 @@ fn a_critter_passes_once_it_reaches_its_rolled_lifespan() {
     critter.life = 1.0; // force passing on the very next tick
     state.critters.push(critter);
 
-    let outcome = tick(&mut state, &mut rng);
+    let outcome = tick(&mut state, &mut rng, 12);
 
     assert!(!state.critters[0].alive);
     assert_eq!(outcome.passed, vec![id]);

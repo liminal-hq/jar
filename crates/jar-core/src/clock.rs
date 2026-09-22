@@ -75,11 +75,23 @@ impl JarClock {
     }
 
     /// True if the jar clock currently reads as night (SPEC.md §5:
-    /// "Night = 21:00-07:00"). At real time (1x) the frontend may instead
-    /// derive day/night from the system clock per SPEC.md §5 — that
-    /// substitution is a presentation-layer decision, not this function's
-    /// concern; this always answers in terms of the jar's own clock.
-    pub fn is_night(&self) -> bool {
+    /// "Night = 21:00-07:00"). At Real time (1×) this follows the system
+    /// clock's local hour instead of the jar's own compressed day cycle —
+    /// `SECONDS_PER_JAR_DAY` (120s) can never line up with a real 24-hour
+    /// day, so at 1× the jar-day-fraction formula would cycle through
+    /// night every two minutes regardless of the actual time outside.
+    /// `local_hour` is injected by the caller (mirroring
+    /// `apps/jar/src/domain/simConstants.ts`'s `isNight`, the frontend
+    /// twin of this exact rule) rather than read from the system clock
+    /// internally, keeping this a pure, deterministically-testable
+    /// function — the plugin layer, not this crate, owns real time.
+    /// Energy refill/breeding eligibility (`tick.rs`) and the frontend's
+    /// own sleep/settle presentation both call through here, so they can
+    /// never disagree about whether it's night.
+    pub fn is_night(&self, local_hour: u8) -> bool {
+        if self.speed == 1 {
+            return !(7..21).contains(&local_hour);
+        }
         let f = self.jar_day_fraction();
         !(NIGHT_END_FRACTION..NIGHT_START_FRACTION).contains(&f)
     }
@@ -130,27 +142,42 @@ mod tests {
         assert_eq!(clock.accumulate(0.0), 0);
     }
 
+    // Any speed other than 1 exercises the jar-day-fraction formula these
+    // tests are about — `local_hour` (12, arbitrarily) is irrelevant at
+    // those speeds and only asserted separately below.
+    const NOON: u8 = 12;
+
     #[test]
     fn is_night_at_the_day_start_boundary() {
         // 7/24 of a 120s jar-day = 35s exactly. The day window is
         // [7/24, 21/24), so 35s is day and anything just below it is night.
-        assert!(!JarClock::resume(35.0, 1).is_night());
-        assert!(JarClock::resume(34.0, 1).is_night());
+        assert!(!JarClock::resume(35.0, 2).is_night(NOON));
+        assert!(JarClock::resume(34.0, 2).is_night(NOON));
     }
 
     #[test]
     fn is_night_at_the_night_start_boundary() {
         // 21/24 of a 120s jar-day = 105s exactly. The day window's end is
         // exclusive, so 105s is already night; just below it is still day.
-        assert!(JarClock::resume(105.0, 1).is_night());
-        assert!(!JarClock::resume(104.0, 1).is_night());
+        assert!(JarClock::resume(105.0, 2).is_night(NOON));
+        assert!(!JarClock::resume(104.0, 2).is_night(NOON));
     }
 
     #[test]
     fn is_night_wraps_across_midnight() {
         // A fraction of exactly 0 (a fresh jar-day boundary) is still within
         // the night window, which spans the wrap.
-        assert!(JarClock::resume(0.0, 1).is_night());
-        assert!(JarClock::resume(120.0, 1).is_night()); // one full jar-day later
+        assert!(JarClock::resume(0.0, 2).is_night(NOON));
+        assert!(JarClock::resume(120.0, 2).is_night(NOON)); // one full jar-day later
+    }
+
+    #[test]
+    fn is_night_at_speed_1_follows_the_injected_local_hour_not_the_jar_day_fraction() {
+        // sim_seconds=0 alone would read as night under the jar-day-fraction
+        // formula (the wrap test above) — at speed 1 that must not matter.
+        assert!(!JarClock::resume(0.0, 1).is_night(NOON));
+        assert!(JarClock::resume(0.0, 1).is_night(22));
+        assert!(JarClock::resume(0.0, 1).is_night(6));
+        assert!(!JarClock::resume(0.0, 1).is_night(7));
     }
 }

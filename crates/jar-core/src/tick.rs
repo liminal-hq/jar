@@ -40,10 +40,13 @@ pub fn life_stage(age_sec: f32) -> LifeStage {
 
 /// Runs exactly one 1 Hz sim tick against `state`, returning the events it
 /// produced (for `events.rs` to push immediately, per SPEC.md/rust-core.md
-/// §4.7 — `Born`/`Passed` are not queued for the next batch).
-pub fn tick(state: &mut JarState, rng: &mut JarRng) -> TickOutcome {
+/// §4.7 — `Born`/`Passed` are not queued for the next batch). `local_hour`
+/// (the caller's current wall-clock hour, 0-23) only matters at Real time
+/// (1×) — see `JarClock::is_night`'s own doc comment for why the jar's own
+/// clock can't answer that case on its own.
+pub fn tick(state: &mut JarState, rng: &mut JarRng, local_hour: u8) -> TickOutcome {
     state.clock.advance_one_tick();
-    let is_night = state.clock.is_night();
+    let is_night = state.clock.is_night(local_hour);
     let population = state.critters.iter().filter(|c| c.alive).count() as f32;
 
     let mut outcome = TickOutcome::default();
@@ -274,13 +277,22 @@ mod tests {
         }
     }
 
+    /// Not speed 1: these tests are about the jar's own compressed
+    /// day/night cycle at `sim_seconds` granularity, which `is_night` only
+    /// consults at speeds other than 1 (see its own doc comment) — the
+    /// exact speed doesn't matter beyond that, so any non-1 value works.
+    const TEST_SPEED: u8 = 2;
+    /// Passed to every `tick()` call below — irrelevant at `TEST_SPEED`,
+    /// since `is_night` only reads it at speed 1.
+    const IGNORED_LOCAL_HOUR: u8 = 12;
+
     fn state_with(critters: Vec<Critter>, sim_seconds: f64, light_on: bool) -> JarState {
         let mut state = JarState::new(JarSettings {
             light_on,
             ..JarSettings::default()
         });
         state.critters = critters;
-        state.clock = crate::clock::JarClock::resume(sim_seconds, 1);
+        state.clock = crate::clock::JarClock::resume(sim_seconds, TEST_SPEED);
         state
     }
 
@@ -330,7 +342,7 @@ mod tests {
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
         for _ in 0..200 {
-            let outcome = tick(&mut state, &mut rng);
+            let outcome = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
             assert!(outcome.born.is_empty());
             assert!(state.living_count(Species::Fish) <= 10);
         }
@@ -360,7 +372,7 @@ mod tests {
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
         for _ in 0..200 {
-            let outcome = tick(&mut state, &mut rng);
+            let outcome = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
             assert!(outcome.born.is_empty());
             assert!(state.living_count(Species::Gecko) <= 4);
         }
@@ -389,7 +401,9 @@ mod tests {
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
         for _ in 0..200 {
-            assert!(tick(&mut state, &mut rng).born.is_empty());
+            assert!(tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR)
+                .born
+                .is_empty());
         }
     }
 
@@ -416,7 +430,9 @@ mod tests {
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
         for _ in 0..200 {
-            assert!(tick(&mut state, &mut rng).born.is_empty());
+            assert!(tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR)
+                .born
+                .is_empty());
         }
     }
 
@@ -443,7 +459,9 @@ mod tests {
         let mut state = state_with(critters, NIGHT_SIM_SECONDS, true);
         let mut rng = JarRng::new();
         for _ in 0..30 {
-            assert!(tick(&mut state, &mut rng).born.is_empty());
+            assert!(tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR)
+                .born
+                .is_empty());
         }
     }
 
@@ -463,7 +481,7 @@ mod tests {
             NIGHT_SIM_SECONDS,
             true,
         );
-        tick(&mut night_state, &mut rng);
+        tick(&mut night_state, &mut rng, IGNORED_LOCAL_HOUR);
         assert_eq!(night_state.critters[0].energy, 52.0);
 
         let mut day_state = state_with(
@@ -478,7 +496,7 @@ mod tests {
             DAY_SIM_SECONDS,
             true,
         );
-        tick(&mut day_state, &mut rng);
+        tick(&mut day_state, &mut rng, IGNORED_LOCAL_HOUR);
         assert!((day_state.critters[0].energy - 49.95).abs() < 1e-6);
     }
 
@@ -498,7 +516,7 @@ mod tests {
             DAY_SIM_SECONDS,
             true,
         );
-        tick(&mut low, &mut rng);
+        tick(&mut low, &mut rng, IGNORED_LOCAL_HOUR);
         assert_eq!(low.critters[0].energy, 0.0);
 
         let mut high = state_with(
@@ -513,7 +531,7 @@ mod tests {
             NIGHT_SIM_SECONDS,
             true,
         );
-        tick(&mut high, &mut rng);
+        tick(&mut high, &mut rng, IGNORED_LOCAL_HOUR);
         assert_eq!(high.critters[0].energy, 100.0);
     }
 
@@ -534,7 +552,7 @@ mod tests {
             true,
         );
         let mut rng = JarRng::new();
-        tick(&mut state, &mut rng);
+        tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
         let mood = state.critters[0].mood;
         assert!(
             (65.2..=67.2).contains(&mood),
@@ -566,7 +584,7 @@ mod tests {
         }
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
-        tick(&mut state, &mut rng);
+        tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
         let mood = state.critters[0].mood;
         assert!(
             (64.45..=66.45).contains(&mood),
@@ -591,7 +609,7 @@ mod tests {
             true,
         );
         let mut rng = JarRng::new();
-        tick(&mut state, &mut rng);
+        tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
         let mood = state.critters[0].mood;
         assert!(
             (64.45..=66.45).contains(&mood),
@@ -615,7 +633,7 @@ mod tests {
             true,
         );
         let mut rng = JarRng::new();
-        tick(&mut state, &mut rng);
+        tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
         let mood = state.critters[0].mood;
         assert!(
             (62.2..=70.2).contains(&mood),
@@ -646,7 +664,7 @@ mod tests {
         }
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
-        tick(&mut state, &mut rng);
+        tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
         assert_eq!(state.critters[0].mood, 0.0);
     }
 
