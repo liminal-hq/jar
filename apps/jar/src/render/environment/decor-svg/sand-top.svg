@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-300 -150 600 300">
+  <!-- Jar sand-floor overlay, top-down. `sand-top` is a wide, asymmetric
+       lobed patch (never a plain oval) laid over the darker base box;
+       `pebbles` are four small rounded stones scattered across it.
+       Fills are placeholders: colour is applied at runtime via material. -->
+  <path id="sand-top" fill="#d8c9a0" d="
+    M -216 -52
+    C -224 -76, -192 -90, -166 -82
+    C -154 -98, -122 -98, -108 -84
+    C -82 -96, -44 -90, -30 -76
+    C -4 -84, 32 -78, 41 -60
+    C 67 -68, 93 -50, 84 -32
+    C 103 -21, 94 2, 71 4
+    C 64 21, 33 26, 15 15
+    C -5 28, -40 23, -48 6
+    C -68 4, -75 -13, -66 -28
+    C -94 -26, -101 -9, -92 5
+    C -120 14, -153 6, -161 -12
+    C -191 -8, -220 -24, -216 -52
+    Z"/>
+
+  <!-- Small rounded stone, centred on origin. -->
+  <path id="pebble" fill="#a9906f" d="
+    M -13 3
+    C -15 -6, -6 -12, 3 -10
+    C 12 -9, 15 -2, 12 4
+    C 9 11, -9 11, -13 3
+    Z"/>
+</svg>

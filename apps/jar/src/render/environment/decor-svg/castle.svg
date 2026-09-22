@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-300 -400 600 400">
+  <!-- Jar castle. Ground at y=0, local x=0 is the keep's own centre; the two
+       towers are a single reusable shape positioned twice (like the fish
+       model's mirrored pectoral fin) at x=-290/+290 (`decorLayout.ts`'s
+       `CASTLE_TOWER_OFFSET`), not baked in here. Fills are placeholders:
+       colour is applied at runtime via material.
+
+       Proportioned flatter and wider than a real castle would be — the
+       door has to clear a fish's own collider (up to ~1.45 world units
+       across, `Fish.tsx`'s `colliderRadiusFor`), which forced the whole
+       keep wider than the tank's height can comfortably fit at a
+       realistic tall-castle aspect ratio; see `decorLayout.ts`'s header
+       comment for the actual world-unit sizing this maps to.
+
+       `keep-body` is a compound path: the keep's own rounded-rectangle
+       outline, then the arched doorway traced with the *opposite* winding
+       (the same convention `SVGLoader`/`ExtrudeGeometry` use for letterform
+       counters, e.g. the hole in a capital "O") — a real cut-through hole
+       in the extruded geometry, not a coloured overlay, so light and a
+       fish's own model are visible straight through it. -->
+  <path id="keep-body" fill="#d9a86c" fill-rule="evenodd" d="
+    M -240 0
+    L -240 -276
+    A 24 24 0 0 1 -216 -300
+    L 216 -300
+    A 24 24 0 0 1 240 -276
+    L 240 0
+    Z
+    M -100 0
+    L 100 0
+    L 100 -130
+    A 100 100 0 0 0 -100 -130
+    L -100 0
+    Z"/>
+
+  <!-- Three dome merlons crowning the keep, drawn as separate overlapping
+       circles sharing the keep's own colour (fused visually, not a single
+       path union). -->
+  <path id="merlons" fill="#d9a86c" d="
+    M -180 -300 A 30 30 0 0 1 -120 -300 A 30 30 0 0 1 -180 -300 Z
+    M -30 -300 A 30 30 0 0 1 30 -300 A 30 30 0 0 1 -30 -300 Z
+    M 120 -300 A 30 30 0 0 1 180 -300 A 30 30 0 0 1 120 -300 Z"/>
+
+  <!-- One tower, local origin at its own base centre (y=0). -->
+  <path id="tower-body" fill="#d9a86c" d="
+    M -55 0
+    L -55 -204
+    A 16 16 0 0 1 -39 -220
+    L 39 -220
+    A 16 16 0 0 1 55 -204
+    L 55 0
+    Z"/>
+
+  <!-- Plump bowed-outward cone roof, sitting on the tower's own top edge. -->
+  <path id="tower-roof" fill="#c96f5e" d="
+    M -65 -220
+    C -70 -250, -45 -285, -12 -300
+    A 12 12 0 0 1 12 -300
+    C 45 -285, 70 -250, 65 -220
+    Z"/>
+</svg>

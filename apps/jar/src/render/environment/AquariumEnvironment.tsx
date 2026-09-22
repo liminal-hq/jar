@@ -1,10 +1,12 @@
-// Aquarium backdrop + containment. The visible floor is a simple two-tone
-// stand-in for the real sand/rock/plants (`docs/architecture/3d-engine.md`
-// §8.1 — still TODO, see `NEXT_STEPS.md`); the invisible fixed walls are
-// real containment per §5.1 ("Static/fixed bodies: tank walls... inset
-// slightly from the visible glass so no clipping is visible at the
-// boundary"), inset a small margin from `TANK_WIDTH`/`TANK_HEIGHT`/
-// `TANK_DEPTH` so fish don't visibly clip the glass before bouncing off it.
+// Aquarium backdrop + containment. Floor/decor (`SandFloor`, `Castle`,
+// `Plants`) implements §8.1's "sand floor, one rock, three plants" — the
+// pebbles scattered on the sand floor double as the rock, and the castle is
+// genuinely new scope §8.1 never speced (see those components' own header
+// comments). The invisible fixed walls are real containment per §5.1
+// ("Static/fixed bodies: tank walls... inset slightly from the visible
+// glass so no clipping is visible at the boundary"), inset a small margin
+// from `TANK_WIDTH`/`TANK_HEIGHT`/`TANK_DEPTH` so fish don't visibly clip
+// the glass before bouncing off it.
 //
 // The glass box below uses plain alpha blending (`transparent`/`opacity`),
 // not `meshPhysicalMaterial`'s `transmission` — transmission achieves its
@@ -29,6 +31,9 @@ import {
   TANK_WIDTH,
   WALL_THICKNESS,
 } from '../physics/coordinates';
+import { Castle } from './Castle';
+import { Plants } from './Plants';
+import { SandFloor } from './SandFloor';
 
 export function AquariumEnvironment() {
   const halfW = TANK_INNER_BOUNDS.x;
@@ -38,11 +43,9 @@ export function AquariumEnvironment() {
 
   return (
     <>
-      {/* Sand floor — stand-in for the real two-tone floor/rock/plants. */}
-      <mesh position={[0, -halfH, 0]}>
-        <boxGeometry args={[TANK_WIDTH, 0.2, TANK_DEPTH]} />
-        <meshStandardMaterial color="#d8c9a0" roughness={0.9} />
-      </mesh>
+      <SandFloor />
+      <Castle />
+      <Plants />
 
       {/* Glass tank enclosure: a translucent tinted box around the whole
           volume rather than just a front pane, so the tank reads as glass
