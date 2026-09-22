@@ -33,6 +33,7 @@ import {
   TAIL_PIVOT,
   wrapInPivot,
 } from './fishGeometry';
+import { computeTurnRate } from './turnRate';
 
 interface FishModelProps {
   critter: Critter;
@@ -47,6 +48,12 @@ interface FishModelProps {
    * for the standalone critter-card preview (`CritterPreview.tsx`), which
    * has no steering mode of its own — treated as always `'active'` there. */
   getMode?: () => FishMotionMode;
+  /** Called once per frame with this fish's animation state, for the fish
+   * monitor window (`domain/fishDebug.ts`) — a callback rather than an
+   * imperative handle since `Fish.tsx` just wants to stash the latest value
+   * in a ref, not react to it. Absent (and skipped entirely) for the
+   * critter-card preview. */
+  onDebugFrame?: (anim: { turnRate: number; isResting: boolean; activeAmplitude: number }) => void;
 }
 
 /** Eye and spot positions are plain sphere primitives, not extruded SVG
@@ -62,6 +69,11 @@ const SPOTS: Array<{ x: number; y: number; r: number }> = [
   { x: -40, y: 4, r: 5 },
   { x: 45, y: -8, r: 4 },
 ];
+
+// Reused across every fish's `useFrame` call, read immediately and never
+// stored — safe to share at module scope (same pattern as
+// `SteeringSystem.tsx`'s own scratch vectors).
+const scratchVelocity = new THREE.Vector3();
 
 /** Below this speed (fraction of the fish's own `maxSpeedFor(energy)`
  * ceiling — a tired fish still "works hard" near its own cap, not an
@@ -103,7 +115,13 @@ const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside a hand-picked ~20–25° sw
 const BODY_BANK_AMPLITUDE = 0.05;
 const BODY_BOB_AMPLITUDE = 0.02;
 
-export function FishModel({ critter, vehicle, still = false, getMode }: FishModelProps) {
+export function FishModel({
+  critter,
+  vehicle,
+  still = false,
+  getMode,
+  onDebugFrame,
+}: FishModelProps) {
   const rootRef = useRef<THREE.Group>(null);
   const tailPivotRef = useRef<THREE.Group>(null);
   const pectoralPivotRef = useRef<THREE.Group>(null);
@@ -114,6 +132,12 @@ export function FishModel({ critter, vehicle, still = false, getMode }: FishMode
   // in perfect unison whenever they share a speed (§6.6).
   const phaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
   const prevDirection = useRef(new THREE.Vector3(0, 0, 1));
+  // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
+  // window only samples a few times a second, so a genuine one/two-frame
+  // spike (e.g. right at a night settle/wake mode flip) would otherwise be
+  // invisible between polls. Decays fast enough to read as "just happened"
+  // rather than a stuck reading.
+  const peakTurnRateRef = useRef(0);
 
   // Idle/rest state — see the constants above for the hysteresis and blend
   // timing this drives.
@@ -233,16 +257,17 @@ export function FishModel({ critter, vehicle, still = false, getMode }: FishMode
     if (still) return;
 
     const speed = vehicle.getSpeed();
-    const direction =
-      vehicle.velocity.squaredLength() > 0.0001
-        ? new THREE.Vector3(vehicle.velocity.x, vehicle.velocity.y, vehicle.velocity.z).normalize()
-        : prevDirection.current;
 
-    // turnRate approximated from how fast the heading direction is
-    // rotating, rather than tracked as a first-class steering output —
-    // good enough to drive "sharper turn -> bigger S-curve" (§6.6).
-    const angleDelta = prevDirection.current.angleTo(direction);
-    const turnRate = delta > 0 ? angleDelta / delta : 0;
+    // turnRate drives "sharper turn -> bigger S-curve" (§6.6) — see
+    // `turnRate.ts` for why it's gated below a minimum speed rather than
+    // measured from every frame's raw velocity direction.
+    scratchVelocity.set(vehicle.velocity.x, vehicle.velocity.y, vehicle.velocity.z);
+    const { turnRate, direction } = computeTurnRate(
+      speed,
+      scratchVelocity,
+      prevDirection.current,
+      delta,
+    );
     prevDirection.current.copy(direction);
 
     const t = state.clock.elapsedTime;
@@ -318,6 +343,13 @@ export function FishModel({ critter, vehicle, still = false, getMode }: FishMode
     const frequency = workingFrequencyRef.current;
     const amplitude = workingAmplitudeRef.current;
     const phase = t * frequency + phaseSeed;
+
+    peakTurnRateRef.current = Math.max(turnRate, peakTurnRateRef.current * Math.exp(-5 * delta));
+    onDebugFrame?.({
+      turnRate: peakTurnRateRef.current,
+      isResting: isRestingRef.current,
+      activeAmplitude: amplitude,
+    });
 
     if (tailPivotRef.current) {
       tailPivotRef.current.rotation.y = Math.sin(phase) * amplitude;

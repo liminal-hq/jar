@@ -8,13 +8,18 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as YUKA from 'yuka';
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
 import { entityManager } from './entityManager';
 import type { FishMotionMode } from './motionState';
 import { maxSpeedFor, steeringParamsFor } from './steeringParams';
+import {
+  MODE_WEIGHTS,
+  rampWeights as computeRampedWeights,
+  type ModeWeights,
+} from './steeringWeights';
 import { TankContainmentBehaviour } from './tankContainmentBehaviour';
 
 /** Yuka's `WanderBehavior` projects its wander target this many units
@@ -54,12 +59,20 @@ export function useFishSteering(
     wander.radius = params.wanderRadius;
     wander.jitter = params.wanderJitter;
     wander.distance = WANDER_DISTANCE;
+    wander.weight = MODE_WEIGHTS.active.wander;
 
     const separation = new YUKA.SeparationBehavior();
+    separation.weight = MODE_WEIGHTS.active.separation;
     const containment = new TankContainmentBehaviour();
 
     const arrive = new YUKA.ArriveBehavior(favouriteSpotWorld, 3, 0.3);
-    arrive.active = false;
+    arrive.weight = MODE_WEIGHTS.active.arrive;
+    // `active` stays permanently `true` (Yuka's own default) on all three —
+    // `setMode`/`rampWeights` below only ever move `.weight`, never flip
+    // `active`, which is what turns a mode change into a fade instead of a
+    // snap. `calculate()` still runs every frame regardless of weight
+    // (cheap for a handful of fish); see `rampWeights`'s comment for why
+    // that's the point.
 
     vehicle.steering.add(wander);
     vehicle.steering.add(separation);
@@ -81,37 +94,29 @@ export function useFishSteering(
     };
   }, [rig.vehicle]);
 
-  // `containment` is never toggled here — it stays active in every mode,
-  // paused/settled fish included, since even a resting fish shouldn't be
-  // able to drift into the glass.
+  // `containment` is never targeted here — it stays at weight 1 in every
+  // mode, paused/settled fish included, since even a resting fish shouldn't
+  // be able to drift into the glass.
+  const targetWeightsRef = useRef<ModeWeights>(MODE_WEIGHTS.active);
+
   const setMode = (mode: FishMotionMode) => {
-    switch (mode) {
-      case 'active':
-        rig.wander.active = true;
-        rig.separation.active = true;
-        rig.arrive.active = false;
-        break;
-      case 'paused':
-        // Separation stays on — a paused fish still yields space rather
-        // than becoming an obstacle for its neighbours.
-        rig.wander.active = false;
-        rig.separation.active = true;
-        rig.arrive.active = false;
-        break;
-      case 'settling':
-        // §4.1: night cancels active steering except arrival — no wander,
-        // no separation, until settled.
-        rig.wander.active = false;
-        rig.separation.active = false;
-        rig.arrive.active = true;
-        break;
-      case 'settled':
-        rig.wander.active = false;
-        rig.separation.active = false;
-        rig.arrive.active = false;
-        break;
-    }
+    targetWeightsRef.current = MODE_WEIGHTS[mode];
   };
 
-  return { ...rig, params, setMode, maxSpeedFor };
+  /** Called every frame (`Fish.tsx`) to fade each behavior's `.weight`
+   * toward whatever `setMode` last targeted — see `steeringWeights.ts`'s
+   * `BEHAVIOR_WEIGHT_RAMP_RATE` comment for why this exists instead of
+   * `setMode` changing weights directly. */
+  const rampWeights = (delta: number) => {
+    const next = computeRampedWeights(
+      { wander: rig.wander.weight, separation: rig.separation.weight, arrive: rig.arrive.weight },
+      targetWeightsRef.current,
+      delta,
+    );
+    rig.wander.weight = next.wander;
+    rig.separation.weight = next.separation;
+    rig.arrive.weight = next.arrive;
+  };
+
+  return { ...rig, params, setMode, rampWeights, maxSpeedFor };
 }

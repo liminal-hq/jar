@@ -23,10 +23,29 @@ import * as THREE from 'three';
 import type * as YUKA from 'yuka';
 
 import { publishFishPositions } from '../../domain/debugChannel';
-import { useFishPositionOverlayEnabled } from '../../domain/devSettings';
+import {
+  useDayNightOverride,
+  useFishMonitorEnabled,
+  useFishPositionOverlayEnabled,
+} from '../../domain/devSettings';
+import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
+import { useJarStore } from '../../domain/jarClient';
+import { isNight } from '../../domain/simConstants';
 import { entityManager } from './entityManager';
-import { computeTargetHeading } from './heading';
+import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
 import type { FishMotionMode } from './motionState';
+
+/** Extra per-fish detail only `FishModel.tsx` knows (its own animation
+ * state) — optional because the standalone critter-card preview drives a
+ * `FishModel` with no steering registration at all. */
+export interface FishDebugAnim {
+  /** A fast-decaying peak hold, not the instantaneous value — a genuine
+   * one/two-frame spike would otherwise be invisible between the fish
+   * monitor's ~5Hz polls (`FishModel.tsx`'s own comment on `peakTurnRateRef`). */
+  turnRate: number;
+  isResting: boolean;
+  activeAmplitude: number;
+}
 
 export interface RegisteredFish {
   vehicle: YUKA.Vehicle;
@@ -38,6 +57,18 @@ export interface RegisteredFish {
    * body's actual rotation at registration time (`Fish.tsx`). */
   currentHeading: THREE.Quaternion;
   targetHeading: THREE.Quaternion;
+  /** Hysteresis state for `computeTargetHeading`'s commit/release threshold
+   * pair (`heading.ts`) — whether this fish is currently trusting its
+   * instantaneous velocity for a fresh heading, versus holding the last one
+   * through a low-speed wobble. Starts `false`: a freshly-spawned fish
+   * holds its seeded heading until it's genuinely underway. */
+  isHeadingActive: boolean;
+  /** Feeds the fish monitor window (`windows/FishMonitor/FishMonitorWindow.tsx`)
+   * — absent for a `FishModel` with no steering mode of its own. */
+  getDebugAnim?: () => FishDebugAnim | null;
+  /** `Critter.hue`, 0-360 — never changes after spawn, so a plain field
+   * rather than a getter. Feeds the fish monitor window's map. */
+  hue: number;
 }
 
 type Registry = Map<number, RegisteredFish>;
@@ -87,12 +118,25 @@ const HEADING_SLERP_RATE = 6;
  * unassisted. */
 const NON_ACTIVE_VELOCITY_DECAY_RATE = 4;
 
+/** How often the fish monitor snapshot publishes — a live table doesn't
+ * need 60Hz, and publishing every frame would spam the Tauri event bridge
+ * for no visible benefit. */
+const DEBUG_PUBLISH_INTERVAL_SEC = 0.2;
+
+const scratchYawEuler = new THREE.Euler();
+
 interface SteeringSystemProps {
   children: ReactNode;
 }
 
 export function SteeringSystem({ children }: SteeringSystemProps) {
   const registryRef = useRef<Registry>(new Map());
+  const monitorEnabled = useFishMonitorEnabled();
+  const simSeconds = useJarStore((s) => s.simSeconds);
+  const dayNightOverride = useDayNightOverride();
+  const effectiveIsNight =
+    dayNightOverride === 'auto' ? isNight(simSeconds) : dayNightOverride === 'night';
+  const publishElapsedRef = useRef(0);
 
   // A ref, not read directly in `useFrame` — the toggle can flip mid-session
   // (Dev settings window, any window) and this component doesn't otherwise
@@ -152,13 +196,40 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
           .multiplyScalar(VELOCITY_GAIN * delta);
         body.applyImpulse(scratchImpulse, true);
 
-        const target = computeTargetHeading(scratchVelocity);
+        const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;
+        const target = computeTargetHeading(scratchVelocity, threshold);
+        fish.isHeadingActive = target !== null;
         if (target) fish.targetHeading.copy(target);
       }
 
       const slerpFactor = 1 - Math.exp(-HEADING_SLERP_RATE * delta);
       fish.currentHeading.slerp(fish.targetHeading, slerpFactor);
       body.setRotation(fish.currentHeading, true);
+    }
+
+    if (monitorEnabled) {
+      publishElapsedRef.current += delta;
+      if (publishElapsedRef.current >= DEBUG_PUBLISH_INTERVAL_SEC) {
+        publishElapsedRef.current = 0;
+        const entries: FishDebugEntry[] = [];
+        for (const [id, fish] of registry) {
+          const anim = fish.getDebugAnim?.() ?? null;
+          scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
+          entries.push({
+            id,
+            mode: fish.getMode(),
+            pos: [fish.vehicle.position.x, fish.vehicle.position.y, fish.vehicle.position.z],
+            speed: fish.vehicle.getSpeed(),
+            yawDeg: (scratchYawEuler.y * 180) / Math.PI,
+            // `heading.ts` builds the euler as `(-pitch, yaw, 0, 'YXZ')`.
+            pitchDeg: (-scratchYawEuler.x * 180) / Math.PI,
+            turnRate: anim?.turnRate ?? 0,
+            isResting: anim?.isResting ?? false,
+            hue: fish.hue,
+          });
+        }
+        void emitFishDebug({ entries, simSeconds, isNight: effectiveIsNight });
+      }
     }
   });
 

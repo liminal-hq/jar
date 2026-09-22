@@ -13,15 +13,16 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import * as YUKA from 'yuka';
 
-import { isNight, lifeStageScale } from '../../domain/simConstants';
+import { useDayNightOverride } from '../../domain/devSettings';
 import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
+import { isNight, lifeStageScale } from '../../domain/simConstants';
 import { FishModel } from '../models/FishModel';
 import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
 import type { FishMotionMode } from '../steering/motionState';
-import { useSteeringRegistry } from '../steering/SteeringSystem';
+import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
 import { useFishSteering } from '../steering/useFishSteering';
 
 /** A loose bounding sphere around `FishModel`'s combined body/tail/eye
@@ -125,8 +126,15 @@ export function Fish({ critter, livingPopulation }: FishProps) {
 
   const steering = useFishSteering(critter.personality, livingPopulation, favouriteSpotWorld);
 
-  const night = useJarStore((s) => isNight(s.simSeconds));
+  const simNight = useJarStore((s) => isNight(s.simSeconds));
+  // Dev-only override (`windows/FishMonitor/FishMonitorWindow.tsx`) to pin
+  // day or night on demand rather than wait out a real day/night cycle —
+  // `'auto'` (the real jar clock) in production builds, where the toggle
+  // can't be set.
+  const dayNightOverride = useDayNightOverride();
+  const night = dayNightOverride === 'auto' ? simNight : dayNightOverride === 'night';
   const nightRef = useRef(night);
+  const debugAnimRef = useRef<FishDebugAnim | null>(null);
   useEffect(() => {
     nightRef.current = night;
   }, [night]);
@@ -156,6 +164,9 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       getMode: () => modeRef.current,
       currentHeading,
       targetHeading: currentHeading.clone(),
+      isHeadingActive: false,
+      getDebugAnim: () => debugAnimRef.current,
+      hue: critter.hue,
     });
     return () => {
       registry.delete(critter.id);
@@ -191,6 +202,13 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // (see that file's header for why that distinction matters with R3F v8).
   const settleElapsedRef = useRef(0);
   useFrame((_, delta) => {
+    // Fades wander/separation/arrive toward whatever `setMode` last
+    // targeted, every frame and every mode — not just while settling. See
+    // `useFishSteering.ts`'s `BEHAVIOR_WEIGHT_RAMP_RATE` comment for why an
+    // instant behavior-set flip was the actual cause of fish visibly
+    // "shaking" for a moment at every night settle/wake transition.
+    steering.rampWeights(delta);
+
     if (modeRef.current !== 'settling') return;
     settleElapsedRef.current += delta;
     const distance = steering.vehicle.position.distanceTo(favouriteSpotWorld);
@@ -269,7 +287,14 @@ export function Fish({ critter, livingPopulation }: FishProps) {
           void selectCritter(critter.id);
         }}
       >
-        <FishModel critter={critter} vehicle={steering.vehicle} getMode={() => modeRef.current} />
+        <FishModel
+          critter={critter}
+          vehicle={steering.vehicle}
+          getMode={() => modeRef.current}
+          onDebugFrame={(anim) => {
+            debugAnimRef.current = anim;
+          }}
+        />
       </group>
     </RigidBody>
   );
