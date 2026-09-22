@@ -23,17 +23,51 @@ export function shapesFromSvg(svg: string): THREE.Shape[] {
  * winding itself is also reversed to match. Three.js's `BufferGeometry`
  * transform methods only ever touch attribute *values*, never index
  * *topology*, so nothing does that second half automatically — this does
- * it by hand, swapping two indices per triangle. */
+ * it by hand.
+ *
+ * `THREE.ExtrudeGeometry` builds *non-indexed* geometry (confirmed live:
+ * `geometry.index` is `null`), so an index-only implementation here is a
+ * silent no-op for every caller — the exact bug a Codex review round
+ * caught after an earlier version of this function shipped doing nothing,
+ * despite live testing that looked like it worked (turned out to be a
+ * stale automation-bridge connection returning blank screenshots that
+ * masked genuine renders, and separately a color/ambient-light mixup that
+ * masked the no-op — see PR discussion, not a rendering bug at all).
+ * Every 3 consecutive vertices form one triangle in non-indexed geometry,
+ * so "reverse the winding" here means swapping each attribute's own
+ * values (position, normal, uv — whatever `ExtrudeGeometry` populated)
+ * between a triangle's 2nd and 3rd vertex, not touching an index buffer
+ * that doesn't exist. */
 function reverseWinding(geometry: THREE.BufferGeometry): void {
   const index = geometry.index;
-  if (!index) return;
-  const array = index.array;
-  for (let i = 0; i + 2 < array.length; i += 3) {
-    const b = array[i + 1]!;
-    array[i + 1] = array[i + 2]!;
-    array[i + 2] = b;
+  if (index) {
+    const array = index.array;
+    for (let i = 0; i + 2 < array.length; i += 3) {
+      const b = array[i + 1]!;
+      array[i + 1] = array[i + 2]!;
+      array[i + 2] = b;
+    }
+    index.needsUpdate = true;
+    return;
   }
-  index.needsUpdate = true;
+
+  const position = geometry.attributes.position;
+  if (!position) return;
+  const vertexCount = position.count;
+  for (const attribute of Object.values(geometry.attributes)) {
+    if (!(attribute instanceof THREE.BufferAttribute)) continue; // not used by extrude()'s output
+    const itemSize = attribute.itemSize;
+    const array = attribute.array;
+    const scratch = new Array<number>(itemSize);
+    for (let v = 0; v + 2 < vertexCount; v += 3) {
+      const bStart = (v + 1) * itemSize;
+      const cStart = (v + 2) * itemSize;
+      for (let k = 0; k < itemSize; k++) scratch[k] = array[bStart + k]!;
+      for (let k = 0; k < itemSize; k++) array[bStart + k] = array[cStart + k]!;
+      for (let k = 0; k < itemSize; k++) array[cStart + k] = scratch[k]!;
+    }
+    attribute.needsUpdate = true;
+  }
 }
 
 /** SVG's Y grows downward, three.js's Y grows upward — the standard flip
