@@ -10,14 +10,16 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-/// On-demand satellite windows (`domain/windows.ts`'s `SPECS`) — excluded
-/// from `tauri-plugin-window-state` below. They're meant to spawn fresh
-/// every time, sized to their own `SPECS` entry and positioned beside the
-/// tank (`openSatelliteWindow`'s own placement logic) — not wherever they
-/// happened to be sized/positioned the last time one was open. Only `tank`
-/// (statically declared, genuinely wants to reopen where you left it)
-/// should persist geometry across restarts.
-const EPHEMERAL_WINDOW_LABELS: &[&str] = &["critter-card", "family-tree", "setup", "dev-settings"];
+/// Windows excluded from `tauri-plugin-window-state` below. `SPEC.md` §6
+/// requires window positions/sizes to persist, and that covers every
+/// window in the documented screen inventory (`SCREENS.md`'s W1-W4) —
+/// `critter-card`, `family-tree` and `setup` are on-demand
+/// (`domain/windows.ts`'s `SPECS`) but still user-facing, tracked windows,
+/// so only `dev-settings` (a debug-only tool, explicitly "not part of
+/// `SPEC.md`/`SCREENS.md`" per its own `SPECS` entry) is denylisted here —
+/// it's meant to spawn fresh every time rather than remember where a dev
+/// last left it.
+const EPHEMERAL_WINDOW_LABELS: &[&str] = &["dev-settings"];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
