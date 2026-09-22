@@ -39,7 +39,7 @@ export function Drawer({ onNavigate }: DrawerProps) {
   const toggleLight = () => jar.setToggle('light', !settings.light_on);
   const toggleAmbient = () => jar.setToggle('ambientParticles', !settings.ambient_particles_on);
   const toggleSound = () => jar.setToggle('sound', !settings.sound_on);
-  const navigate = async (window: 'family-tree' | 'setup' | 'dev-settings') => {
+  const navigate = async (window: 'family-tree' | 'setup' | 'dev-settings' | 'fish-monitor') => {
     // Await the shrink first — otherwise `openSatelliteWindow` measures the
     // tank while it's still the drawer's extra width, positioning the new
     // window separated from the tank instead of beside it.
@@ -98,6 +98,11 @@ export function Drawer({ onNavigate }: DrawerProps) {
       {import.meta.env.DEV && (
         <button style={buttonStyle} onClick={() => void navigate('dev-settings')}>
           Dev
+        </button>
+      )}
+      {import.meta.env.DEV && (
+        <button style={buttonStyle} onClick={() => void navigate('fish-monitor')}>
+          Fish monitor
         </button>
       )}
     </div>

@@ -16,6 +16,12 @@ const GECKO_HUE_PALETTE: [u16; 5] = [28, 42, 75, 110, 150];
 
 const SPOT_INHERIT_CHANCE: f32 = 0.7;
 const HUE_MUTATION_RANGE: f32 = 18.0;
+/// Chance a child's personality is pulled from a parent rather than rolled
+/// fresh from the full pool — real family resemblance across generations
+/// without ever converging the population on one personality, since the
+/// fresh-roll fallback isn't excluded from coincidentally matching a parent
+/// either.
+const PERSONALITY_INHERIT_CHANCE: f32 = 0.7;
 
 const NAME_POOL: &[&str] = &[
     "Pickle",
@@ -66,6 +72,7 @@ pub fn roll_original(
         mood: 66.0,
         energy: 100.0,
         age_sec: 0.0,
+        life_stage: crate::tick::life_stage(0.0),
         life: roll_lifespan(rng),
         gen,
         parents: None,
@@ -119,10 +126,13 @@ pub fn roll_child(
         fin,
         spots,
         sex: roll_sex(rng), // not inherited — SPEC.md §5's amended rule
-        personality: roll_personality(rng),
+        // inherited ~70% of the time, fresh roll otherwise — family
+        // resemblance without stagnation (SPEC.md §5's amended rule)
+        personality: roll_child_personality(parent_a.critter, parent_b.critter, rng),
         mood: 66.0,
         energy: 100.0,
         age_sec: 0.0,
+        life_stage: crate::tick::life_stage(0.0),
         life: roll_lifespan(rng),
         gen,
         parents: Some([parent_a.critter.id, parent_b.critter.id]),
@@ -157,6 +167,23 @@ fn roll_personality(rng: &mut JarRng) -> Personality {
         3 => Personality::Sleepy,
         4 => Personality::Bold,
         _ => Personality::Dramatic,
+    }
+}
+
+/// `PERSONALITY_INHERIT_CHANCE` of the time, pick whichever parent's
+/// personality wins a coin flip (mirrors `fin`'s exact "one parent,
+/// wholesale" pattern above); otherwise roll fresh from the full pool
+/// (mirrors `spots`' probabilistic-inherit-with-fallback pattern) rather
+/// than a flat 50/50 alone.
+fn roll_child_personality(parent_a: &Critter, parent_b: &Critter, rng: &mut JarRng) -> Personality {
+    if rng.chance(PERSONALITY_INHERIT_CHANCE) {
+        if rng.chance(0.5) {
+            parent_a.personality
+        } else {
+            parent_b.personality
+        }
+    } else {
+        roll_personality(rng)
     }
 }
 
@@ -226,6 +253,7 @@ mod tests {
             mood: 66.0,
             energy: 100.0,
             age_sec: 1000.0,
+            life_stage: crate::tick::life_stage(1000.0),
             life: 100_000.0,
             gen: 1,
             parents: None,
@@ -477,5 +505,125 @@ mod tests {
     fn naming_falls_back_to_a_roman_numeral_once_the_pool_is_exhausted() {
         let existing: Vec<String> = NAME_POOL.iter().map(|s| s.to_string()).collect();
         assert_eq!(roll_name(&existing), "Pickle II");
+    }
+
+    #[test]
+    fn personality_comes_from_a_parent_roughly_seventy_percent_of_the_time() {
+        let mut rng = JarRng::new();
+        let a = Critter {
+            personality: Personality::Bold,
+            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+        };
+        let b = Critter {
+            personality: Personality::Sleepy,
+            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+        };
+        let n = 2000;
+        let mut matched_a_parent = 0;
+        for _ in 0..n {
+            let child = roll_child(
+                CritterId(1),
+                Parent { critter: &a },
+                Parent { critter: &b },
+                2,
+                0.0,
+                &mut rng,
+                &[],
+            );
+            if child.personality == Personality::Bold || child.personality == Personality::Sleepy {
+                matched_a_parent += 1;
+            }
+        }
+        // 70% direct inheritance plus the fresh-roll fallback coincidentally
+        // landing on one of the two parent values (~2/6 of the remaining
+        // 30%) puts the expected rate near 80%, not 70% — the fallback
+        // isn't excluded from matching a parent by chance.
+        let rate = matched_a_parent as f64 / n as f64;
+        assert!(
+            (0.7..=0.9).contains(&rate),
+            "personality-matches-a-parent rate {rate} far from the ~80% expected"
+        );
+    }
+
+    #[test]
+    fn both_parents_sharing_a_personality_does_not_guarantee_it() {
+        let mut rng = JarRng::new();
+        let a = Critter {
+            personality: Personality::Bold,
+            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+        };
+        let b = Critter {
+            personality: Personality::Bold,
+            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+        };
+        let n = 2000;
+        let mut bold_count = 0;
+        let mut saw_non_bold = false;
+        for _ in 0..n {
+            let child = roll_child(
+                CritterId(1),
+                Parent { critter: &a },
+                Parent { critter: &b },
+                2,
+                0.0,
+                &mut rng,
+                &[],
+            );
+            if child.personality == Personality::Bold {
+                bold_count += 1;
+            } else {
+                saw_non_bold = true;
+            }
+        }
+        assert!(
+            saw_non_bold,
+            "two Bold parents produced Bold in every one of {n} children — fresh-roll fallback never fired"
+        );
+        let bold_rate = bold_count as f64 / n as f64;
+        assert!(
+            bold_rate > 0.65,
+            "Bold rate {bold_rate} lower than expected even with both parents Bold"
+        );
+    }
+
+    #[test]
+    fn fresh_rolls_cover_the_full_personality_pool() {
+        // `Personality` doesn't derive `Hash` (no need to for anything else
+        // it's used for), so track "seen" per-variant by hand rather than
+        // reaching for a `HashSet` here.
+        let mut seen = [false; 6];
+        let mut rng = JarRng::new();
+        let a = Critter {
+            personality: Personality::Bold,
+            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+        };
+        let b = Critter {
+            personality: Personality::Bold,
+            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+        };
+        for _ in 0..2000 {
+            let child = roll_child(
+                CritterId(1),
+                Parent { critter: &a },
+                Parent { critter: &b },
+                2,
+                0.0,
+                &mut rng,
+                &[],
+            );
+            let index = match child.personality {
+                Personality::Shy => 0,
+                Personality::Greedy => 1,
+                Personality::Curious => 2,
+                Personality::Sleepy => 3,
+                Personality::Bold => 4,
+                Personality::Dramatic => 5,
+            };
+            seen[index] = true;
+        }
+        assert!(
+            seen.iter().all(|&s| s),
+            "not every personality appeared across 2000 children of two Bold parents: {seen:?}"
+        );
     }
 }

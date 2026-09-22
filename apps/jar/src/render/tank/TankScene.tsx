@@ -17,10 +17,15 @@ import { AquariumEnvironment } from '../environment/AquariumEnvironment';
 import { CrtEffect } from '../effects/CrtEffect';
 import { Bubbles } from '../particles/Bubbles';
 import { SteeringSystem } from '../steering/SteeringSystem';
+import { clampClockDelta } from './clampClockDelta';
 import { CrittersLayer } from './CrittersLayer';
 import { useRenderLoopPolicy } from './useRenderLoopPolicy';
 
 THREE.ColorManagement.enabled = false;
+
+/** ~6 fixed Rapier substeps' worth of catch-up in one rendered frame after a
+ * stall — fast, but no longer a one-frame snap. See `clampClockDelta.ts`. */
+const MAX_FRAME_DELTA_SEC = 0.1;
 
 export function TankScene() {
   // §1.3: the render loop pauses on window-hidden/minimized; the sim tick
@@ -42,10 +47,11 @@ export function TankScene() {
         premultipliedAlpha: false,
         powerPreference: 'low-power',
       }}
-      onCreated={({ gl, scene }) => {
+      onCreated={({ gl, scene, clock }) => {
         gl.setClearColor(0x000000, 0);
         scene.background = null;
         scene.environment = null;
+        clampClockDelta(clock, MAX_FRAME_DELTA_SEC);
       }}
     >
       <ambientLight intensity={0.6} />

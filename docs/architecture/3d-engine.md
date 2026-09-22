@@ -111,7 +111,7 @@ Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Veh
 
 ### 4.1 Fish
 
-- **Active behaviors: `WanderBehavior` + `SeparationBehavior`.** That's the full default set — deliberately _not_ `CohesionBehavior` or `AlignmentBehavior`. Jar's critters are named, individual pets, not an anonymous school; boid flocking makes multiple named fish move in lockstep, which reads as less alive, not more. Leave both weights at 0 by default.
+- **Active behaviors: `WanderBehavior` + `SeparationBehavior` + a custom `TankContainmentBehaviour`.** Deliberately _not_ `CohesionBehavior` or `AlignmentBehavior` — Jar's critters are named, individual pets, not an anonymous school; boid flocking makes multiple named fish move in lockstep, which reads as less alive, not more. `TankContainmentBehaviour` (anticipatory wall-avoidance, pushing a fish back toward centre once within a margin of any wall) is the one behavior of the three that's never mode-gated — it stays at a fixed weight of 1 in every motion mode, including `paused`/`settled`, since even a resting fish shouldn't be able to drift into the glass. `Wander`/`Separation` (and, mode-dependent, `Arrive`) instead fade their own `.weight` toward a per-mode target over time rather than snapping on/off — an instant behavior-set flip was a real, fixed stutter bug (a full-strength `ArriveBehavior` force landing in one frame at every night settle/wake transition).
   - _Stretch, explicitly opt-in later:_ a per-relationship "bonded pair" attraction (e.g. parent/child, or two critters flagged as attached) as a small custom steering force scoped to that one relationship — not a global flock behavior. Not required for v1.
 - **Arrival at favourite spot:** ~30% of the time a fish's current wander/target cycle resolves, redirect it to `fav.{x,y,z}` using an `ArriveBehavior` (slowing radius) rather than snapping — reproducing the same 30%-of-the-time rule `Jar.dc.html`'s mock uses, re-expressed as a proper steering behavior instead of a linear-interpolation target.
 - **Trait modulation** (traits are already defined in `SPEC.md` §5 — this table says how each one bends the _steering_ parameters, since the 2D version only had ad-hoc movement tweaks):
@@ -171,7 +171,7 @@ Per frame: read the `RigidBody`'s actual position → feed it into the `YUKA.Veh
 
 ### 6.3 Life-stage scaling
 
-Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). A single uniform scale on `FishModel`'s root `<group>` (`lifeStageScale(critter.age_sec)`, composed with the SVG-to-world unit conversion below) is what's actually applied; proportion changes (bigger eyes on fry, etc.) remain a nice stretch, not built.
+Same size curve `SPEC.md` already specifies (and `Jar.dc.html`'s mock renders at): fry ×0.45, juvenile ×0.75, adult ×1.0, elder ×1.0 (no separate elder scale currently defined — keep parity unless a visual case emerges for shrinking/graying elders). A single uniform scale on `FishModel`'s root `<group>` (`lifeStageScale(critter.life_stage)`, composed with the SVG-to-world unit conversion below) is what's actually applied; proportion changes (bigger eyes on fry, etc.) remain a nice stretch, not built. `life_stage` itself is a sim fact pushed from `jar-core` (`docs/architecture/rust-core.md` §3.1), not derived from `age_sec` client-side.
 
 ### 6.4 Materials — flat, not PBR
 

@@ -19,7 +19,7 @@ interface SatelliteWindowSpec {
 }
 
 const SPECS: Record<
-  'critter-card' | 'family-tree' | 'setup' | 'dev-settings',
+  'critter-card' | 'family-tree' | 'setup' | 'dev-settings' | 'fish-monitor',
   SatelliteWindowSpec
 > = {
   // Tall enough for the 3D preview panel (a square that scales with width,
@@ -35,6 +35,9 @@ const SPECS: Record<
   // checkboxes plus their scrollable debug panels (`DevSettingsWindow.tsx`)
   // when both are toggled on, without the window itself needing to grow.
   'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },
+  // Dev-only, same as `dev-settings` — wide enough for the live table plus
+  // the top-down and front tank maps side by side (`FishMonitorWindow.tsx`).
+  'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 620, height: 480 },
 };
 
 /** Focuses the window if it's already open, otherwise creates it

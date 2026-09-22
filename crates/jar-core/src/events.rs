@@ -40,6 +40,7 @@ pub fn events_for_tick(state: &JarState, outcome: &TickOutcome) -> Vec<SimEvent>
             .filter(|c| c.alive)
             .map(stats_of)
             .collect(),
+        is_night: outcome.is_night,
     });
 
     events
@@ -51,6 +52,7 @@ fn stats_of(c: &Critter) -> CritterStats {
         mood: c.mood,
         energy: c.energy,
         age_sec: c.age_sec,
+        life_stage: c.life_stage,
         alive: c.alive,
     }
 }

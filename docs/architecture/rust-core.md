@@ -83,6 +83,7 @@ pub struct Critter {
     pub mood: f32,                  // 0–100
     pub energy: f32,                // 0–100
     pub age_sec: f32,
+    pub life_stage: LifeStage,      // Fry | Juvenile | Adult | Elder — derived from age_sec, kept fresh every tick
     pub life: f32,                  // rolled lifespan, 26–36 jar-days
     pub gen: u32,
     pub parents: Option<[CritterId; 2]>,
@@ -92,6 +93,8 @@ pub struct Critter {
     pub favourite_spot: FavouriteSpot,  // {x, y, z} percents — rolled once at spawn
 }
 ```
+
+**`life_stage`:** a sim fact like `mood`/`energy`/`alive`, not a frontend-derived presentation value — `jar-core::tick::life_stage(age_sec)` is the one place the SPEC.md §5 age thresholds are implemented, and the aging pass in `tick()` refreshes `critter.life_stage` in the same step it increments `age_sec`, so the two are never out of sync. The frontend reads it directly off `Critter`/`CritterStats` rather than re-deriving it from a raw `age_sec`, same reasoning as `SimEvent::TickUpdate`'s `is_night` above.
 
 **Naming note:** `trait` is a reserved word in Rust (trait definitions). The personality gene is named `personality` here rather than `trait` — small, easy to get bitten by if translating `SPEC.md`'s vocabulary literally, worth flagging explicitly so the implementing agent doesn't have to discover it via a compile error.
 
@@ -107,7 +110,7 @@ Everything in `SPEC.md` §6's persistence list _except_ window geometry (see §6
 pub enum SimEvent {
     Born { child: Critter, parent_a: CritterId, parent_b: CritterId },
     Passed { id: CritterId },
-    TickUpdate { critters: Vec<CritterStats> },  // mood/energy/age deltas
+    TickUpdate { critters: Vec<CritterStats>, is_night: bool },  // mood/energy/age deltas + day/night
     SettingsChanged { settings: JarSettings },
     Renamed { id: CritterId, name: String },
     Added { critter: Critter },
@@ -115,6 +118,8 @@ pub enum SimEvent {
 ```
 
 `CritterStats` is a slim projection (id + the fields that actually change tick-to-tick: mood, energy, age_sec, alive) — no reason to re-send genetics or name on every routine push when nothing about them changed.
+
+`TickUpdate`'s `is_night` is this tick's `JarClock::is_night` result — the one jar-wide (not per-critter) fact this variant carries. It exists specifically so the frontend's sleep/settle presentation reads the same day/night decision the core used for energy refill and breeding eligibility this same tick, rather than re-deriving its own copy from `sim_seconds`/the system clock — two independent computations of the same fact can disagree by construction (each reads its own live wall-clock source at a slightly different instant), which is exactly what happened before this field existed. `get_snapshot`'s `SnapshotView` carries the same fact for the same reason, computed fresh at read time rather than cached.
 
 `SettingsChanged`/`Renamed`/`Added` are the same one-shot push mechanism as `Born`/`Passed`, fired by every `set_*`/`rename_critter`/`add_critter` command rather than only by the tick loop — a setting or a critter's roster changes at the moment a command runs, not on the tick cadence, so it's pushed then, not batched into the next `TickUpdate`.
 
@@ -134,7 +139,7 @@ Pure Rust, no I/O, no `tauri`/`wasm-bindgen` — testable in complete isolation,
 
 ### 4.2 `genetics.rs`
 
-The `make()`-equivalent: hue averaging ±18° / fresh roll for originals, fin inheritance (fish only), spot inheritance (70% chance if either parent has them), sex roll (50/50, independent of parentage — `SPEC.md` §5's amended genetics rule), favourite-spot roll, naming. Exactly the rules already specified; this module is where they're implemented once, correctly, rather than re-derived.
+The `make()`-equivalent: hue averaging ±18° / fresh roll for originals, fin inheritance (fish only), spot inheritance (70% chance if either parent has them), personality inheritance (70% chance from one parent, fresh roll from the full pool otherwise — `SPEC.md` §5's amended genetics rule), sex roll (50/50, independent of parentage — `SPEC.md` §5's amended genetics rule), favourite-spot roll, naming. Exactly the rules already specified; this module is where they're implemented once, correctly, rather than re-derived.
 
 ### 4.3 `clock.rs`
 

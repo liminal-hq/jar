@@ -11,7 +11,6 @@ import { DialogShell } from '../../components/DialogShell';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
-import { lifeStageOf } from '../../domain/simConstants';
 
 export function FamilyTreeWindow() {
   const critters = useJarStore((s) => s.critters);
@@ -55,7 +54,7 @@ export function FamilyTreeWindow() {
                 {critter.name}
                 {!critter.alive && ' † remembered'}
                 <br />
-                <small>{lifeStageOf(critter.age_sec)}</small>
+                <small>{critter.life_stage}</small>
               </button>
             ))}
           </div>

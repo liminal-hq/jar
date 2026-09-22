@@ -24,4 +24,8 @@ pub struct SnapshotView {
     pub critters: Vec<Critter>,
     pub settings: JarSettings,
     pub sim_seconds: f64,
+    /// Authoritative day/night state at the moment of this read — see
+    /// `SimEvent::TickUpdate`'s own doc comment for why the frontend reads
+    /// this rather than deriving its own copy.
+    pub is_night: bool,
 }

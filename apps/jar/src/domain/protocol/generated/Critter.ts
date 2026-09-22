@@ -2,8 +2,9 @@
 import type { CritterId } from "./CritterId";
 import type { FavouriteSpot } from "./FavouriteSpot";
 import type { FinType } from "./FinType";
+import type { LifeStage } from "./LifeStage";
 import type { Personality } from "./Personality";
 import type { Sex } from "./Sex";
 import type { Species } from "./Species";
 
-export type Critter = { id: CritterId, species: Species, name: string, hue: number, fin: FinType | null, spots: boolean, sex: Sex, personality: Personality, mood: number, energy: number, age_sec: number, life: number, gen: number, parents: [CritterId, CritterId] | null, alive: boolean, born: number, died: number | null, favourite_spot: FavouriteSpot, };
+export type Critter = { id: CritterId, species: Species, name: string, hue: number, fin: FinType | null, spots: boolean, sex: Sex, personality: Personality, mood: number, energy: number, age_sec: number, life_stage: LifeStage, life: number, gen: number, parents: [CritterId, CritterId] | null, alive: boolean, born: number, died: number | null, favourite_spot: FavouriteSpot, };

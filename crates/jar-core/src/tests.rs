@@ -6,11 +6,11 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{JarSettings, Species};
+use jar_protocol::{JarSettings, LifeStage, Species};
 
 use crate::rng::JarRng;
 use crate::state::JarState;
-use crate::tick::{life_stage, tick, LifeStage};
+use crate::tick::{life_stage, tick};
 
 #[test]
 fn a_fresh_original_starts_as_a_fry() {
@@ -31,7 +31,7 @@ fn ticking_ages_every_living_critter_by_one_second() {
     let critter = crate::genetics::roll_original(id, Species::Fish, 1, 0.0, &mut rng, &[]);
     state.critters.push(critter);
 
-    tick(&mut state, &mut rng);
+    tick(&mut state, &mut rng, 12);
 
     assert_eq!(state.critters[0].age_sec, 1.0);
     assert_eq!(state.clock.sim_seconds, 1.0);
@@ -46,7 +46,7 @@ fn a_critter_passes_once_it_reaches_its_rolled_lifespan() {
     critter.life = 1.0; // force passing on the very next tick
     state.critters.push(critter);
 
-    let outcome = tick(&mut state, &mut rng);
+    let outcome = tick(&mut state, &mut rng, 12);
 
     assert!(!state.critters[0].alive);
     assert_eq!(outcome.passed, vec![id]);

@@ -75,18 +75,30 @@ interface JarStoreState {
   critters: Record<CritterId, Critter>;
   settings: JarSettings;
   simSeconds: number;
+  /** Authoritative day/night state, pushed by the sim core on every
+   * `TickUpdate`/`get_snapshot` response — never re-derived in the
+   * frontend, so it can never disagree with what the core actually used
+   * for energy refill and breeding eligibility (`SimEvent.TickUpdate`'s
+   * own doc comment). */
+  isNight: boolean;
   hydrated: boolean;
 }
 
 interface JarStoreActions {
   applyEvent: (event: SimEvent) => void;
-  hydrate: (snapshot: { critters: Critter[]; settings: JarSettings; sim_seconds: number }) => void;
+  hydrate: (snapshot: {
+    critters: Critter[];
+    settings: JarSettings;
+    sim_seconds: number;
+    is_night: boolean;
+  }) => void;
 }
 
 export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
   critters: {},
   settings: DEFAULT_SETTINGS,
   simSeconds: 0,
+  isNight: false,
   hydrated: false,
 
   hydrate: (snapshot) =>
@@ -94,6 +106,7 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
       critters: Object.fromEntries(snapshot.critters.map((c) => [c.id, c])),
       settings: snapshot.settings,
       simSeconds: snapshot.sim_seconds,
+      isNight: snapshot.is_night,
       hydrated: true,
     }),
 
@@ -121,10 +134,11 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
               mood: stats.mood,
               energy: stats.energy,
               age_sec: stats.age_sec,
+              life_stage: stats.life_stage,
               alive: stats.alive,
             };
           }
-          return { critters: next, simSeconds: state.simSeconds + 1 };
+          return { critters: next, simSeconds: state.simSeconds + 1, isNight: event.is_night };
         }
 
         // Pushed by every `set_*` command (rust-core.md §6) so a change
@@ -217,6 +231,7 @@ async function doStart(settings: JarSettings): Promise<void> {
     critters: Critter[];
     settings: JarSettings;
     sim_seconds: number;
+    is_night: boolean;
   };
   useJarStore.getState().hydrate(snapshot);
 }

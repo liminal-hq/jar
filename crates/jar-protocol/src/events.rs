@@ -23,8 +23,14 @@ pub enum SimEvent {
     Passed {
         id: CritterId,
     },
+    /// `is_night` is this tick's authoritative day/night state — the only
+    /// jar-wide (not per-critter) fact carried by this variant. The
+    /// frontend reads it rather than re-deriving its own copy, so its
+    /// sleep/settle presentation can never disagree with what the sim core
+    /// actually used for energy refill and breeding eligibility this tick.
     TickUpdate {
         critters: Vec<CritterStats>,
+        is_night: bool,
     },
     /// Pushed whenever a setting changes via any `set_*` command, so every
     /// open window — not just the one that made the change — reflects it

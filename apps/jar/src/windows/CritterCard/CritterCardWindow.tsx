@@ -13,7 +13,7 @@ import { StatBar } from '../../components/StatBar';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { onCritterSelected } from '../../domain/selection';
-import { lifeStageOf, SECONDS_PER_JAR_DAY } from '../../domain/simConstants';
+import { SECONDS_PER_JAR_DAY } from '../../domain/simConstants';
 import { CritterPreview } from './CritterPreview';
 
 /** Reads the `critterId` this window was created with (`domain/selection.ts`'s
@@ -54,7 +54,7 @@ export function CritterCardWindow() {
     );
   }
 
-  const stage = lifeStageOf(critter.age_sec);
+  const stage = critter.life_stage;
   const ageDays = (critter.age_sec / SECONDS_PER_JAR_DAY).toFixed(1);
 
   return (
