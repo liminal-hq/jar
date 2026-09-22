@@ -188,17 +188,12 @@ const LIGHT_PROP_TARGET: [number, number, number] = [-0.7, 0.75, 0.29];
  * 4 barely registered once the tank-wide LED strip's own ambient wash
  * was in place) — a "flood," not a tight pin-spot.
  *
- * Known limitation, not yet root-caused: at a bright test colour/
- * intensity, this light visibly lit the keep's simple (non-extruded)
- * adornments — the `Window` sphere, the `ArrowSlit` boxes — but the
- * extruded keep/merlon body itself (`svgExtrude.ts`'s `extrude()`, shared
- * with `FishModel.tsx`) barely picked up any of it, even aimed at a plain
- * flat stretch of wall. `extrude()`'s own header comment has the working
- * theory (a `DoubleSide`/`gl_FrontFacing` normal-flip trick that's only
- * camera-relative, not genuinely angle-independent) and why a same-session
- * attempt to fix it there broke rendering outright and was reverted. Left
- * at a modest, plausible-looking intensity rather than tuned against a
- * render path known not to respond correctly. */
+ * This is also what originally exposed `svgExtrude.ts`'s `extrude()`
+ * mirrored-normal bug live: at a bright test colour/intensity, this light
+ * visibly lit the keep's simple (non-extruded) adornments — the `Window`
+ * sphere, the `ArrowSlit` boxes — while the extruded keep/merlon body
+ * sharing that same function stayed dark, despite both catching the same
+ * light. See `extrude()`'s own doc comment for the actual fix. */
 function GroundUplight() {
   // Not memoized: `aimFixture` is a handful of vector ops on module-level
   // constants, called once per render of a component that itself only
