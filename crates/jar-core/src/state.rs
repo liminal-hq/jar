@@ -16,7 +16,6 @@ pub struct JarState {
     pub critters: Vec<Critter>,
     pub clock: JarClock,
     pub settings: JarSettings,
-    next_id: u32,
 }
 
 impl JarState {
@@ -25,14 +24,29 @@ impl JarState {
             critters: Vec::new(),
             clock: JarClock::new(),
             settings,
-            next_id: 0,
         }
     }
 
-    pub fn next_critter_id(&mut self) -> CritterId {
-        let id = CritterId(self.next_id);
-        self.next_id += 1;
-        id
+    /// Derived from the current population on every call rather than a
+    /// separately tracked counter — critters are never removed from
+    /// `critters` (a passed one stays for the family tree, per this
+    /// struct's own doc comment above), so the highest id already present
+    /// is always a safe floor to build on. A stored counter here previously
+    /// reset to 0 in every fresh `JarState::new()`, including the one
+    /// `decode()` constructs *before* populating `critters` from a loaded
+    /// snapshot (`snapshot.rs::decode`) — meaning every app restart quietly
+    /// restarted id assignment from 0 too, colliding the next-born
+    /// critter's id with whichever critter already held it from a previous
+    /// session (breaking `CritterId`'s own documented "stable, unique for
+    /// the lifetime of a jar" guarantee).
+    pub fn next_critter_id(&self) -> CritterId {
+        let next = self
+            .critters
+            .iter()
+            .map(|c| c.id.0)
+            .max()
+            .map_or(0, |max| max + 1);
+        CritterId(next)
     }
 
     /// Living population for a given species, used for population-cap
