@@ -30,7 +30,6 @@ import {
 } from '../../domain/devSettings';
 import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
 import { useJarStore } from '../../domain/jarClient';
-import { isNight } from '../../domain/simConstants';
 import { entityManager } from './entityManager';
 import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
 import type { FishMotionMode } from './motionState';
@@ -133,12 +132,13 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
   const registryRef = useRef<Registry>(new Map());
   const monitorEnabled = useFishMonitorEnabled();
   const simSeconds = useJarStore((s) => s.simSeconds);
-  const simulationSpeed = useJarStore((s) => s.settings.simulation_speed);
+  // Authoritative — pushed by the sim core on every `TickUpdate`
+  // (`jarClient.ts`'s `isNight` store field) rather than re-derived here,
+  // so this can never disagree with what the core actually used for
+  // energy/breeding eligibility this tick.
+  const coreIsNight = useJarStore((s) => s.isNight);
   const dayNightOverride = useDayNightOverride();
-  const effectiveIsNight =
-    dayNightOverride === 'auto'
-      ? isNight(simSeconds, simulationSpeed, new Date().getHours())
-      : dayNightOverride === 'night';
+  const effectiveIsNight = dayNightOverride === 'auto' ? coreIsNight : dayNightOverride === 'night';
   const publishElapsedRef = useRef(0);
 
   // A ref, not read directly in `useFrame` — the toggle can flip mid-session

@@ -40,6 +40,7 @@ pub fn events_for_tick(state: &JarState, outcome: &TickOutcome) -> Vec<SimEvent>
             .filter(|c| c.alive)
             .map(stats_of)
             .collect(),
+        is_night: outcome.is_night,
     });
 
     events

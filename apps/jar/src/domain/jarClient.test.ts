@@ -66,6 +66,7 @@ beforeEach(() => {
     critters: {},
     settings: DEFAULT_SETTINGS,
     simSeconds: 0,
+    isNight: false,
     hydrated: false,
   });
 });
@@ -91,11 +92,13 @@ describe('hydrate', () => {
       critters: [critter],
       settings: DEFAULT_SETTINGS,
       sim_seconds: 42,
+      is_night: true,
     });
 
     const state = useJarStore.getState();
     expect(state.critters[critter.id]).toEqual(critter);
     expect(state.simSeconds).toBe(42);
+    expect(state.isNight).toBe(true);
     expect(state.hydrated).toBe(true);
   });
 });
@@ -113,6 +116,7 @@ describe('applyEvent — TickUpdate', () => {
     useJarStore.getState().applyEvent({
       type: 'TickUpdate',
       critters: [{ id: 1, mood: 40, energy: 55, age_sec: 12, alive: true }],
+      is_night: false,
     });
 
     const updated = useJarStore.getState().critters[1];
@@ -134,17 +138,26 @@ describe('applyEvent — TickUpdate', () => {
     useJarStore.getState().applyEvent({
       type: 'TickUpdate',
       critters: [{ id: 999, mood: 10, energy: 10, age_sec: 1, alive: true }],
+      is_night: false,
     });
 
     expect(useJarStore.getState().critters[999]).toBeUndefined();
   });
 
   it('advances simSeconds by one per TickUpdate, regardless of critter count', () => {
-    useJarStore.getState().applyEvent({ type: 'TickUpdate', critters: [] });
+    useJarStore.getState().applyEvent({ type: 'TickUpdate', critters: [], is_night: false });
     expect(useJarStore.getState().simSeconds).toBe(1);
 
-    useJarStore.getState().applyEvent({ type: 'TickUpdate', critters: [] });
+    useJarStore.getState().applyEvent({ type: 'TickUpdate', critters: [], is_night: false });
     expect(useJarStore.getState().simSeconds).toBe(2);
+  });
+
+  it('adopts is_night as the store-wide authoritative night state', () => {
+    useJarStore.getState().applyEvent({ type: 'TickUpdate', critters: [], is_night: true });
+    expect(useJarStore.getState().isNight).toBe(true);
+
+    useJarStore.getState().applyEvent({ type: 'TickUpdate', critters: [], is_night: false });
+    expect(useJarStore.getState().isNight).toBe(false);
   });
 });
 

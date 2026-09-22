@@ -107,7 +107,7 @@ Everything in `SPEC.md` §6's persistence list _except_ window geometry (see §6
 pub enum SimEvent {
     Born { child: Critter, parent_a: CritterId, parent_b: CritterId },
     Passed { id: CritterId },
-    TickUpdate { critters: Vec<CritterStats> },  // mood/energy/age deltas
+    TickUpdate { critters: Vec<CritterStats>, is_night: bool },  // mood/energy/age deltas + day/night
     SettingsChanged { settings: JarSettings },
     Renamed { id: CritterId, name: String },
     Added { critter: Critter },
@@ -115,6 +115,8 @@ pub enum SimEvent {
 ```
 
 `CritterStats` is a slim projection (id + the fields that actually change tick-to-tick: mood, energy, age_sec, alive) — no reason to re-send genetics or name on every routine push when nothing about them changed.
+
+`TickUpdate`'s `is_night` is this tick's `JarClock::is_night` result — the one jar-wide (not per-critter) fact this variant carries. It exists specifically so the frontend's sleep/settle presentation reads the same day/night decision the core used for energy refill and breeding eligibility this same tick, rather than re-deriving its own copy from `sim_seconds`/the system clock — two independent computations of the same fact can disagree by construction (each reads its own live wall-clock source at a slightly different instant), which is exactly what happened before this field existed. `get_snapshot`'s `SnapshotView` carries the same fact for the same reason, computed fresh at read time rather than cached.
 
 `SettingsChanged`/`Renamed`/`Added` are the same one-shot push mechanism as `Born`/`Passed`, fired by every `set_*`/`rename_critter`/`add_critter` command rather than only by the tick loop — a setting or a critter's roster changes at the moment a command runs, not on the tick cadence, so it's pushed then, not batched into the next `TickUpdate`.
 

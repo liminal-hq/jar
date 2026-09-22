@@ -49,7 +49,10 @@ pub fn tick(state: &mut JarState, rng: &mut JarRng, local_hour: u8) -> TickOutco
     let is_night = state.clock.is_night(local_hour);
     let population = state.critters.iter().filter(|c| c.alive).count() as f32;
 
-    let mut outcome = TickOutcome::default();
+    let mut outcome = TickOutcome {
+        is_night,
+        ..TickOutcome::default()
+    };
 
     // 1. Aging + passing.
     for critter in state.critters.iter_mut().filter(|c| c.alive) {
@@ -111,6 +114,13 @@ pub fn tick(state: &mut JarState, rng: &mut JarRng, local_hour: u8) -> TickOutco
 pub struct TickOutcome {
     pub passed: Vec<CritterId>,
     pub born: Vec<BornEvent>,
+    /// This tick's `JarClock::is_night` result — carried out of `tick()` so
+    /// `events.rs` can push it as part of `TickUpdate` rather than the
+    /// frontend re-deriving its own copy from `simSeconds`/the system
+    /// clock, which could disagree with what this tick actually decided
+    /// (see `JarClock::is_night`'s own doc comment for the failure mode
+    /// that split ownership caused before this).
+    pub is_night: bool,
 }
 
 pub struct BornEvent {

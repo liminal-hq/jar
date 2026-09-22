@@ -17,7 +17,7 @@ import { useDayNightOverride } from '../../domain/devSettings';
 import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
-import { isNight, lifeStageScale } from '../../domain/simConstants';
+import { lifeStageScale } from '../../domain/simConstants';
 import { FishModel } from '../models/FishModel';
 import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
@@ -143,9 +143,9 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     maxColliderRadius,
   );
 
-  const simNight = useJarStore((s) =>
-    isNight(s.simSeconds, s.settings.simulation_speed, new Date().getHours()),
-  );
+  // Authoritative — pushed by the sim core on every `TickUpdate`
+  // (`jarClient.ts`'s `isNight` store field) rather than re-derived here.
+  const simNight = useJarStore((s) => s.isNight);
   // Dev-only override (`windows/FishMonitor/FishMonitorWindow.tsx`) to pin
   // day or night on demand rather than wait out a real day/night cycle —
   // `'auto'` (the real jar clock) in production builds, where the toggle

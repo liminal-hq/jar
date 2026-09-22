@@ -6,6 +6,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use chrono::Timelike;
 use jar_protocol::{Critter, CritterId, DialogTheme, JarSettings, SimEvent, Species, TankFrame};
 use serde::Deserialize;
 use tauri::ipc::Channel;
@@ -176,10 +177,12 @@ pub fn set_frame(plugin: State<'_, JarPlugin>, frame: TankFrame) -> Result<()> {
 #[command]
 pub fn get_snapshot(plugin: State<'_, JarPlugin>) -> Result<jar_protocol::SnapshotView> {
     with_jar(&plugin, |jar| {
+        let local_hour = chrono::Local::now().hour() as u8;
         Ok(jar_protocol::SnapshotView {
             critters: jar.critters.clone(),
             settings: jar.settings.clone(),
             sim_seconds: jar.clock.sim_seconds,
+            is_night: jar.clock.is_night(local_hour),
         })
     })
 }

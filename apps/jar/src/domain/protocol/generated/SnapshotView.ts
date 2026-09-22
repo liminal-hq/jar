@@ -9,4 +9,10 @@ import type { JarSettings } from "./JarSettings";
  * `jar-core::snapshot`, which is a versioned binary format, not this
  * JSON-over-IPC view.
  */
-export type SnapshotView = { critters: Array<Critter>, settings: JarSettings, sim_seconds: number, };
+export type SnapshotView = { critters: Array<Critter>, settings: JarSettings, sim_seconds: number, 
+/**
+ * Authoritative day/night state at the moment of this read — see
+ * `SimEvent::TickUpdate`'s own doc comment for why the frontend reads
+ * this rather than deriving its own copy.
+ */
+is_night: boolean, };
