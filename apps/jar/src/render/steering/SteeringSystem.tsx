@@ -246,10 +246,27 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
         // a single constant derivable here. Retune `VELOCITY_GAIN` by eye
         // against real cruise/arrival timing if it's needed, rather than
         // trying to correct it through the envelope's own math.
-        scratchImpulse
-          .copy(scratchVelocity)
-          .sub(scratchLinvel)
-          .multiplyScalar(VELOCITY_GAIN * delta * fish.getThrustEnvelope());
+        scratchImpulse.copy(scratchVelocity).sub(scratchLinvel);
+        // The largest impulse that can ever be *correct*: exactly enough to
+        // close the velocity error in one step (`mass * |error|` — Rapier
+        // converts impulse to a velocity change via `/mass` internally, so
+        // this is the impulse magnitude at which `Δv == error`). Computed
+        // before scaling by `VELOCITY_GAIN * delta * thrustEnvelope()`,
+        // which on a throttled frame (the tank window resumes from
+        // hidden/minimized with a large, if `clampClockDelta`-bounded,
+        // `delta`) or at the thrust envelope's own peak (~2x mean) can
+        // otherwise scale well past that point — for a light enough fish,
+        // past the `Δv > 2 * error` threshold where this explicit
+        // correction diverges instead of converging, flinging or
+        // stutter-snapping it. Clamping the impulse's *length* to this
+        // bound (direction untouched) still lets a large error close in a
+        // single frame when the scaled term is smaller — it only stops the
+        // correction from ever overshooting past fully matching `desired`.
+        const maxImpulseMagnitude = body.mass() * scratchImpulse.length();
+        scratchImpulse.multiplyScalar(VELOCITY_GAIN * delta * fish.getThrustEnvelope());
+        if (scratchImpulse.length() > maxImpulseMagnitude) {
+          scratchImpulse.setLength(maxImpulseMagnitude);
+        }
         body.applyImpulse(scratchImpulse, true);
 
         const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;

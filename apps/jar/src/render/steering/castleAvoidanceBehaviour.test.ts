@@ -9,7 +9,7 @@ import * as YUKA from 'yuka';
 import { CASTLE_POSITION } from '../environment/decorLayout';
 import { CastleAvoidanceBehaviour, pushFromBox } from './castleAvoidanceBehaviour';
 
-const BOX_CENTER = { x: 1, y: 0.5, z: -0.5 };
+const BOX_CENTRE = { x: 1, y: 0.5, z: -0.5 };
 const HALF_EXTENTS = { x: 0.3, y: 0.9, z: 0.3 };
 const MARGIN = 0.5;
 const STRENGTH = 4;
@@ -17,8 +17,8 @@ const STRENGTH = 4;
 describe('pushFromBox', () => {
   it('is zero when far outside on even a single axis', () => {
     // Same y and z as the box, but well clear in x.
-    const far = { x: BOX_CENTER.x + 5, y: BOX_CENTER.y, z: BOX_CENTER.z };
-    expect(pushFromBox(far, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH)).toEqual({
+    const far = { x: BOX_CENTRE.x + 5, y: BOX_CENTRE.y, z: BOX_CENTRE.z };
+    expect(pushFromBox(far, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH)).toEqual({
       x: 0,
       y: 0,
       z: 0,
@@ -27,11 +27,11 @@ describe('pushFromBox', () => {
 
   it('is zero just past the margin, on every axis', () => {
     const justPastX = {
-      x: BOX_CENTER.x + HALF_EXTENTS.x + MARGIN + 0.01,
-      y: BOX_CENTER.y,
-      z: BOX_CENTER.z,
+      x: BOX_CENTRE.x + HALF_EXTENTS.x + MARGIN + 0.01,
+      y: BOX_CENTRE.y,
+      z: BOX_CENTRE.z,
     };
-    expect(pushFromBox(justPastX, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH)).toEqual({
+    expect(pushFromBox(justPastX, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH)).toEqual({
       x: 0,
       y: 0,
       z: 0,
@@ -42,11 +42,11 @@ describe('pushFromBox', () => {
     // Well within margin on x, comfortably within the (larger) margin on
     // y/z too — x is the nearest face here.
     const nearXFace = {
-      x: BOX_CENTER.x + HALF_EXTENTS.x + 0.1,
-      y: BOX_CENTER.y,
-      z: BOX_CENTER.z,
+      x: BOX_CENTRE.x + HALF_EXTENTS.x + 0.1,
+      y: BOX_CENTRE.y,
+      z: BOX_CENTRE.z,
     };
-    const push = pushFromBox(nearXFace, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH);
+    const push = pushFromBox(nearXFace, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH);
     expect(push.x).toBeGreaterThan(0); // away from the box, toward +x
     expect(push.y).toBe(0);
     expect(push.z).toBe(0);
@@ -54,34 +54,34 @@ describe('pushFromBox', () => {
 
   it('pushes in the negative direction on the opposite side', () => {
     const nearXFaceNegative = {
-      x: BOX_CENTER.x - HALF_EXTENTS.x - 0.1,
-      y: BOX_CENTER.y,
-      z: BOX_CENTER.z,
+      x: BOX_CENTRE.x - HALF_EXTENTS.x - 0.1,
+      y: BOX_CENTRE.y,
+      z: BOX_CENTRE.z,
     };
-    const push = pushFromBox(nearXFaceNegative, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH);
+    const push = pushFromBox(nearXFaceNegative, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH);
     expect(push.x).toBeLessThan(0);
   });
 
   it('ramps from 0 at the margin boundary to full strength at the real surface', () => {
     const atMarginEdge = {
-      x: BOX_CENTER.x + HALF_EXTENTS.x + MARGIN,
-      y: BOX_CENTER.y,
-      z: BOX_CENTER.z,
+      x: BOX_CENTRE.x + HALF_EXTENTS.x + MARGIN,
+      y: BOX_CENTRE.y,
+      z: BOX_CENTRE.z,
     };
-    const atSurface = { x: BOX_CENTER.x + HALF_EXTENTS.x, y: BOX_CENTER.y, z: BOX_CENTER.z };
-    expect(pushFromBox(atMarginEdge, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH).x).toBeCloseTo(
+    const atSurface = { x: BOX_CENTRE.x + HALF_EXTENTS.x, y: BOX_CENTRE.y, z: BOX_CENTRE.z };
+    expect(pushFromBox(atMarginEdge, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH).x).toBeCloseTo(
       0,
       5,
     );
-    expect(pushFromBox(atSurface, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH).x).toBeCloseTo(
+    expect(pushFromBox(atSurface, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH).x).toBeCloseTo(
       STRENGTH,
       5,
     );
   });
 
   it('clamps magnitude at strength even if the point is inside the real box', () => {
-    const deepInside = { x: BOX_CENTER.x, y: BOX_CENTER.y, z: BOX_CENTER.z };
-    const push = pushFromBox(deepInside, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH);
+    const deepInside = { x: BOX_CENTRE.x, y: BOX_CENTRE.y, z: BOX_CENTRE.z };
+    const push = pushFromBox(deepInside, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH);
     const magnitude = Math.hypot(push.x, push.y, push.z);
     expect(magnitude).toBeCloseTo(STRENGTH, 5);
   });
@@ -90,11 +90,11 @@ describe('pushFromBox', () => {
     // z is the tightest axis here (smallest half-extent), and the point is
     // closest to the z face specifically.
     const nearZFace = {
-      x: BOX_CENTER.x,
-      y: BOX_CENTER.y,
-      z: BOX_CENTER.z + HALF_EXTENTS.z + 0.05,
+      x: BOX_CENTRE.x,
+      y: BOX_CENTRE.y,
+      z: BOX_CENTRE.z + HALF_EXTENTS.z + 0.05,
     };
-    const push = pushFromBox(nearZFace, BOX_CENTER, HALF_EXTENTS, MARGIN, STRENGTH);
+    const push = pushFromBox(nearZFace, BOX_CENTRE, HALF_EXTENTS, MARGIN, STRENGTH);
     expect(push.z).toBeGreaterThan(0);
     expect(push.x).toBe(0);
     expect(push.y).toBe(0);

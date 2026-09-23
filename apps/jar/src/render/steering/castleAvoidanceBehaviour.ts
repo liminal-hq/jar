@@ -37,14 +37,14 @@ const STRENGTH = 4;
  * discrete snap. */
 export function pushFromBox(
   position: { x: number; y: number; z: number },
-  boxCenter: { x: number; y: number; z: number },
+  boxCentre: { x: number; y: number; z: number },
   halfExtents: { x: number; y: number; z: number },
   margin: number,
   strength: number,
 ): { x: number; y: number; z: number } {
-  const dx = position.x - boxCenter.x;
-  const dy = position.y - boxCenter.y;
-  const dz = position.z - boxCenter.z;
+  const dx = position.x - boxCentre.x;
+  const dy = position.y - boxCentre.y;
+  const dz = position.z - boxCentre.z;
   const ex = halfExtents.x + margin;
   const ey = halfExtents.y + margin;
   const ez = halfExtents.z + margin;
@@ -70,13 +70,13 @@ export function pushFromBox(
  * `pushFromBox`'s margin-expanded, graded check. */
 export function isInsideBox(
   position: { x: number; y: number; z: number },
-  boxCenter: { x: number; y: number; z: number },
+  boxCentre: { x: number; y: number; z: number },
   halfExtents: { x: number; y: number; z: number },
 ): boolean {
   return (
-    Math.abs(position.x - boxCenter.x) < halfExtents.x &&
-    Math.abs(position.y - boxCenter.y) < halfExtents.y &&
-    Math.abs(position.z - boxCenter.z) < halfExtents.z
+    Math.abs(position.x - boxCentre.x) < halfExtents.x &&
+    Math.abs(position.y - boxCentre.y) < halfExtents.y &&
+    Math.abs(position.z - boxCentre.z) < halfExtents.z
   );
 }
 
@@ -121,7 +121,7 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
     // sized knowing wouldn't perfectly fit) gets no exemption at all —
     // avoidance stays on and it may still brush the frame, the same
     // documented trade-off `decorLayout.ts` already accepts, not a new one.
-    const corridorCenter = {
+    const corridorCentre = {
       x: CASTLE_POSITION.x + CASTLE_DOORWAY_CORRIDOR.position.x,
       y: CASTLE_POSITION.y + CASTLE_DOORWAY_CORRIDOR.position.y,
       z: CASTLE_POSITION.z + CASTLE_DOORWAY_CORRIDOR.position.z,
@@ -132,7 +132,7 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
       y: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.y - colliderRadius),
       z: CASTLE_DOORWAY_CORRIDOR.halfExtents.z,
     };
-    if (isInsideBox(position, corridorCenter, corridorHalfExtents)) {
+    if (isInsideBox(position, corridorCentre, corridorHalfExtents)) {
       return force;
     }
 
@@ -151,12 +151,12 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
     // eventually nudges the fish enough off-centre to break the symmetry
     // and let the horizontal pushes actually diverge again.
     for (const box of CASTLE_COLLIDER_BOXES) {
-      const boxCenter = {
+      const boxCentre = {
         x: CASTLE_POSITION.x + box.position.x,
         y: CASTLE_POSITION.y + box.position.y,
         z: CASTLE_POSITION.z + box.position.z,
       };
-      const push = pushFromBox(position, boxCenter, box.halfExtents, this.margin, STRENGTH);
+      const push = pushFromBox(position, boxCentre, box.halfExtents, this.margin, STRENGTH);
       force.x += push.x;
       force.y += push.y;
       force.z += push.z;
