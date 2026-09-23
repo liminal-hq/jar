@@ -3,7 +3,7 @@
 // `Passed` are pushed the instant they occur; `TickUpdate` batches on the
 // regular cadence (`docs/architecture/rust-core.md` §4.7).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use serde::{Deserialize, Serialize};

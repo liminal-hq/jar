@@ -6,7 +6,7 @@
 // origin when a key changes, never the one that wrote it) is what keeps
 // them live-synced without any Tauri event/IPC plumbing.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useEffect, useState } from 'react';

@@ -3,7 +3,7 @@
 // direct, line-by-line expression of that section's prose, not a
 // reinterpretation of it. See `docs/architecture/rust-core.md` §4.4.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use jar_protocol::{CritterId, LifeStage, Personality, Sex, Species};

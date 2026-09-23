@@ -9,7 +9,7 @@
 // geometry clone, done by `FishModel.tsx` itself; every other piece here
 // is safe to share as-is, since nothing mutates it per-fish or per-frame.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';

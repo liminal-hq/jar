@@ -3,7 +3,7 @@
 // called. See `docs/architecture/rust-core.md` §4.3 for the "spiral of
 // death" guard this implements, borrowed from City Sim 1000's `sim.rs`.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /// One jar-day = 120 sim-seconds (SPEC.md §5).

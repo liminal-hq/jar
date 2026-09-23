@@ -1,7 +1,7 @@
 // Tests for animationMulFor's per-personality and per-mood-band multipliers,
 // and breathingMultiplier's slow speed-ceiling ripple.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { describe, expect, it } from 'vitest';

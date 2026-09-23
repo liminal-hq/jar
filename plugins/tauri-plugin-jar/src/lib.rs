@@ -7,7 +7,7 @@
 //! here — see §5.4; use the official `tauri-plugin-window-state` alongside
 //! this plugin.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 mod commands;

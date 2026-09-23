@@ -12,7 +12,7 @@
 // listener isn't guaranteed to be registered yet by the time that emit
 // reaches it, so the URL is what the first selection actually relies on.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';

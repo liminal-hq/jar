@@ -4,7 +4,7 @@
 // anything that also gates the simulation tick, which keeps running on the
 // Rust side regardless (`docs/architecture/rust-core.md` §5.1).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { getCurrentWindow } from '@tauri-apps/api/window';

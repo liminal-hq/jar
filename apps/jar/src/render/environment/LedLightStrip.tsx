@@ -10,7 +10,7 @@
 // the same "do it once, not per-mount" rationale `svgExtrude.ts`'s shared
 // `svgLoader` already follows.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';

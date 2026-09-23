@@ -7,7 +7,7 @@
 // this is debugging state, not simulation state, so it doesn't belong in
 // `jarClient`'s store.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';

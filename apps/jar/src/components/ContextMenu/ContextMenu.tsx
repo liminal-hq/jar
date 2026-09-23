@@ -1,7 +1,7 @@
 // Custom right-click context menu — ported from Cadence/Threshold's
 // `components/ContextMenu`, re-themed onto Jar's `--jar-*` tokens.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useEffect, useRef } from 'react';

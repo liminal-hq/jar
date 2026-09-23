@@ -3,7 +3,7 @@
 // tick.rs`'s `life_stage_boundaries_match_spec`, not here; this file no
 // longer has a copy of that logic to test.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { describe, expect, it } from 'vitest';

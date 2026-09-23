@@ -3,7 +3,7 @@
 // immediately per event; routine stat updates batch into one `TickUpdate`.
 // See `docs/architecture/rust-core.md` §4.7.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use jar_protocol::{Critter, CritterStats, SimEvent};

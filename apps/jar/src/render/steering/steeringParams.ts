@@ -4,7 +4,7 @@
 // (shy/curious separation radius) take the current living population as an
 // argument rather than baking it in, since that count changes at runtime.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import type { Personality } from '../../domain/protocol/generated/Personality';

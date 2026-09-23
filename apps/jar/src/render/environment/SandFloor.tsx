@@ -5,7 +5,7 @@
 // floor's containment collider is untouched (`AquariumEnvironment.tsx`
 // still owns it) — this is visual only.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';

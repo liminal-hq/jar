@@ -5,7 +5,7 @@
 // `mood`/`energy`/`alive`) — this file has no copy of those thresholds to
 // keep in sync.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import type { LifeStage } from './protocol/generated/LifeStage';

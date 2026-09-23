@@ -5,7 +5,7 @@
 // plain CSS modules (see `windows/Tank/TankWindow.module.css`) can consume
 // them with `var(--jar-...)`.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import type { DialogTheme } from '../domain/protocol/generated/DialogTheme';

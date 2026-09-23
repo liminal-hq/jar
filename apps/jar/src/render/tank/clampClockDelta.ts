@@ -2,7 +2,7 @@
 // `TankScene.tsx`'s `onCreated` specifically so the wrapping behaviour is
 // unit-testable without a real `THREE.Clock`/`Canvas`.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /** The subset of `THREE.Clock` this cares about — real `getDelta()` is

@@ -8,7 +8,7 @@
 // oscillations rather than a function of real velocity), which reads as
 // "gently swimming in place" — exactly what a profile view wants.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { OrbitControls } from '@react-three/drei';

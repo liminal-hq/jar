@@ -6,7 +6,7 @@
 // `SHARED_GEOMETRY` (nothing here mutates per-frame or per-instance, except
 // each plant blade's own per-vertex sway — see `Plants.tsx`).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';

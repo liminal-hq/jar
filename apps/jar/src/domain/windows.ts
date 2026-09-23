@@ -5,7 +5,7 @@
 // load the same frontend bundle and route by label (`App.tsx`), so opening
 // one just needs a label + a reasonable position, not a distinct URL.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { getCurrentWindow } from '@tauri-apps/api/window';

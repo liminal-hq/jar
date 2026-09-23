@@ -1,7 +1,7 @@
 // Tests for the theme token tables and their CSS-custom-property
 // application (SPEC.md §4). jsdom-only — see `vitest.config.ts`.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { describe, expect, it } from 'vitest';

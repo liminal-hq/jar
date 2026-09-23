@@ -11,7 +11,7 @@
 // `decor-svg/castle.svg`'s own header comment for the geometry this maps
 // onto ground truth for.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { TANK_INNER_BOUNDS } from '../physics/coordinates';

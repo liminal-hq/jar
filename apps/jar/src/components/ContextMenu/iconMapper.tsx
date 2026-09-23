@@ -1,6 +1,6 @@
 // Maps a MenuItem's icon name string to its rendered icon component.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import type { ReactNode } from 'react';

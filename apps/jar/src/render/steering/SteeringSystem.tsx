@@ -13,7 +13,7 @@
 // would require exactly that, which is why fish register into this
 // system's registry instead of driving their own frame loop for it.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';

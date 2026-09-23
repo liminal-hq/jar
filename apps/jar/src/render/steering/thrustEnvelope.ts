@@ -3,7 +3,7 @@
 // arrives on the power stroke and the fish coasts under damping between
 // beats — real fish don't track a velocity setpoint continuously.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /** Sharpness of the pulse — higher narrows each half-stroke's push toward

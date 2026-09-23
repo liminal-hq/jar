@@ -1,7 +1,7 @@
 // Mood/energy bar (W2 · Critter card, SCREENS.md): "Mood (green > 60,
 // amber > 35, red) and Energy."
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 interface StatBarProps {

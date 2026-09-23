@@ -4,7 +4,7 @@
 // magic bytes + a version number + a comment trail at each version bump
 // explaining *why* the layout changed.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::collections::BTreeMap;

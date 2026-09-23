@@ -3,7 +3,7 @@
 // `WebviewWindow` at the same `index.html`, so routing happens here by the
 // current window's label rather than by URL path.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { getCurrentWindow } from '@tauri-apps/api/window';

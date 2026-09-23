@@ -3,7 +3,7 @@
 // ≈ 10 cm, so Rapier's damping/impulse magnitudes below are tuned assuming
 // roughly real-world scale.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';

@@ -5,7 +5,7 @@
 // from `generated/` is exactly the kind of hand-sync `ts-rs` exists to
 // avoid (see `docs/architecture/rust-core.md` §9).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use serde::{Deserialize, Serialize};

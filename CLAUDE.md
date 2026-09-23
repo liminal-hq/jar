@@ -50,7 +50,7 @@ If host Rust tooling is unavailable, run commands in a container with the Rust/T
 
 - **PR titles**: human-readable, imperative, sentence case, ~70 chars, **no Conventional Commit prefix**. Descriptions use `## Summary` + `## Test plan` (checklists, concrete commands). Every PR gets a category label (`enhancement`, `bug`, `documentation`, …) plus scope labels (`rendering`, `sim`, `rust`, `frontend`, …). PRs open ready for review, not as drafts.
 - **Commits**: Conventional Commits with markdown bodies (what/why, `test:` for test-only changes); write bodies to a file and `git commit -F` when they contain backticks.
-- **Licence headers** on new/substantially rewritten `.rs`/`.ts`/`.tsx` files in `src/` (one-line summary + `(c) Copyright 2026 Scott Morris` + `SPDX-License-Identifier: Apache-2.0 OR MIT`).
+- **Licence headers** on new/substantially rewritten `.rs`/`.ts`/`.tsx` files in `src/` (one-line summary + `(c) Copyright 2026 Liminal HQ, Scott Morris` + `SPDX-License-Identifier: Apache-2.0 OR MIT`).
 - **Docs sync**: user-facing changes update `SPEC.md`/`SCREENS.md`; render/physics/AI changes update `docs/architecture/3d-engine.md`; sim-core changes update `docs/architecture/rust-core.md`.
 - **No hard wrapping**: write each markdown paragraph or list item as a single line and let viewers soft-wrap; deliberate short lines, one-liners, and bullets stay as-is.
 - **Git**: never push (especially force-push) unless explicitly asked; prefer the `gh` CLI for GitHub work.
