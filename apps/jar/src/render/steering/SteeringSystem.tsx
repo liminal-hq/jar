@@ -113,12 +113,22 @@ const scratchLinvel = new THREE.Vector3();
  * a moving ceiling (`steeringParams.ts`'s `breathingMultiplier`, a burst
  * ramp) keeps the *target* itself in motion too, so the body chronically
  * trails it — read live as "tail beating hard, barely accelerating." 2.2
- * (~0.45s) keeps this smooth (still a lag, not a snap — no risk of
- * reintroducing the unbounded-force class of stutter the weight-ramp
- * system exists to prevent, since `desired` itself is already smooth) while
- * making an actual speed change — cruise or burst — read on the body
- * promptly enough to match what the tail is already doing. */
-const VELOCITY_GAIN = 2.2;
+ * (~0.45s) fixed that, but was still too weak relative to `linearDamping`
+ * (2.5, `Fish.tsx`) once `desired`'s own *direction* is also constantly
+ * shifting (`WanderBehavior`'s per-update noise, amplified further by
+ * containment/castle-avoidance's proximity-triggered corrections near a
+ * wall) — live-diagnosed via a temporary registry/entity-manager
+ * introspection hook: fish sitting near a wall margin had a Yuka-desired
+ * speed pinned at `maxSpeed` while their real `RigidBody.linvel()` stayed
+ * near zero for many seconds, `isResting` and all, because each frame's
+ * correction was mostly re-aiming rather than building forward momentum a
+ * damping term this strong could keep eating. 5 (~0.2s) gives the
+ * controller enough authority to actually reach a healthy fraction of
+ * `desired` against that damping even while the target keeps swinging —
+ * confirmed live: freshly-spawned fish (a clean, obstruction-free case)
+ * went straight to a normal cruise speed instead of the old value's slow
+ * crawl. */
+const VELOCITY_GAIN = 5;
 const MIN_VELOCITY_SQ = 0.0001;
 
 /** The fish-position debug publish goes over a cross-window Tauri event
