@@ -36,6 +36,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Liminal HQ",
+    "homepage": "https://github.com/liminal-hq/jar",
+    "copyright": "Copyright 2026 Liminal HQ, Scott Morris",
+    "license": "Apache-2.0 OR MIT",
+    "category": "Entertainment",
+    "shortDescription": "A tiny floating desktop aquarium",
+    "longDescription": "A floating desktop aquarium with a few auto-named fish who live, sleep, breed, age and pass on in real time. No goals, no win state — just something calm to glance at while it runs."
   }
 }
