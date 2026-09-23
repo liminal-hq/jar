@@ -17,7 +17,7 @@ import { CastleAvoidanceBehaviour } from './castleAvoidanceBehaviour';
 import { ChasePursuitBehaviour } from './chasePursuitBehaviour';
 import { entityManager } from './entityManager';
 import type { FishMotionMode } from './motionState';
-import { maxSpeedFor, steeringParamsFor } from './steeringParams';
+import { BASE_SEPARATION_RADIUS, maxSpeedFor, steeringParamsFor } from './steeringParams';
 import {
   MODE_WEIGHTS,
   rampWeights as computeRampedWeights,
@@ -72,19 +72,30 @@ export function useFishSteering(
   const rig = useMemo(() => {
     const vehicle = new YUKA.Vehicle();
     vehicle.updateNeighborhood = true;
-    // Floored by this fish's own two-body clearance: `neighborhoodRadius` is
-    // a *centre-to-centre* distance, so a `separationRadius` smaller than
-    // roughly two collider radii means two fish's `BallCollider`s are
-    // already deeply overlapping before either is even considered a
-    // neighbour — `SeparationBehavior` never gets a chance to push them
-    // apart, and Rapier's own hard collision response takes over instead
-    // (contact jitter, not a graceful turn-away). `params.separationRadius`
-    // still governs the *personality*-driven range above this geometric
-    // floor (Shy grows it, Curious shrinks it), just never below the point
-    // where separation would already be too late to matter.
+    // `neighborhoodRadius` is a *centre-to-centre* distance, so it can never
+    // go below `physicalTouchDistance` — a fish's own two-body clearance
+    // (this radius, doubled, approximating "if the other fish is about my
+    // size") — or two `BallCollider`s are already deeply overlapping before
+    // either is even considered a neighbour, and `SeparationBehavior` never
+    // gets a chance to push them apart; Rapier's own hard collision
+    // response takes over instead (contact jitter, not a graceful
+    // turn-away). But that floor alone (a flat `+ SEPARATION_CLEARANCE_
+    // BUFFER`) swamps `params.separationRadius`'s whole personality range —
+    // Shy/Curious/Default all clamp to the exact same value for any
+    // ordinary adult collider size, silently erasing §4.1's documented
+    // trait differentiation. Applying personality as a *delta from
+    // baseline* on top of the physical floor instead keeps both true: the
+    // floor itself is never violated (Curious's negative delta can only
+    // shrink the buffer back down to zero, never past the physical
+    // minimum), while Shy's positive delta still visibly grows the radius,
+    // and Curious's negative one still visibly shrinks it relative to
+    // Default and Shy, just from a physically-safe baseline instead of an
+    // arbitrary one.
+    const physicalTouchDistance = maxColliderRadius * 2;
+    const separationTraitDelta = params.separationRadius - BASE_SEPARATION_RADIUS;
     vehicle.neighborhoodRadius = Math.max(
-      params.separationRadius,
-      maxColliderRadius * 2 + SEPARATION_CLEARANCE_BUFFER,
+      physicalTouchDistance,
+      physicalTouchDistance + SEPARATION_CLEARANCE_BUFFER + separationTraitDelta,
     );
     vehicle.maxForce = MAX_STEERING_FORCE;
 
