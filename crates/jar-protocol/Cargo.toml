@@ -1,7 +1,12 @@
 [package]
 name = "jar-protocol"
 version = "0.1.0"
-edition = "2021"
+description = "Shared wire-format types for Jar's frontend/backend boundary, with generated TypeScript bindings"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]

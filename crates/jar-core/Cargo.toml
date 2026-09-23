@@ -1,7 +1,12 @@
 [package]
 name = "jar-core"
 version = "0.1.0"
-edition = "2021"
+description = "Pure simulation core for Jar's critters — aging, mood/energy, breeding, genetics, passing, naming, jar clock"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]
