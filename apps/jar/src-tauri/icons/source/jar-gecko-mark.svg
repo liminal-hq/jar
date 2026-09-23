@@ -2,8 +2,9 @@
 <!-- Secondary/gecko-mode icon source, adopted from the Claude Design project's "4f Gecko
      mark" (jar-gecko-mark.svg) — terrarium-mode twin of jar-fish-mark.svg, not currently
      wired to anything (see icons/gecko/ for the generated set, and tauri.conf.json's
-     bundle.icon for the official fish-mark set actually in use). Regenerate with:
-       bun run --cwd apps/jar tauri icon path/to/jar-gecko-mark.svg -o src-tauri/icons/gecko -->
+     bundle.icon for the official fish-mark set actually in use). Regenerate the sibling
+     icons/gecko/ set by running "tauri icon" on this file, output directory
+     src-tauri/icons/gecko. -->
 <defs><linearGradient id="g" x1="100" y1="420" x2="412" y2="100" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5D3147"/><stop offset=".55" stop-color="#CF5D22"/><stop offset="1" stop-color="#F19B18"/></linearGradient></defs>
 <rect width="512" height="512" rx="112" fill="#0A0A0D"/>
 <g fill="none" stroke="url(#g)" stroke-linecap="round" stroke-linejoin="round">
