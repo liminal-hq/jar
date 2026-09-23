@@ -17,7 +17,13 @@ import type { Personality } from '../../domain/protocol/generated/Personality';
 // the dominant cause of "wild" swimming; see `useFishSteering.ts`'s own
 // comment on `WANDER_DISTANCE` for the other half of that fix.
 export const BASE_WANDER_RADIUS = 0.8;
-export const BASE_SEPARATION_RADIUS = 0.8;
+/** How close two fish can drift before `SeparationBehavior` starts pushing
+ * them apart — trimmed from an original `0.8`, comfortably larger than the
+ * sum of even two adult Veil males' own collider radii (~1.45 combined),
+ * which meant the steering-level "personal space" bubble was doing all the
+ * spacing work well before either fish's actual body was anywhere close to
+ * the other's. */
+export const BASE_SEPARATION_RADIUS = 0.4;
 export const BASE_WANDER_JITTER = 0.6;
 /** Every personality gets some chance of a brief pause between wander
  * cycles, not just Sleepy — otherwise the idle/rest animation state

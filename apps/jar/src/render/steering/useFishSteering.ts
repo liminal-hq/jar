@@ -45,8 +45,13 @@ const MAX_STEERING_FORCE = 3;
 /** Extra room beyond a fish's own collider radius before the containment
  * push starts — not just enough to clear the glass at zero margin
  * remaining, but enough that the fish has room to actually complete the
- * turn away from the wall before its collider would reach it. */
-const CONTAINMENT_BUFFER = 0.2;
+ * turn away from the wall before its collider would reach it. Trimmed from
+ * an original `0.2`, which (stacked on `maxColliderRadius` already being
+ * sized to the tail tip, the model's single farthest point) kept every
+ * fish turning away from the glass and the castle well before its actual
+ * body silhouette was anywhere near either — a visibly empty buffer band
+ * all the way around the tank. */
+const CONTAINMENT_BUFFER = 0.1;
 
 export function useFishSteering(
   personality: Personality,

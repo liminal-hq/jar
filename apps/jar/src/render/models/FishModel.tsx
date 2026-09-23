@@ -237,6 +237,12 @@ export function FishModel({
   // back to 0, i.e. only the positive half of a sine, restarting once per
   // tail cycle instead of oscillating smoothly once per two.
   const bobPhaseRef = useRef(phaseSeed * 0.5);
+  // The pectoral flutter's own accumulated phase, advanced at 1.3x
+  // `phaseRef`'s frequency, for the same reason `bobPhaseRef` exists: once
+  // `phaseRef` wraps at 2π, multiplying it by a non-integer factor breaks
+  // continuity right at the wrap (the value, and visibly its direction of
+  // motion, jumps), even though `phaseRef` itself stays smooth.
+  const flutterPhaseRef = useRef(phaseSeed * 1.3 + 0.6);
   const prevDirection = useRef(new THREE.Vector3(0, 0, 1));
   // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
   // window only samples a few times a second, so a genuine one/two-frame
@@ -496,6 +502,8 @@ export function FishModel({
     const phase = phaseRef.current;
     bobPhaseRef.current = advanceTailPhase(bobPhaseRef.current, frequency * 0.5, delta);
     const bobPhase = bobPhaseRef.current;
+    flutterPhaseRef.current = advanceTailPhase(flutterPhaseRef.current, frequency * 1.3, delta);
+    const flutterPhase = flutterPhaseRef.current;
 
     peakTurnRateRef.current = Math.max(turnRate, peakTurnRateRef.current * Math.exp(-5 * delta));
     onDebugFrame?.({
@@ -533,7 +541,7 @@ export function FishModel({
       }
     }
 
-    const flutter = Math.sin(phase * 1.3 + 0.6) * PECTORAL_FLUTTER_AMPLITUDE;
+    const flutter = Math.sin(flutterPhase) * PECTORAL_FLUTTER_AMPLITUDE;
     if (pectoralPivotRef.current) pectoralPivotRef.current.rotation.z = flutter;
     if (pectoralFarPivotRef.current) pectoralFarPivotRef.current.rotation.z = flutter;
 

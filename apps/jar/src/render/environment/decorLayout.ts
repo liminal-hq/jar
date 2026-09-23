@@ -125,7 +125,7 @@ export const CASTLE_COLLIDER_BOXES: Array<{
 /** A safe corridor through the doorway opening — `CastleAvoidanceBehaviour`
  * exempts a fish inside this volume from the flanking wall-segment/lintel
  * push entirely, rather than merely reducing it. Without this, the
- * anticipatory margin those boxes expand by (up to ~0.9 world units for a
+ * anticipatory margin those boxes expand by (up to ~0.8 world units for a
  * large fish, `useFishSteering.ts`'s `maxColliderRadius + CONTAINMENT_BUFFER`)
  * comfortably exceeds `CASTLE_DOOR_HALF_WIDTH` (0.65), so the two walls'
  * expanded zones overlap *past the doorway's own centre* — a fish
