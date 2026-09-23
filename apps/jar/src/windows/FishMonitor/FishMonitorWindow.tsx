@@ -1,13 +1,18 @@
-// Dev-only fish tuning rig (opened via the drawer's "Fish monitor" button,
-// itself only shown in dev builds — see `Drawer.tsx`) — a live table plus
-// top-down and front maps of every fish's steering/animation state, for
-// tuning wander/rest/pause behaviour against real numbers instead of
-// guessing from screen recordings. Not part of SPEC.md/SCREENS.md, since
-// there's nothing here a shipped build ever shows a real user.
+// Fish tuning rig (opened via the drawer's always-available "Fish monitor"
+// button, `Drawer.tsx`) — a live table plus top-down and front maps of
+// every fish's steering/animation state, for tuning wander/rest/pause
+// behaviour against real numbers instead of guessing from screen
+// recordings. Not part of SPEC.md/SCREENS.md — supplementary tooling
+// rather than a core product screen, but not gated behind a dev build
+// either: it's self-contained (opening it is what turns telemetry
+// publishing on, and closing it resets the day/night override back to
+// `'auto'`, both via the mount effect below) and just as useful for a
+// curious owner as for tuning.
 //
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
@@ -129,9 +134,33 @@ export function FishMonitorWindow() {
     // updates even between snapshots (e.g. once the tank window closes and
     // publishing stops entirely).
     const tick = setInterval(() => forceRerender((n) => n + 1), 500);
-    return () => {
+    // The day/night override is a real, product-affecting setting
+    // (`Fish.tsx`/`SteeringSystem.tsx` both consume it), not just a debug
+    // overlay — resetting it is what keeps this window self-contained:
+    // closing it always leaves the jar's own real day/night clock in
+    // control again, never stuck pinned to whatever was last selected.
+    const resetOnClose = () => {
       setFishMonitorEnabled(false);
+      setDayNightOverride('auto');
+    };
+    // The title bar's close button destroys this webview directly
+    // (`TitleBar.tsx`'s `close`, `appWindow.close()`) rather than going
+    // through React, so the unmount cleanup below never runs on that path —
+    // `onCloseRequested` fires first regardless of how the window closes
+    // (title bar, taskbar, OS shortcut), so it's the one reliable hook for
+    // this reset. `@tauri-apps/api`'s own `onCloseRequested` completes the
+    // close by calling `destroy()` once every listener returns without
+    // `preventDefault()` — needs `core:window:allow-destroy`
+    // (`capabilities/default.json`), or that final `destroy()` silently
+    // fails and this fires the reset on every close attempt without the
+    // window ever actually closing.
+    const unlistenClose = getCurrentWindow().onCloseRequested(() => {
+      resetOnClose();
+    });
+    return () => {
+      resetOnClose();
       unlisten?.();
+      void unlistenClose.then((fn) => fn());
       clearInterval(tick);
     };
   }, []);

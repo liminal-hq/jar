@@ -1,8 +1,9 @@
-// Dev-only window (opened from the drawer's "Dev" button, itself only
-// shown in dev builds — see `Drawer.tsx`) for toggling debugging aids that
-// live in `localStorage` rather than the wire protocol
-// (`domain/devSettings.ts`) — not part of SPEC.md/SCREENS.md, since
-// there's nothing here a shipped build ever shows a real user. Also where
+// Window (opened from the drawer's always-available "Dev" button,
+// `Drawer.tsx`) for toggling debugging aids that live in `localStorage`
+// rather than the wire protocol (`domain/devSettings.ts`) — not part of
+// SPEC.md/SCREENS.md, since it's supplementary tooling rather than a core
+// product screen, but not gated behind a dev build either: every toggle
+// here only affects local debug overlays, nothing product-facing. Also where
 // both aids' captured data actually gets *displayed*: the tank window
 // captures it (mouse events at its own boundary; live fish RigidBody
 // positions), but an in-tank overlay would cover the very content it's
@@ -12,6 +13,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState, type CSSProperties } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
@@ -125,6 +127,35 @@ export function DevSettingsWindow() {
 
   useEffect(() => {
     void ensureJarClientStarted();
+    // Both toggles are real, product-affecting instrumentation once
+    // enabled (`MouseDebugCapture` sending an event per mousemove plus a
+    // 200ms poll; fish positions publishing every 200ms), not just this
+    // window's own local state — leaving either on after close would keep
+    // that running indefinitely, including across app restarts
+    // (`localStorage`-backed). Resetting here is what keeps this window
+    // self-contained, the same reason the Fish monitor window resets its
+    // own day/night override on close (`FishMonitorWindow.tsx`).
+    const resetOnClose = () => {
+      setMouseOverlayEnabled(false);
+      setFishPositionOverlayEnabled(false);
+    };
+    // The title bar's close button destroys this webview directly
+    // (`TitleBar.tsx`'s `close`, `appWindow.close()`) rather than going
+    // through React, so the unmount cleanup below never runs on that path —
+    // `onCloseRequested` fires first regardless of how the window closes.
+    // `@tauri-apps/api`'s own `onCloseRequested` completes the close by
+    // calling `destroy()` once every listener returns without
+    // `preventDefault()` — needs `core:window:allow-destroy`
+    // (`capabilities/default.json`), or that final `destroy()` silently
+    // fails and this fires the reset on every close attempt without the
+    // window ever actually closing.
+    const unlistenClose = getCurrentWindow().onCloseRequested(() => {
+      resetOnClose();
+    });
+    return () => {
+      resetOnClose();
+      void unlistenClose.then((fn) => fn());
+    };
   }, []);
 
   return (

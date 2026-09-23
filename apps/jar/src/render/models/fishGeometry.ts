@@ -85,19 +85,19 @@ function bodyShapesById(id: string): THREE.Shape[] {
     .flatMap((p) => p.toShapes(true));
 }
 
-/** Shared, read-only — safe to reuse the same geometry across every fish
- * instance (and, for `pectoral`, across both the near and far mirrored
- * copies within one fish) since nothing mutates it per-frame or per-fish.
- * `tailFan`/`tailForked`/`pectoral`/`mouth` are pre-translated to their
- * hinge origin (see `extrudeAtHinge`); `dorsal`/`gill` are rigid (no
- * pivot) and stay in their natural authored coordinates. */
+/** Shared, read-only — safe to reuse across every fish instance (and, for
+ * `pectoral`, across both the near and far mirrored copies within one
+ * fish) since nothing mutates it per-frame or per-fish. These three sit
+ * forward of the swim wave's onset (`swimWave.ts`'s `SWIM_WAVE_ONSET_X`)
+ * and stay rigid; the tail and dorsal fin deform per-frame per-fish now,
+ * so they're per-fish clones instead (`createTailGeometry`/
+ * `createDorsalGeometry` below), not shared here. `pectoral`/`mouth` are
+ * pre-translated to their hinge origin (see `extrudeAtHinge`); `gill` is
+ * rigid (no pivot) and stays in its natural authored coordinates. */
 export const SHARED_GEOMETRY = {
-  dorsal: extrude(shapesFromSvg(dorsalSvg), 6),
   gill: extrude(shapesFromSvg(gillSvg), 2),
   pectoral: extrudeAtHinge(shapesFromSvg(pectoralSvg), 5, PECTORAL_HINGE.x, PECTORAL_HINGE.y),
   mouth: extrudeAtHinge(shapesFromSvg(mouthSvg), BODY_DEPTH, MOUTH_HINGE.x, MOUTH_HINGE.y),
-  tailFan: extrudeAtHinge(shapesFromSvg(tailFanSvg), 8, TAIL_PIVOT.x, TAIL_PIVOT.y),
-  tailForked: extrudeAtHinge(shapesFromSvg(tailForkedSvg), 8, TAIL_PIVOT.x, TAIL_PIVOT.y),
 };
 
 /** Body's `body-back` shape only — per-fish clones of this are what get
@@ -107,13 +107,40 @@ export function createBodyGeometry(): THREE.BufferGeometry {
   return extrude(bodyShapesById('body-back'), BODY_DEPTH);
 }
 
-/** The veil tail needs its own per-fish geometry clone (its per-frame bend
- * differs per fish, unlike the rigid fan/forked shared geometries above) —
- * pre-translated to the tail pivot origin same as the shared tails, so the
- * bend deformer and the pivot rotation both operate in the same
- * hinge-centred local space. */
-export function createVeilGeometry(): THREE.BufferGeometry {
-  return extrudeAtHinge(shapesFromSvg(tailVeilSvg), 8, TAIL_PIVOT.x, TAIL_PIVOT.y);
+const TAIL_SVG_BY_FIN: Record<'Fan' | 'Forked' | 'Veil', string> = {
+  Fan: tailFanSvg,
+  Forked: tailForkedSvg,
+  Veil: tailVeilSvg,
+};
+
+/** Every fin type gets its own per-fish geometry clone — the swim wave
+ * deforms all three per-frame per-fish (`swimWave.ts`). Pre-translated to
+ * the tail pivot origin (`extrudeAtHinge`) so the wave operates in the same
+ * hinge-centred local space `FishModel.tsx` mounts the mesh at.
+ * `tailScale` (`MALE_TAIL_SCALE` for males, `1` otherwise) is baked
+ * directly into the clone via a uniform scale about that same
+ * hinge-centred origin, so `Fish.tsx`'s collider math (which assumes a
+ * uniform scale about the hinge) needs no changes. */
+export function createTailGeometry(
+  finType: 'Fan' | 'Forked' | 'Veil',
+  tailScale: number,
+): THREE.BufferGeometry {
+  const geometry = extrudeAtHinge(
+    shapesFromSvg(TAIL_SVG_BY_FIN[finType]),
+    8,
+    TAIL_PIVOT.x,
+    TAIL_PIVOT.y,
+  );
+  if (tailScale !== 1) geometry.scale(tailScale, tailScale, tailScale);
+  return geometry;
+}
+
+/** The dorsal fin spans into the swim wave's bend zone (`swimWave.ts`) —
+ * left rigid it would visibly shear off the body's back at higher
+ * amplitudes, so it needs its own per-fish clone to deform in step with
+ * the body, same rationale as the tail above. */
+export function createDorsalGeometry(): THREE.BufferGeometry {
+  return extrude(shapesFromSvg(dorsalSvg), 6);
 }
 
 /** Wraps an already-hinge-centred geometry (see `extrudeAtHinge`) in a

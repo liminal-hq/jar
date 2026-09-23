@@ -87,7 +87,14 @@
 .drawerArea {
   flex: 1 1 auto;
   height: 100%;
-  overflow: hidden;
+  /* Vertical-only: with nine buttons now (Dev/Fish monitor appended,
+   * always-available per `Drawer.tsx`), a short resized tank window can be
+   * shorter than the full button column — scroll rather than silently
+   * clip the later buttons out of reach. `overflow-x` stays `hidden` so
+   * this doesn't also grow a stray horizontal scrollbar from the tuck
+   * below. */
+  overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
   padding: 8px;
   /* Tucks 18px behind the tank's right edge (SCREENS.md W1: "overlaps the
@@ -113,6 +120,12 @@
   padding: 8px;
   display: flex;
   align-items: stretch;
+  /* Same reasoning as `.drawerArea` — without this, a button past the
+   * bottom of a short window has nothing clipping it explicitly, but
+   * nothing letting it be reached either: it simply paints past the
+   * physical window's own bounds. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .statusChip {
