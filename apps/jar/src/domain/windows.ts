@@ -121,3 +121,19 @@ export async function openSatelliteWindow(
     console.error(`failed to open ${spec.label} window`, e);
   });
 }
+
+/** Closes every satellite window that's currently open. Tauri's own exit
+ * behaviour only fires once every open window is gone — with no "main
+ * window" concept, a satellite left open after the tank closes keeps the
+ * whole app running in the background — so the tank's own close handler
+ * (`TankWindow.tsx`) calls this first. Keeping the label list here (not
+ * duplicated into the Rust shell) matches `lib.rs`'s own split: satellite
+ * windows are frontend-owned, Rust never learns their labels. */
+export async function closeAllSatelliteWindows(): Promise<void> {
+  await Promise.all(
+    (Object.keys(SPECS) as (keyof typeof SPECS)[]).map(async (kind) => {
+      const win = await WebviewWindow.getByLabel(SPECS[kind].label);
+      await win?.close();
+    }),
+  );
+}

@@ -20,6 +20,7 @@ import { MouseDebugCapture } from '../../components/MouseDebugCapture';
 import { ToastLayer } from '../../components/Toast';
 import { useMouseOverlayEnabled } from '../../domain/devSettings';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
+import { closeAllSatelliteWindows } from '../../domain/windows';
 import { TankScene } from '../../render/tank/TankScene';
 import { applyDialogTheme } from '../../theme/theme';
 import styles from './TankWindow.module.css';
@@ -69,6 +70,30 @@ export function TankWindow() {
 
   useEffect(() => {
     void ensureJarClientStarted();
+  }, []);
+
+  useEffect(() => {
+    // Tauri has no "main window" concept — its own exit behaviour only
+    // fires once every open window is gone, so a satellite window left
+    // open when the tank closes keeps the whole app running in the
+    // background indefinitely. Closing them here first, on whatever path
+    // the tank itself closes by (its own title bar, OS close, Alt+F4,
+    // taskbar), lets Tauri's exit condition resolve normally once they're
+    // gone — no manual `destroy()` needed, since exit only checks the
+    // final window count, not the order windows close in. The handler
+    // must be `async`/awaited, not fire-and-forgotten: Tauri holds the
+    // tank's own close until a returned promise resolves (its own
+    // `onCloseRequested` docs demonstrate exactly this — an async handler
+    // awaiting a confirm dialog before conditionally calling
+    // `preventDefault()` only works at all if the close is genuinely held
+    // open until then) — voiding the promise here let the tank's teardown
+    // race ahead of and kill the in-flight closes for every other window.
+    const unlistenClose = getCurrentWindow().onCloseRequested(async () => {
+      await closeAllSatelliteWindows();
+    });
+    return () => {
+      void unlistenClose.then((fn) => fn());
+    };
   }, []);
 
   useEffect(() => {
