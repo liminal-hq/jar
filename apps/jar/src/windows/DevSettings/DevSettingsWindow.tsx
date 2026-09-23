@@ -13,6 +13,7 @@
 // (c) Copyright 2026 Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState, type CSSProperties } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
@@ -126,6 +127,29 @@ export function DevSettingsWindow() {
 
   useEffect(() => {
     void ensureJarClientStarted();
+    // Both toggles are real, product-affecting instrumentation once
+    // enabled (`MouseDebugCapture` sending an event per mousemove plus a
+    // 200ms poll; fish positions publishing every 200ms), not just this
+    // window's own local state — leaving either on after close would keep
+    // that running indefinitely, including across app restarts
+    // (`localStorage`-backed). Resetting here is what keeps this window
+    // self-contained, the same reason the Fish monitor window resets its
+    // own day/night override on close (`FishMonitorWindow.tsx`).
+    const resetOnClose = () => {
+      setMouseOverlayEnabled(false);
+      setFishPositionOverlayEnabled(false);
+    };
+    // The title bar's close button destroys this webview directly
+    // (`TitleBar.tsx`'s `close`, `appWindow.close()`) rather than going
+    // through React, so the unmount cleanup below never runs on that path —
+    // `onCloseRequested` fires first regardless of how the window closes.
+    const unlistenClose = getCurrentWindow().onCloseRequested(() => {
+      resetOnClose();
+    });
+    return () => {
+      resetOnClose();
+      void unlistenClose.then((fn) => fn());
+    };
   }, []);
 
   return (
