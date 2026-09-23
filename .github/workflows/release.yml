@@ -395,8 +395,16 @@ jobs:
           fi
           dll="${dll_matches[0]}"
 
+          # Stage as flat filenames before zipping -- 7z stores files under
+          # whatever path is given on the command line, and both source
+          # paths above are several directories deep.
+          release_dir_abs="$(pwd)/${release_dir}"
+          staging_dir="$(mktemp -d)"
+          cp "${exe}" "${staging_dir}/jar.exe"
+          cp "${dll}" "${staging_dir}/WebView2Loader.dll"
+
           zip_name="Jar_${RELEASE_VERSION}_${ARCH}-portable.zip"
-          7z a "${release_dir}/${zip_name}" "${exe}" "${dll}"
+          (cd "${staging_dir}" && 7z a "${release_dir_abs}/${zip_name}" jar.exe WebView2Loader.dll)
 
       - name: Upload staged release assets
         uses: actions/upload-artifact@v7
