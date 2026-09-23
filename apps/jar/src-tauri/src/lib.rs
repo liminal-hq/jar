@@ -14,12 +14,12 @@
 /// requires window positions/sizes to persist, and that covers every
 /// window in the documented screen inventory (`SCREENS.md`'s W1-W4) —
 /// `critter-card`, `family-tree` and `setup` are on-demand
-/// (`domain/windows.ts`'s `SPECS`) but still user-facing, tracked windows,
-/// so only `dev-settings` (a debug-only tool, explicitly "not part of
-/// `SPEC.md`/`SCREENS.md`" per its own `SPECS` entry) is denylisted here —
-/// it's meant to spawn fresh every time rather than remember where a dev
-/// last left it.
-const EPHEMERAL_WINDOW_LABELS: &[&str] = &["dev-settings"];
+/// (`domain/windows.ts`'s `SPECS`) but still user-facing, tracked windows.
+/// `dev-settings`/`fish-monitor` are supplementary tooling rather than core
+/// product screens, but they're real, always-available windows now too
+/// (`Drawer.tsx`), not a debug-only build feature, so they persist their
+/// geometry the same as everything else — nothing left to exclude here.
+const EPHEMERAL_WINDOW_LABELS: &[&str] = &[];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

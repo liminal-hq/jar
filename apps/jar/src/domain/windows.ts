@@ -30,13 +30,15 @@ const SPECS: Record<
   // Tall enough for every row incl. the variant chip row (SPEC.md §4) and
   // TitleBar's 32px without scrolling — re-check if Setup grows more rows.
   setup: { label: 'setup', title: 'Setup', width: 320, height: 640 },
-  // Dev-only (`Drawer.tsx` only shows the button that opens this in dev
-  // builds) — not part of SPEC.md/SCREENS.md. Tall enough for both
-  // checkboxes plus their scrollable debug panels (`DevSettingsWindow.tsx`)
-  // when both are toggled on, without the window itself needing to grow.
+  // Supplementary tooling, always available from the drawer (`Drawer.tsx`)
+  // rather than gated to dev builds — not part of SPEC.md/SCREENS.md's core
+  // product screens, but not hidden either. Tall enough for both checkboxes
+  // plus their scrollable debug panels (`DevSettingsWindow.tsx`) when both
+  // are toggled on, without the window itself needing to grow.
   'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },
-  // Dev-only, same as `dev-settings` — wide enough for the live table plus
-  // the top-down and front tank maps side by side (`FishMonitorWindow.tsx`).
+  // Same always-available tooling as `dev-settings` — wide enough for the
+  // live table plus the top-down and front tank maps side by side
+  // (`FishMonitorWindow.tsx`).
   'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 620, height: 480 },
 };
 
