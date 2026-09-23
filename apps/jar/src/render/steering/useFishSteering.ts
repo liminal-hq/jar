@@ -53,6 +53,10 @@ const MAX_STEERING_FORCE = 3;
  * all the way around the tank. */
 const CONTAINMENT_BUFFER = 0.1;
 
+/** Same "room to actually turn away" rationale as `CONTAINMENT_BUFFER`,
+ * applied to the separation floor below. */
+const SEPARATION_CLEARANCE_BUFFER = 0.1;
+
 export function useFishSteering(
   personality: Personality,
   livingPopulation: number,
@@ -68,7 +72,20 @@ export function useFishSteering(
   const rig = useMemo(() => {
     const vehicle = new YUKA.Vehicle();
     vehicle.updateNeighborhood = true;
-    vehicle.neighborhoodRadius = params.separationRadius;
+    // Floored by this fish's own two-body clearance: `neighborhoodRadius` is
+    // a *centre-to-centre* distance, so a `separationRadius` smaller than
+    // roughly two collider radii means two fish's `BallCollider`s are
+    // already deeply overlapping before either is even considered a
+    // neighbour — `SeparationBehavior` never gets a chance to push them
+    // apart, and Rapier's own hard collision response takes over instead
+    // (contact jitter, not a graceful turn-away). `params.separationRadius`
+    // still governs the *personality*-driven range above this geometric
+    // floor (Shy grows it, Curious shrinks it), just never below the point
+    // where separation would already be too late to matter.
+    vehicle.neighborhoodRadius = Math.max(
+      params.separationRadius,
+      maxColliderRadius * 2 + SEPARATION_CLEARANCE_BUFFER,
+    );
     vehicle.maxForce = MAX_STEERING_FORCE;
 
     const wander = new YUKA.WanderBehavior();

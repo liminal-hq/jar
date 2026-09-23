@@ -22,7 +22,10 @@ export const BASE_WANDER_RADIUS = 0.8;
  * sum of even two adult Veil males' own collider radii (~1.45 combined),
  * which meant the steering-level "personal space" bubble was doing all the
  * spacing work well before either fish's actual body was anywhere close to
- * the other's. */
+ * the other's. Only a starting point, not the real floor: `useFishSteering.ts`
+ * still clamps the vehicle's actual `neighborhoodRadius` up to at least this
+ * fish's own two-body clearance, so separation never goes fully silent
+ * before a pair's colliders would already be touching. */
 export const BASE_SEPARATION_RADIUS = 0.4;
 export const BASE_WANDER_JITTER = 0.6;
 /** Every personality gets some chance of a brief pause between wander
