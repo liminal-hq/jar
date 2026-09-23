@@ -552,12 +552,16 @@ export function FishModel({
     // *raised ceiling*, not to genuine forward progress catching up to it),
     // and with no bone rig to distribute that into a real swimming
     // undulation, a fast bank/bob with little real motion under it reads as
-    // the whole fish vibrating in place rather than swimming hard.
+    // the whole fish vibrating in place rather than swimming hard. Bob is
+    // derived from the same accumulated `phase` as the tail beat (at half
+    // rate, one bob per two tail beats) rather than absolute clock time, for
+    // the same reason `advanceTailPhase` exists: a `frequency`-scaled
+    // elapsed-time term drifts further out of sync with the tail the longer
+    // a fish lives.
     const swayIntensity = THREE.MathUtils.lerp(0.3, 1, excite);
     if (rootRef.current) {
       rootRef.current.rotation.z = Math.sin(phase) * BODY_BANK_AMPLITUDE * swayIntensity;
-      rootRef.current.position.y =
-        Math.sin(t * frequency * 0.5 + phaseSeed) * BODY_BOB_AMPLITUDE * swayIntensity;
+      rootRef.current.position.y = Math.sin(phase * 0.5) * BODY_BOB_AMPLITUDE * swayIntensity;
     }
   });
 
