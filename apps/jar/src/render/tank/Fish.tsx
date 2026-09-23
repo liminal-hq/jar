@@ -37,6 +37,7 @@ import { selectChaseTarget, type ChaseCandidate } from '../steering/chaseTarget'
 import type { FishMotionMode } from '../steering/motionState';
 import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
 import { breathingMultiplier } from '../steering/steeringParams';
+import { thrustMultiplierFor } from '../steering/thrustEnvelope';
 import { useFishSteering } from '../steering/useFishSteering';
 
 /** A loose bounding sphere around `FishModel`'s combined body/tail/eye
@@ -176,11 +177,26 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     [],
   );
 
+  // Kept fresh via effect (same pattern as `nightRef` below) so
+  // `getColliderRadius` — captured once by `useFishSteering`'s memoized rig
+  // — always reads this fish's *current*, life-stage-scaled size (grows as
+  // it ages) rather than whatever it was at mount. Distinct from
+  // `maxColliderRadius` above, which is deliberately the fixed eventual
+  // adult size for the anticipatory containment/avoidance *margin* — a
+  // fry that hasn't grown into its adult collider yet can still genuinely
+  // fit through a gap its future self couldn't, which matters specifically
+  // for the castle doorway exemption (`useFishSteering.ts`).
+  const critterRef = useRef(critter);
+  useEffect(() => {
+    critterRef.current = critter;
+  }, [critter]);
+
   const steering = useFishSteering(
     critter.personality,
     livingPopulation,
     favouriteSpotWorld,
     maxColliderRadius,
+    () => colliderRadiusFor(critterRef.current),
   );
 
   // Authoritative — pushed by the sim core on every `TickUpdate`
@@ -266,6 +282,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       getDebugAnim: () => debugAnimRef.current,
       hue: critter.hue,
       getColliderRadius: () => colliderRadiusFor(critter),
+      getThrustEnvelope: () => thrustMultiplierFor(debugAnimRef.current?.phase ?? 0),
     });
     return () => {
       registry.delete(critter.id);

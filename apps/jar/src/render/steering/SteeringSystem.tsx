@@ -44,6 +44,11 @@ export interface FishDebugAnim {
   turnRate: number;
   isResting: boolean;
   activeAmplitude: number;
+  /** The tail beat's current accumulated phase (`FishModel.tsx`'s
+   * `phaseRef`) — not just monitor telemetry, this also feeds `Fish.tsx`'s
+   * `getThrustEnvelope` (`thrustEnvelope.ts`), which gates the physics
+   * impulse below to the same beat. */
+  phase: number;
 }
 
 export interface RegisteredFish {
@@ -73,6 +78,11 @@ export interface RegisteredFish {
    * grows. Lets another fish's chase-catch check (`Fish.tsx`) account for
    * this fish's actual current collider size, not just its own. */
   getColliderRadius: () => number;
+  /** `thrustMultiplierFor` (`thrustEnvelope.ts`) evaluated at this fish's
+   * current tail phase — gates the impulse below so thrust arrives on the
+   * power stroke and the fish coasts between beats, rather than tracking
+   * its desired velocity continuously. */
+  getThrustEnvelope: () => number;
 }
 
 type Registry = Map<number, RegisteredFish>;
@@ -103,12 +113,22 @@ const scratchLinvel = new THREE.Vector3();
  * a moving ceiling (`steeringParams.ts`'s `breathingMultiplier`, a burst
  * ramp) keeps the *target* itself in motion too, so the body chronically
  * trails it — read live as "tail beating hard, barely accelerating." 2.2
- * (~0.45s) keeps this smooth (still a lag, not a snap — no risk of
- * reintroducing the unbounded-force class of stutter the weight-ramp
- * system exists to prevent, since `desired` itself is already smooth) while
- * making an actual speed change — cruise or burst — read on the body
- * promptly enough to match what the tail is already doing. */
-const VELOCITY_GAIN = 2.2;
+ * (~0.45s) fixed that, but was still too weak relative to `linearDamping`
+ * (2.5, `Fish.tsx`) once `desired`'s own *direction* is also constantly
+ * shifting (`WanderBehavior`'s per-update noise, amplified further by
+ * containment/castle-avoidance's proximity-triggered corrections near a
+ * wall) — live-diagnosed via a temporary registry/entity-manager
+ * introspection hook: fish sitting near a wall margin had a Yuka-desired
+ * speed pinned at `maxSpeed` while their real `RigidBody.linvel()` stayed
+ * near zero for many seconds, `isResting` and all, because each frame's
+ * correction was mostly re-aiming rather than building forward momentum a
+ * damping term this strong could keep eating. 5 (~0.2s) gives the
+ * controller enough authority to actually reach a healthy fraction of
+ * `desired` against that damping even while the target keeps swinging —
+ * confirmed live: freshly-spawned fish (a clean, obstruction-free case)
+ * went straight to a normal cruise speed instead of the old value's slow
+ * crawl. */
+const VELOCITY_GAIN = 5;
 const MIN_VELOCITY_SQ = 0.0001;
 
 /** The fish-position debug publish goes over a cross-window Tauri event
@@ -211,10 +231,42 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       if (scratchVelocity.lengthSq() >= MIN_VELOCITY_SQ) {
         const lv = body.linvel();
         scratchLinvel.set(lv.x, lv.y, lv.z);
-        scratchImpulse
-          .copy(scratchVelocity)
-          .sub(scratchLinvel)
-          .multiplyScalar(VELOCITY_GAIN * delta);
+        // `getThrustEnvelope()`'s own mean-normalization only guarantees
+        // this multiplier's time-average is 1 — it does not, on its own,
+        // guarantee the resulting body motion's mean speed matches the
+        // unpulsed controller. This is a closed-loop correction (∝ the
+        // instantaneous `desired − actual` error), not an open-loop force:
+        // pulsing it correlates the multiplier with the error itself under
+        // `linearDamping`, so `E[multiplier] = 1` doesn't imply the same
+        // mean impulse, and thus not the same cruise/arrival/chase-catch
+        // timing either. The true compensation, if this drifts noticeably
+        // in practice, is frequency-dependent (how fast the pulse cycles
+        // relative to `linearDamping`'s own timescale, which itself varies
+        // continuously with the fish's current tail-beat frequency) — not
+        // a single constant derivable here. Retune `VELOCITY_GAIN` by eye
+        // against real cruise/arrival timing if it's needed, rather than
+        // trying to correct it through the envelope's own math.
+        scratchImpulse.copy(scratchVelocity).sub(scratchLinvel);
+        // The largest impulse that can ever be *correct*: exactly enough to
+        // close the velocity error in one step (`mass * |error|` — Rapier
+        // converts impulse to a velocity change via `/mass` internally, so
+        // this is the impulse magnitude at which `Δv == error`). Computed
+        // before scaling by `VELOCITY_GAIN * delta * thrustEnvelope()`,
+        // which on a throttled frame (the tank window resumes from
+        // hidden/minimized with a large, if `clampClockDelta`-bounded,
+        // `delta`) or at the thrust envelope's own peak (~2x mean) can
+        // otherwise scale well past that point — for a light enough fish,
+        // past the `Δv > 2 * error` threshold where this explicit
+        // correction diverges instead of converging, flinging or
+        // stutter-snapping it. Clamping the impulse's *length* to this
+        // bound (direction untouched) still lets a large error close in a
+        // single frame when the scaled term is smaller — it only stops the
+        // correction from ever overshooting past fully matching `desired`.
+        const maxImpulseMagnitude = body.mass() * scratchImpulse.length();
+        scratchImpulse.multiplyScalar(VELOCITY_GAIN * delta * fish.getThrustEnvelope());
+        if (scratchImpulse.length() > maxImpulseMagnitude) {
+          scratchImpulse.setLength(maxImpulseMagnitude);
+        }
         body.applyImpulse(scratchImpulse, true);
 
         const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;

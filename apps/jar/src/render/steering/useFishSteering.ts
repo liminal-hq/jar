@@ -13,10 +13,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as YUKA from 'yuka';
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
+import { CastleAvoidanceBehaviour } from './castleAvoidanceBehaviour';
 import { ChasePursuitBehaviour } from './chasePursuitBehaviour';
 import { entityManager } from './entityManager';
 import type { FishMotionMode } from './motionState';
-import { maxSpeedFor, steeringParamsFor } from './steeringParams';
+import { BASE_SEPARATION_RADIUS, maxSpeedFor, steeringParamsFor } from './steeringParams';
 import {
   MODE_WEIGHTS,
   rampWeights as computeRampedWeights,
@@ -44,14 +45,24 @@ const MAX_STEERING_FORCE = 3;
 /** Extra room beyond a fish's own collider radius before the containment
  * push starts — not just enough to clear the glass at zero margin
  * remaining, but enough that the fish has room to actually complete the
- * turn away from the wall before its collider would reach it. */
-const CONTAINMENT_BUFFER = 0.2;
+ * turn away from the wall before its collider would reach it. Trimmed from
+ * an original `0.2`, which (stacked on `maxColliderRadius` already being
+ * sized to the tail tip, the model's single farthest point) kept every
+ * fish turning away from the glass and the castle well before its actual
+ * body silhouette was anywhere near either — a visibly empty buffer band
+ * all the way around the tank. */
+const CONTAINMENT_BUFFER = 0.1;
+
+/** Same "room to actually turn away" rationale as `CONTAINMENT_BUFFER`,
+ * applied to the separation floor below. */
+const SEPARATION_CLEARANCE_BUFFER = 0.1;
 
 export function useFishSteering(
   personality: Personality,
   livingPopulation: number,
   favouriteSpotWorld: YUKA.Vector3,
   maxColliderRadius: number,
+  getColliderRadius: () => number,
 ) {
   const params = useMemo(
     () => steeringParamsFor(personality, livingPopulation),
@@ -61,7 +72,31 @@ export function useFishSteering(
   const rig = useMemo(() => {
     const vehicle = new YUKA.Vehicle();
     vehicle.updateNeighborhood = true;
-    vehicle.neighborhoodRadius = params.separationRadius;
+    // `neighborhoodRadius` is a *centre-to-centre* distance, so it can never
+    // go below `physicalTouchDistance` — a fish's own two-body clearance
+    // (this radius, doubled, approximating "if the other fish is about my
+    // size") — or two `BallCollider`s are already deeply overlapping before
+    // either is even considered a neighbour, and `SeparationBehavior` never
+    // gets a chance to push them apart; Rapier's own hard collision
+    // response takes over instead (contact jitter, not a graceful
+    // turn-away). But that floor alone (a flat `+ SEPARATION_CLEARANCE_
+    // BUFFER`) swamps `params.separationRadius`'s whole personality range —
+    // Shy/Curious/Default all clamp to the exact same value for any
+    // ordinary adult collider size, silently erasing §4.1's documented
+    // trait differentiation. Applying personality as a *delta from
+    // baseline* on top of the physical floor instead keeps both true: the
+    // floor itself is never violated (Curious's negative delta can only
+    // shrink the buffer back down to zero, never past the physical
+    // minimum), while Shy's positive delta still visibly grows the radius,
+    // and Curious's negative one still visibly shrinks it relative to
+    // Default and Shy, just from a physically-safe baseline instead of an
+    // arbitrary one.
+    const physicalTouchDistance = maxColliderRadius * 2;
+    const separationTraitDelta = params.separationRadius - BASE_SEPARATION_RADIUS;
+    vehicle.neighborhoodRadius = Math.max(
+      physicalTouchDistance,
+      physicalTouchDistance + SEPARATION_CLEARANCE_BUFFER + separationTraitDelta,
+    );
     vehicle.maxForce = MAX_STEERING_FORCE;
 
     const wander = new YUKA.WanderBehavior();
@@ -73,6 +108,10 @@ export function useFishSteering(
     const separation = new YUKA.SeparationBehavior();
     separation.weight = MODE_WEIGHTS.active.separation;
     const containment = new TankContainmentBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
+    const castleAvoidance = new CastleAvoidanceBehaviour(
+      maxColliderRadius + CONTAINMENT_BUFFER,
+      getColliderRadius,
+    );
 
     // Added after `containment` deliberately — Yuka's priority-budget
     // accumulation (`SteeringManager`'s calculate order) gives earlier-added
@@ -92,20 +131,22 @@ export function useFishSteering(
     // (cheap for a handful of fish); see `rampWeights`'s comment for why
     // that's the point.
 
-    // `containment` goes first: Yuka's `SteeringManager` accumulates each
-    // behaviour's force in insertion order and stops once the running total
-    // already reaches `vehicle.maxForce` — added last (as this used to be),
-    // a fish committed to wandering straight at the glass could exhaust the
-    // whole force budget on `wander`/`separation` before containment ever
-    // got a chance to contribute, letting it collide and jitter against the
-    // glass despite its own strength nominally out-voting the others.
+    // `containment`/`castleAvoidance` go first: Yuka's `SteeringManager`
+    // accumulates each behaviour's force in insertion order and stops once
+    // the running total already reaches `vehicle.maxForce` — added last, a
+    // fish committed to wandering straight at an obstacle could exhaust the
+    // whole force budget on `wander`/`separation` before either avoidance
+    // behaviour ever got a chance to contribute, letting it collide and
+    // jitter against the glass or the castle despite their own strength
+    // nominally out-voting the others.
     vehicle.steering.add(containment);
+    vehicle.steering.add(castleAvoidance);
     vehicle.steering.add(wander);
     vehicle.steering.add(separation);
     vehicle.steering.add(pursuit);
     vehicle.steering.add(arrive);
 
-    return { vehicle, wander, separation, containment, pursuit, arrive };
+    return { vehicle, wander, separation, containment, castleAvoidance, pursuit, arrive };
     // Created once per mounted fish instance; personality/params/
     // maxColliderRadius changes mid-life aren't expected (a critter's
     // personality/fin/sex never change after spawn per SPEC.md §5), so this
@@ -120,9 +161,9 @@ export function useFishSteering(
     };
   }, [rig.vehicle]);
 
-  // `containment` is never targeted here — it stays at weight 1 in every
-  // mode, paused/settled fish included, since even a resting fish shouldn't
-  // be able to drift into the glass.
+  // `containment`/`castleAvoidance` are never targeted here — both stay at
+  // weight 1 in every mode, paused/settled fish included, since even a
+  // resting fish shouldn't be able to drift into the glass or the castle.
   const targetWeightsRef = useRef<ModeWeights>(MODE_WEIGHTS.active);
 
   const setMode = (mode: FishMotionMode) => {

@@ -34,6 +34,7 @@ import {
   TAIL_PIVOT,
   wrapInPivot,
 } from './fishGeometry';
+import { advanceTailPhase } from './tailPhase';
 import { computeTurnRate } from './turnRate';
 
 interface FishModelProps {
@@ -74,11 +75,18 @@ interface FishModelProps {
    * (which has no burst state) is unaffected. */
   getSpeedCeiling?: () => number;
   /** Called once per frame with this fish's animation state, for the fish
-   * monitor window (`domain/fishDebug.ts`) — a callback rather than an
-   * imperative handle since `Fish.tsx` just wants to stash the latest value
-   * in a ref, not react to it. Absent (and skipped entirely) for the
-   * critter-card preview. */
-  onDebugFrame?: (anim: { turnRate: number; isResting: boolean; activeAmplitude: number }) => void;
+   * monitor window (`domain/fishDebug.ts`) and — via `phase` —
+   * `Fish.tsx`'s `getThrustEnvelope` (`thrustEnvelope.ts`), which gates the
+   * physics impulse to the same tail beat this animates. A callback rather
+   * than an imperative handle since `Fish.tsx` just wants to stash the
+   * latest value in a ref, not react to it. Absent (and skipped entirely)
+   * for the critter-card preview. */
+  onDebugFrame?: (anim: {
+    turnRate: number;
+    isResting: boolean;
+    activeAmplitude: number;
+    phase: number;
+  }) => void;
 }
 
 /** Eye and spot positions are plain sphere primitives, not extruded SVG
@@ -121,6 +129,15 @@ const EXCITED_FREQUENCY_SPEED_SCALE = 2.5;
  * range (before the turn/overdrive boosts below). */
 const CALM_AMPLITUDE = 0.08;
 const EXCITED_AMPLITUDE = 0.16;
+
+/** Fan/Forked tails are one rigid single-pivot paddle with no secondary
+ * motion (unlike Veil, which layers `VEIL_BEND_AMPLITUDE`'s per-vertex
+ * progressive bend on top of this same base swing) — at the plain base
+ * amplitude above, that single small pivot rotation reads as stiff/rigid
+ * rather than swimming. This boosts *only* their base swing to compensate;
+ * Veil is left at 1 since it's already getting its exaggeration from the
+ * secondary bend instead. */
+const RIGID_TAIL_AMPLITUDE_MULTIPLIER = 1.8;
 
 /** How much a turn adds to tail amplitude — kept well under
  * `CALM_AMPLITUDE`/`EXCITED_AMPLITUDE` above (a fraction of the base range,
@@ -209,6 +226,23 @@ export function FishModel({
   // One random phase per fish, fixed at spawn — without it every fish beats
   // in perfect unison whenever they share a speed (§6.6).
   const phaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
+  // The tail beat's own accumulated phase, seeded from the above — see
+  // `advanceTailPhase`'s doc comment for why this has to accumulate rather
+  // than derive from absolute clock time.
+  const phaseRef = useRef(phaseSeed);
+  // The body bob's own accumulated phase, advanced at half `phaseRef`'s
+  // frequency — kept as a *separate* accumulator rather than derived by
+  // halving `phaseRef`'s already-wrapped value: `phaseRef` wraps at 2π, so
+  // `phaseRef.current * 0.5` would only ever sweep [0, π) before snapping
+  // back to 0, i.e. only the positive half of a sine, restarting once per
+  // tail cycle instead of oscillating smoothly once per two.
+  const bobPhaseRef = useRef(phaseSeed * 0.5);
+  // The pectoral flutter's own accumulated phase, advanced at 1.3x
+  // `phaseRef`'s frequency, for the same reason `bobPhaseRef` exists: once
+  // `phaseRef` wraps at 2π, multiplying it by a non-integer factor breaks
+  // continuity right at the wrap (the value, and visibly its direction of
+  // motion, jumps), even though `phaseRef` itself stays smooth.
+  const flutterPhaseRef = useRef(phaseSeed * 1.3 + 0.6);
   const prevDirection = useRef(new THREE.Vector3(0, 0, 1));
   // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
   // window only samples a few times a second, so a genuine one/two-frame
@@ -423,9 +457,11 @@ export function FishModel({
       freqMul *
       (1 + OVERDRIVE_FREQUENCY_SCALE * overdrive) *
       (1 - TURN_RATE_FREQUENCY_DAMP_SCALE * cappedTurnRate);
+    const rigidTailMul = finType === 'Veil' ? 1 : RIGID_TAIL_AMPLITUDE_MULTIPLIER;
     const activeAmplitude =
       (THREE.MathUtils.lerp(CALM_AMPLITUDE, EXCITED_AMPLITUDE, excite) +
         cappedTurnRate * TURN_RATE_AMPLITUDE_SCALE) *
+      rigidTailMul *
       ampMul *
       (1 + OVERDRIVE_AMPLITUDE_SCALE * overdrive) *
       (1 + STEADY_AMPLITUDE_BONUS * steadiness);
@@ -462,13 +498,19 @@ export function FishModel({
 
     const frequency = workingFrequencyRef.current;
     const amplitude = workingAmplitudeRef.current;
-    const phase = t * frequency + phaseSeed;
+    phaseRef.current = advanceTailPhase(phaseRef.current, frequency, delta);
+    const phase = phaseRef.current;
+    bobPhaseRef.current = advanceTailPhase(bobPhaseRef.current, frequency * 0.5, delta);
+    const bobPhase = bobPhaseRef.current;
+    flutterPhaseRef.current = advanceTailPhase(flutterPhaseRef.current, frequency * 1.3, delta);
+    const flutterPhase = flutterPhaseRef.current;
 
     peakTurnRateRef.current = Math.max(turnRate, peakTurnRateRef.current * Math.exp(-5 * delta));
     onDebugFrame?.({
       turnRate: peakTurnRateRef.current,
       isResting: isRestingRef.current,
       activeAmplitude: amplitude,
+      phase,
     });
 
     if (tailPivotRef.current) {
@@ -499,7 +541,7 @@ export function FishModel({
       }
     }
 
-    const flutter = Math.sin(phase * 1.3 + 0.6) * PECTORAL_FLUTTER_AMPLITUDE;
+    const flutter = Math.sin(flutterPhase) * PECTORAL_FLUTTER_AMPLITUDE;
     if (pectoralPivotRef.current) pectoralPivotRef.current.rotation.z = flutter;
     if (pectoralFarPivotRef.current) pectoralFarPivotRef.current.rotation.z = flutter;
 
@@ -527,12 +569,15 @@ export function FishModel({
     // *raised ceiling*, not to genuine forward progress catching up to it),
     // and with no bone rig to distribute that into a real swimming
     // undulation, a fast bank/bob with little real motion under it reads as
-    // the whole fish vibrating in place rather than swimming hard.
+    // the whole fish vibrating in place rather than swimming hard. Bob is
+    // driven by `bobPhaseRef`'s own half-frequency accumulator (see its
+    // declaration) rather than absolute clock time, for the same reason
+    // `advanceTailPhase` exists: a `frequency`-scaled elapsed-time term
+    // drifts further out of sync with the tail the longer a fish lives.
     const swayIntensity = THREE.MathUtils.lerp(0.3, 1, excite);
     if (rootRef.current) {
       rootRef.current.rotation.z = Math.sin(phase) * BODY_BANK_AMPLITUDE * swayIntensity;
-      rootRef.current.position.y =
-        Math.sin(t * frequency * 0.5 + phaseSeed) * BODY_BOB_AMPLITUDE * swayIntensity;
+      rootRef.current.position.y = Math.sin(bobPhase) * BODY_BOB_AMPLITUDE * swayIntensity;
     }
   });
 
