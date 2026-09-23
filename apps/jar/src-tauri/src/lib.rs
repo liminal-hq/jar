@@ -29,6 +29,18 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_denylist(EPHEMERAL_WINDOW_LABELS)
+                // Every window's decoration setting is fixed in its own
+                // creation code (`tauri.conf.json` for `tank`,
+                // `decorations: false` in `domain/windows.ts` for the
+                // satellite windows) and never toggled by the user, so
+                // tracking it here only risks a transient bad save (e.g. a
+                // momentary decorated=true reported before a window's own
+                // setting takes effect) permanently overriding the intended
+                // value on every future launch, for that window only.
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        .difference(tauri_plugin_window_state::StateFlags::DECORATIONS),
+                )
                 .build(),
         )
         .plugin(tauri_plugin_jar::init());
