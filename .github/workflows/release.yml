@@ -79,7 +79,7 @@ jobs:
               exit 1
             fi
           else
-            RELEASE_VERSION="$(./scripts/check-release-versions.sh --current-version)"
+            RELEASE_VERSION="$(bash ./scripts/check-release-versions.sh --current-version)"
             TAG_NAME="v${RELEASE_VERSION}"
 
             if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
@@ -95,7 +95,7 @@ jobs:
 
           git checkout --quiet "${CHECKOUT_REF}"
 
-          RELEASE_VERSION="$(./scripts/check-release-versions.sh --current-version)"
+          RELEASE_VERSION="$(bash ./scripts/check-release-versions.sh --current-version)"
 
           if [[ "${TAG_NAME#v}" != "${RELEASE_VERSION}" ]]; then
             echo "Release tag ${TAG_NAME} does not match the synchronised manifest version ${RELEASE_VERSION}" >&2
