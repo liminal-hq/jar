@@ -2,7 +2,7 @@
 // This is the one place these rules are implemented; `tick.rs` calls into
 // here at breeding/spawn time rather than re-deriving any of it.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use jar_protocol::{Critter, CritterId, FavouriteSpot, FinType, Personality, Sex, Species};

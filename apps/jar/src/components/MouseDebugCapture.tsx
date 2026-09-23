@@ -6,7 +6,7 @@
 // `TankWindow.tsx`'s `toggleDrawer`), useful for the same class of
 // platform quirk wherever else it turns up.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useEffect, useRef } from 'react';

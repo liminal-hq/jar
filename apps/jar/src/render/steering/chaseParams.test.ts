@@ -1,7 +1,7 @@
 // Tests for burst-speed tuning: chase/burst trigger chances, the randomized
 // burst multiplier, the asymmetric ramp, and the overdrive animation term.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { describe, expect, it } from 'vitest';

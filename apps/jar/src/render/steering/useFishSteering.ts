@@ -6,7 +6,7 @@
 // `ChasePursuitBehaviour` toward a chase target that same roll occasionally
 // assigns instead (§4.1's chase-bursts paragraph).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useEffect, useMemo, useRef } from 'react';

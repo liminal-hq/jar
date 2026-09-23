@@ -171,7 +171,7 @@ For Rust (`.rs`) files:
 ```
 // Brief one-line summary of what this file does.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 ```
 
@@ -180,7 +180,7 @@ For TypeScript/JavaScript (`.ts`, `.tsx`, `.js`) files:
 ```
 // Brief one-line summary of what this file does.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 ```
 

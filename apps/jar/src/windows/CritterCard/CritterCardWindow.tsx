@@ -3,7 +3,7 @@
 // `domain/selection.ts`. One card at a time: a new selection just updates
 // `selectedId`, it doesn't open a second window.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useEffect, useState } from 'react';

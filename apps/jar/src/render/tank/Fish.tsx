@@ -4,7 +4,7 @@
 // this component is the concrete realization of that table's "per-critter
 // runtime split" for one fish.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';

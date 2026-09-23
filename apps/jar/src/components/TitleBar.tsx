@@ -29,7 +29,7 @@
 // resolves as a click, not a drag, under normal window-manager
 // semantics.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { getCurrentWindow } from '@tauri-apps/api/window';

@@ -4,7 +4,7 @@
 // glass, CRT, etc. — themed HTML/CSS around this canvas) would show a
 // black box instead of the tank contents.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { Canvas } from '@react-three/fiber';

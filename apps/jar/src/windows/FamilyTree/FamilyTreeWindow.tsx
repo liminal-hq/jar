@@ -2,7 +2,7 @@
 // shown muted with `† remembered`. Title shows "N ever" — a count over the
 // full population including the passed, per SCREENS.md.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useEffect, useMemo } from 'react';

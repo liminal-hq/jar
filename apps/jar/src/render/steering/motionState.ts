@@ -18,7 +18,7 @@
 //   `chaseTarget.ts`) — pursuit + separation, wander and arrive off; see
 //   `docs/architecture/3d-engine.md` §4.1's chase-bursts paragraph.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 export type FishMotionMode = 'active' | 'paused' | 'settling' | 'settled' | 'chasing';

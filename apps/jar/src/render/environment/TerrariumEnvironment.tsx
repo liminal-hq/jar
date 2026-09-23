@@ -2,7 +2,7 @@
 // wall/branch (a real static collider)/foliage/heat-lamp glow per
 // `docs/architecture/3d-engine.md` §8.2.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 export function TerrariumEnvironment() {

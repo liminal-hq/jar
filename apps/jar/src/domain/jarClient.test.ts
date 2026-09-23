@@ -5,7 +5,7 @@
 // touch the Tauri IPC bridge outside `ensureJarClientStarted`, which these
 // tests never call.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,7 +1,7 @@
 // Accumulates a fish's tail-beat phase frame to frame, rather than deriving
 // it from absolute session time — see `advanceTailPhase`'s own comment.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /** Advances a tail-beat phase by one frame. This has to be an accumulator,

@@ -8,7 +8,7 @@
 // (§6.4), life-stage scale (§6.3), spot toggles, sex dimorphism (§6.7), and
 // the `fin` gene actually changing which tail mesh a fish gets.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';

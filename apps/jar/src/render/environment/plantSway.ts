@@ -5,7 +5,7 @@
 // per-vertex-bend technique `FishModel.tsx`'s veil tail uses — see that
 // file's veil-bend code for the vertex loop this feeds.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /** Slow — a gentle current, not a flutter; much slower than even a resting

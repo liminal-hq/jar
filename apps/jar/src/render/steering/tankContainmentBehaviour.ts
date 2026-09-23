@@ -7,7 +7,7 @@
 // and the physical collision response is a real source of visible jitter
 // right at the walls.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as YUKA from 'yuka';

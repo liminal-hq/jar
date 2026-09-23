@@ -8,7 +8,7 @@
 // or the doorway indefinitely, barely moving, while `WanderBehavior` keeps
 // handing it a fresh, obstacle-blind heading every frame.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as YUKA from 'yuka';

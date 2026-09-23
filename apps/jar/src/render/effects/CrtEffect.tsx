@@ -4,7 +4,7 @@
 // `settings.frame === 'NeonCrt'` — every other frame is bezel-only CSS
 // chrome around an otherwise-unmodified canvas.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { ChromaticAberration, EffectComposer, Scanline } from '@react-three/postprocessing';

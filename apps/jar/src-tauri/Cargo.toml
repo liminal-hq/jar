@@ -1,7 +1,12 @@
 [package]
 name = "jar"
 version = "0.1.0"
-edition = "2021"
+description = "A tiny floating desktop aquarium"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 publish = false
 
 [lib]

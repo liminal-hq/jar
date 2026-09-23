@@ -3,7 +3,7 @@
 // `render/environment/`) can use the same technique without importing a
 // fish-named module. Nothing here is fish-specific.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';

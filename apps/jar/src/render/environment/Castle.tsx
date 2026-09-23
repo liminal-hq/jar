@@ -9,7 +9,7 @@
 // ambient/directional pair — anything swimming through its cone gets lit
 // the same way, for free.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { CuboidCollider, RigidBody } from '@react-three/rapier';

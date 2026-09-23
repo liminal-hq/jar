@@ -8,7 +8,7 @@
 // (`docs/architecture/3d-engine.md`); only the drawer, toasts and status
 // chip here are flat HTML/CSS.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { currentMonitor, getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';

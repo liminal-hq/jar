@@ -1,7 +1,7 @@
 // Type definitions for the title bar's right-click context menu's data
 // model — ported verbatim from Cadence/Threshold's `components/ContextMenu`.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 export interface MenuItem {

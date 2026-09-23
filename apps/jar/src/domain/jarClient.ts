@@ -33,7 +33,7 @@
 // updates until the tank window is reopened and calls `start()` again —
 // a known limitation, not a bug to chase in this pass (see `NEXT_STEPS.md`).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { emit, listen } from '@tauri-apps/api/event';

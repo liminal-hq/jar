@@ -7,7 +7,7 @@
 // frontend imports. Keeping this package type-agnostic means it doesn't
 // need a build-order dependency on the app's generated-types folder.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { Channel, invoke } from '@tauri-apps/api/core';

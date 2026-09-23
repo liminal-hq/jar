@@ -7,7 +7,7 @@
 // pushes a blade aside (`plantDisturbanceAngle`), which reads as the same
 // kind of interaction a real collider would give without needing one.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';

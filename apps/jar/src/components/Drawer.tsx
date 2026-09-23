@@ -5,7 +5,7 @@
 // the tank window rightward on click — see that file for why it's a resize
 // of the tank's own window rather than a second floating window.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import type { CSSProperties } from 'react';

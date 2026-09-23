@@ -2,7 +2,7 @@
 // `Result<T>` so a failure surfaces to the webview's `invoke()` rejection
 // instead of panicking the background loop.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use serde::{Serialize, Serializer};

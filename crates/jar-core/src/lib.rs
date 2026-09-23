@@ -5,7 +5,7 @@
 // filesystem. See `docs/architecture/rust-core.md` for the full spec this
 // crate implements.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 pub mod clock;

@@ -10,7 +10,7 @@
 // meant to help debug on a window this small, so it's relayed here instead
 // (`domain/debugChannel.ts`).
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { getCurrentWindow } from '@tauri-apps/api/window';

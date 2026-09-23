@@ -3,7 +3,7 @@
 // §5.5), which is also why every rule in this file can be traced back to a
 // specific `jar-core` module rather than being decided on the spot.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use chrono::Timelike;

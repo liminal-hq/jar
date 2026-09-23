@@ -7,7 +7,7 @@
 // `@tauri-apps/api/webviewWindow`, not declared statically here, since they
 // only exist while the user has them open.
 //
-// (c) Copyright 2026 Scott Morris
+// (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 /// Windows excluded from `tauri-plugin-window-state` below. `SPEC.md` §6
