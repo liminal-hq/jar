@@ -15,9 +15,9 @@ import * as THREE from 'three';
  * flowing motion its shape calls for) highest; Fan/Forked moderate. Tune
  * by eye. */
 export const FIN_SWIM_TIP_GAIN: Record<'Fan' | 'Forked' | 'Veil', number> = {
-  Veil: 3.5,
-  Fan: 1.8,
-  Forked: 1.8,
+  Veil: 4.2,
+  Fan: 2.4,
+  Forked: 2.4,
 };
 
 /** Body-space x at/beyond which the wave is zero — protects the rigid head

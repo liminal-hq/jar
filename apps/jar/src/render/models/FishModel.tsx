@@ -136,9 +136,13 @@ const EXCITED_FREQUENCY_SPEED_SCALE = 2.5;
 
 /** Base swim-wave amplitude at the calm and excited ends of the cruise
  * range (before the turn/overdrive boosts below) — per-fin-type tip boost
- * on top of this lives in `swimWave.ts`'s `FIN_SWIM_TIP_GAIN`. */
-const CALM_AMPLITUDE = 0.08;
-const EXCITED_AMPLITUDE = 0.16;
+ * on top of this lives in `swimWave.ts`'s `FIN_SWIM_TIP_GAIN`. Pushed well
+ * past what a real fish needs — this is a small dioramic pet, not a
+ * biomechanics sim, and a visibly committed tail beat reads as "swimming
+ * with intention" from across a room in a way a physically modest one
+ * doesn't. */
+const CALM_AMPLITUDE = 0.13;
+const EXCITED_AMPLITUDE = 0.26;
 
 /** How much a turn adds to amplitude — kept well under
  * `CALM_AMPLITUDE`/`EXCITED_AMPLITUDE` above (a fraction of the base range,
@@ -148,7 +152,7 @@ const EXCITED_AMPLITUDE = 0.16;
  * fast through a turn — halved again here. The old `turnRate * 0.25` with
  * no practical cap could add up to 3-7x the base amplitude on an ordinary
  * turn. */
-const TURN_RATE_AMPLITUDE_SCALE = 0.045;
+const TURN_RATE_AMPLITUDE_SCALE = 0.07;
 const TURN_RATE_AMPLITUDE_CAP = 1.5;
 
 /** A turn's amplitude boost above pairs with a *reduction* in frequency —
