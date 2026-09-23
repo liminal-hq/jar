@@ -136,6 +136,20 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
       return force;
     }
 
+    // For the one fish size that never gets the exemption above (§ the
+    // comment on it), the two flanking wall boxes are mirror images of each
+    // other around the doorway's own centreline — a fish approaching
+    // dead-centre gets equal, opposite `pushFromBox` contributions from
+    // them that sum to zero in x, leaving only the lintel's downward push
+    // once its collider also fails to clear the doorway height. That's a
+    // stall, not a route-around: known and accepted as part of the same
+    // single-non-fitting-combination trade-off `decorLayout.ts` already
+    // documents, not a new regression, and not a permanent trap in
+    // practice — `WanderBehavior`/`SeparationBehavior` still get whatever's
+    // left of `vehicle.maxForce` each frame (this behaviour's own force
+    // stays well under that cap here) and their own randomness is what
+    // eventually nudges the fish enough off-centre to break the symmetry
+    // and let the horizontal pushes actually diverge again.
     for (const box of CASTLE_COLLIDER_BOXES) {
       const boxCenter = {
         x: CASTLE_POSITION.x + box.position.x,

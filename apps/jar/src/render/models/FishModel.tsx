@@ -230,6 +230,13 @@ export function FishModel({
   // `advanceTailPhase`'s doc comment for why this has to accumulate rather
   // than derive from absolute clock time.
   const phaseRef = useRef(phaseSeed);
+  // The body bob's own accumulated phase, advanced at half `phaseRef`'s
+  // frequency — kept as a *separate* accumulator rather than derived by
+  // halving `phaseRef`'s already-wrapped value: `phaseRef` wraps at 2π, so
+  // `phaseRef.current * 0.5` would only ever sweep [0, π) before snapping
+  // back to 0, i.e. only the positive half of a sine, restarting once per
+  // tail cycle instead of oscillating smoothly once per two.
+  const bobPhaseRef = useRef(phaseSeed * 0.5);
   const prevDirection = useRef(new THREE.Vector3(0, 0, 1));
   // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
   // window only samples a few times a second, so a genuine one/two-frame
@@ -487,6 +494,8 @@ export function FishModel({
     const amplitude = workingAmplitudeRef.current;
     phaseRef.current = advanceTailPhase(phaseRef.current, frequency, delta);
     const phase = phaseRef.current;
+    bobPhaseRef.current = advanceTailPhase(bobPhaseRef.current, frequency * 0.5, delta);
+    const bobPhase = bobPhaseRef.current;
 
     peakTurnRateRef.current = Math.max(turnRate, peakTurnRateRef.current * Math.exp(-5 * delta));
     onDebugFrame?.({
@@ -553,15 +562,14 @@ export function FishModel({
     // and with no bone rig to distribute that into a real swimming
     // undulation, a fast bank/bob with little real motion under it reads as
     // the whole fish vibrating in place rather than swimming hard. Bob is
-    // derived from the same accumulated `phase` as the tail beat (at half
-    // rate, one bob per two tail beats) rather than absolute clock time, for
-    // the same reason `advanceTailPhase` exists: a `frequency`-scaled
-    // elapsed-time term drifts further out of sync with the tail the longer
-    // a fish lives.
+    // driven by `bobPhaseRef`'s own half-frequency accumulator (see its
+    // declaration) rather than absolute clock time, for the same reason
+    // `advanceTailPhase` exists: a `frequency`-scaled elapsed-time term
+    // drifts further out of sync with the tail the longer a fish lives.
     const swayIntensity = THREE.MathUtils.lerp(0.3, 1, excite);
     if (rootRef.current) {
       rootRef.current.rotation.z = Math.sin(phase) * BODY_BANK_AMPLITUDE * swayIntensity;
-      rootRef.current.position.y = Math.sin(phase * 0.5) * BODY_BOB_AMPLITUDE * swayIntensity;
+      rootRef.current.position.y = Math.sin(bobPhase) * BODY_BOB_AMPLITUDE * swayIntensity;
     }
   });
 
