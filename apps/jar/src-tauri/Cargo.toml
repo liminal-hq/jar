@@ -16,6 +16,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+# Stores the save/settings snapshot beside the executable instead of the OS
+# app-data directory, for the no-install Windows distribution.
+portable = ["tauri-plugin-jar/portable"]
+
 [dependencies]
 tauri = { workspace = true, features = ["tray-icon"] }
 tauri-plugin-jar = { path = "../../../plugins/tauri-plugin-jar" }

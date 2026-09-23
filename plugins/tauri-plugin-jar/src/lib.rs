@@ -63,6 +63,26 @@ impl JarPlugin {
     }
 }
 
+// Portable builds keep the snapshot beside the executable (in a `data/`
+// subfolder) rather than the OS app-data directory, so moving the folder
+// moves the save with it. Tauri's `app_data_dir()` has no override hook for
+// this — it resolves via a direct OS known-folder call, not an
+// environment variable — so this is a separate code path, not a config
+// toggle.
+#[cfg(feature = "portable")]
+fn snapshot_path<R: Runtime>(
+    _app: &AppHandle<R>,
+) -> std::result::Result<std::path::PathBuf, Error> {
+    let exe_dir = std::env::current_exe()?
+        .parent()
+        .ok_or_else(|| Error::Io(std::io::Error::other("executable has no parent directory")))?
+        .to_path_buf();
+    let dir = exe_dir.join("data");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(SNAPSHOT_FILE_NAME))
+}
+
+#[cfg(not(feature = "portable"))]
 fn snapshot_path<R: Runtime>(app: &AppHandle<R>) -> std::result::Result<std::path::PathBuf, Error> {
     let dir = app
         .path()

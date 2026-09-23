@@ -327,6 +327,76 @@ jobs:
           path: release-assets/windows/**
           if-no-files-found: error
 
+  # Sibling of build-windows, not chained after it (needs: prepare-release
+  # only) so both run in parallel. No installer: jar.exe and
+  # WebView2Loader.dll go into a zip as-is, and the portable Cargo feature
+  # (see plugins/tauri-plugin-jar) makes the app store its snapshot beside
+  # itself instead of the OS app-data directory.
+  build-windows-portable:
+    name: Build Windows portable bundle
+    needs: prepare-release
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+            artefact_name: windows-release-assets-x64-portable
+          - runner: windows-11-arm
+            arch: arm64
+            artefact_name: windows-release-assets-arm64-portable
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare-release.outputs.checkout_ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check release version synchronisation
+        run: bun run release:version:check
+
+      - name: Build portable Windows binary
+        run: bun run tauri build --no-bundle --features portable
+
+      - name: Package portable zip
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.release_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+
+          release_dir="release-assets/windows-portable"
+          mkdir -p "${release_dir}"
+
+          exe="target/release/jar.exe"
+          dll="target/release/WebView2Loader.dll"
+          for f in "${exe}" "${dll}"; do
+            if [[ ! -f "${f}" ]]; then
+              echo "Expected build output not found: ${f}" >&2
+              exit 1
+            fi
+          done
+
+          zip_name="Jar_${RELEASE_VERSION}_${ARCH}-portable.zip"
+          7z a "${release_dir}/${zip_name}" "${exe}" "${dll}"
+
+      - name: Upload staged release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artefact_name }}
+          path: release-assets/windows-portable/**
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release assets
     needs:
@@ -334,6 +404,7 @@ jobs:
       - build-linux
       - package-appimage
       - build-windows
+      - build-windows-portable
     runs-on: ubuntu-24.04
     steps:
       - name: Download Linux release assets
