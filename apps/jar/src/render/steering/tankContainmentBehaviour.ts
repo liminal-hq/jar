@@ -19,7 +19,12 @@ import { TANK_INNER_BOUNDS } from '../physics/coordinates';
  * fish committed to wandering straight at the glass would still win. */
 const STRENGTH = 4;
 
-function pushAxis(position: number, bound: number, margin: number, strength: number): number {
+export function pushAxis(
+  position: number,
+  bound: number,
+  margin: number,
+  strength: number,
+): number {
   const innerEdge = bound - margin;
   if (position > innerEdge) {
     const penetration = Math.min(position - innerEdge, margin);
@@ -32,7 +37,19 @@ function pushAxis(position: number, bound: number, margin: number, strength: num
   return 0;
 }
 
+/** How much of the dominant push's own magnitude gets mirrored sideways as
+ * the tangential nudge below — small enough to leave wall-avoidance itself
+ * clearly dominant, large enough to reliably break a square-on approach's
+ * exact symmetry within a handful of frames. Tune by eye. */
+const TANGENT_FRACTION = 0.2;
+
 export class TankContainmentBehaviour extends YUKA.SteeringBehavior {
+  /** A fixed per-fish left/right bias, rolled once at construction rather
+   * than per frame — this is what makes the tangential nudge below a
+   * consistent turn instead of a frame-to-frame flicker with no net
+   * effect. */
+  private readonly handedness: number;
+
   /** How far from a wall the push starts — the caller (`useFishSteering.ts`)
    * derives this from the specific fish's own collider radius plus a
    * buffer, so the turn happens before the body itself is ever close
@@ -42,12 +59,30 @@ export class TankContainmentBehaviour extends YUKA.SteeringBehavior {
    * to prevent happen anyway. */
   constructor(private readonly margin: number) {
     super();
+    this.handedness = Math.random() < 0.5 ? 1 : -1;
   }
 
   calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
-    force.x = pushAxis(vehicle.position.x, TANK_INNER_BOUNDS.x, this.margin, STRENGTH);
-    force.y = pushAxis(vehicle.position.y, TANK_INNER_BOUNDS.y, this.margin, STRENGTH);
-    force.z = pushAxis(vehicle.position.z, TANK_INNER_BOUNDS.z, this.margin, STRENGTH);
+    const pushX = pushAxis(vehicle.position.x, TANK_INNER_BOUNDS.x, this.margin, STRENGTH);
+    const pushY = pushAxis(vehicle.position.y, TANK_INNER_BOUNDS.y, this.margin, STRENGTH);
+    const pushZ = pushAxis(vehicle.position.z, TANK_INNER_BOUNDS.z, this.margin, STRENGTH);
+
+    // A fish approaching a wall square-on (centred on the tank's other two
+    // axes) gets a push that's purely antiparallel to its own heading —
+    // nothing to turn it aside. WanderBehavior is the usual source of that
+    // turn, but Yuka's steering budget (SteeringManager._accumulate) stops
+    // adding anything once the running force magnitude reaches
+    // vehicle.maxForce, and this behaviour's own STRENGTH is deliberately
+    // set to reach that cap alone at full penetration — so wander can get
+    // zero contribution at exactly the moment a fish most needs it to turn
+    // away. Mirroring each axis's push onto a *different* axis (cyclically:
+    // Z's push nudges X, X's push nudges Y, Y's push nudges Z) adds a
+    // perpendicular component to the force by construction, breaking a
+    // square-on approach's symmetry directly rather than depending on
+    // wander ever getting a turn.
+    force.x = pushX + this.handedness * Math.abs(pushZ) * TANGENT_FRACTION;
+    force.y = pushY + this.handedness * Math.abs(pushX) * TANGENT_FRACTION;
+    force.z = pushZ + this.handedness * Math.abs(pushY) * TANGENT_FRACTION;
     return force;
   }
 }
