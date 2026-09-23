@@ -31,7 +31,12 @@ read_json_version() {
     local file_path="$1"
     local version
 
-    version="$(jq -r '.version // empty' "$file_path")"
+    # Avoids a jq dependency -- these are Prettier-formatted files with a
+    # single "version" key per line, so a line-oriented match is reliable
+    # and keeps this script runnable with nothing beyond bash/sed/grep,
+    # which matters on runners (the tauri-ci-desktop container, Windows)
+    # that don't have jq preinstalled.
+    version="$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file_path" | head -n 1)"
     [[ -n "$version" ]] || fail "Could not read a version from ${file_path#${REPO_ROOT}/}"
 
     printf '%s' "$version"

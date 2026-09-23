@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "validate": "bun run format:check && bun run test:js && bun run build && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && bun run test:rust",
-    "release:version:check": "./scripts/check-release-versions.sh"
+    "release:version:check": "bash ./scripts/check-release-versions.sh"
   },
   "devDependencies": {
     "jsdom": "^25.0.0",
