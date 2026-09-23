@@ -43,6 +43,9 @@
     "license": "Apache-2.0 OR MIT",
     "category": "Entertainment",
     "shortDescription": "A tiny floating desktop aquarium",
-    "longDescription": "A floating desktop aquarium with a few auto-named fish who live, sleep, breed, age and pass on in real time. No goals, no win state — just something calm to glance at while it runs."
+    "longDescription": "A floating desktop aquarium with a few auto-named fish who live, sleep, breed, age and pass on in real time. No goals, no win state — just something calm to glance at while it runs.",
+    "macOS": {
+      "signingIdentity": "-"
+    }
   }
 }

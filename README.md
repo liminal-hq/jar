@@ -16,6 +16,16 @@ A tiny simulation in a box. A floating desktop aquarium/terrarium with a few aut
 - Six tank frames (Bevelled 98, Wood stand, Brushed metal, Rounded glass, Neon/CRT, Cardboard cutout) crossed with six dialog themes (Modern, Modern dark, Classic 98, Paper notebook, Handheld LCD, Neon terminal).
 - The simulation keeps ticking while the tank window is hidden or minimized — a jar left running ages and breeds exactly as much as one you're watching.
 
+## Installing a release
+
+Releases aren't signed — no Apple Developer ID, no Windows code-signing certificate — so both platforms show a warning on first launch. Windows: click "More info" then "Run anyway" in the SmartScreen prompt. macOS: right-click → Open no longer bypasses Gatekeeper as of Sequoia (15) — the reliable fix is Terminal:
+
+```sh
+xattr -r -d com.apple.quarantine /Applications/Jar.app
+```
+
+Run that once after moving `Jar.app` to `/Applications` (or wherever it'll run from), then launch normally.
+
 ## Design
 
 The product design and behaviour were originally specified in a [Claude Design](https://claude.ai/design) prototype, kept for historical reference in [`docs/ui-mockups/`](docs/ui-mockups/) — that's a design concept, not a current screenshot of this app.

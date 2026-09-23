@@ -413,6 +413,58 @@ jobs:
           path: release-assets/windows-portable/**
           if-no-files-found: error
 
+  build-macos:
+    name: Build macOS release bundle
+    needs: prepare-release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare-release.outputs.checkout_ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check release version synchronisation
+        run: bun run release:version:check
+
+      - name: Build macOS universal bundle
+        run: bun run tauri build --target universal-apple-darwin --bundles dmg
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+
+          release_dir="release-assets/macos"
+          mkdir -p "${release_dir}"
+
+          mapfile -t bundle_files < <(find target/universal-apple-darwin/release/bundle -type f -name '*.dmg' | sort)
+          if [[ "${#bundle_files[@]}" -eq 0 ]]; then
+            echo "No macOS release artefacts found under target/universal-apple-darwin/release/bundle" >&2
+            exit 1
+          fi
+
+          for file in "${bundle_files[@]}"; do
+            cp "${file}" "${release_dir}/"
+          done
+
+      - name: Upload staged release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-release-assets-universal
+          path: release-assets/macos/**
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release assets
     needs:
@@ -421,6 +473,7 @@ jobs:
       - package-appimage
       - build-windows
       - build-windows-portable
+      - build-macos
     runs-on: ubuntu-24.04
     steps:
       - name: Download Linux release assets
@@ -444,6 +497,13 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Download macOS release assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: macos-release-assets-*
+          path: release-assets
+          merge-multiple: true
+
       - name: Tag each asset with its OS
         run: |
           set -euo pipefail
@@ -456,6 +516,7 @@ jobs:
             [exe]=Win
             [msi]=Win
             [zip]=Win
+            [dmg]=Mac
           )
 
           for file in *; do
