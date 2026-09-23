@@ -10,6 +10,11 @@ repository.workspace = true
 publish = false
 links = "tauri-plugin-jar"
 
+[features]
+# Stores the save/settings snapshot beside the executable instead of the OS
+# app-data directory, for the no-install Windows distribution.
+portable = []
+
 [dependencies]
 tauri = { workspace = true }
 serde = { workspace = true }
