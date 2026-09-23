@@ -3,7 +3,7 @@
 // `fishGeometry.ts`) stand in for the originally-envisioned rigged GLTF
 // pipeline, giving Jar's flat-vector-art identity a genuinely fish-shaped
 // model without needing a real asset pipeline or a bone rig — the body and
-// tail flex via a per-vertex traveling wave instead (`swimWave.ts`), not a
+// tail flex via a per-vertex travelling wave instead (`swimWave.ts`), not a
 // skeleton. Implements hue-via-material-color and the belly gradient
 // (§6.4), life-stage scale (§6.3), spot toggles, sex dimorphism (§6.7), and
 // the `fin` gene actually changing which tail mesh a fish gets.

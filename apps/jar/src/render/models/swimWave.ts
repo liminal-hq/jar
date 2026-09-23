@@ -1,6 +1,6 @@
 // The unified per-vertex "swim wave" deformer — one continuous per-vertex
 // bend spanning the body, dorsal fin, and all three tail types, so every
-// deforming part shares the same traveling wave rather than each getting
+// deforming part shares the same travelling wave rather than each getting
 // its own independent hinge or bend. See
 // `docs/architecture/3d-engine.md` §6.2/§6.6.
 //
@@ -26,7 +26,7 @@ export const FIN_SWIM_TIP_GAIN: Record<'Fan' | 'Forked' | 'Veil', number> = {
 export const SWIM_WAVE_ONSET_X = 45;
 
 /** Phase lag across the *entire* onset-to-tail-tip span. Too small and the
- * whole fish reads as flexing in lockstep rather than a wave traveling
+ * whole fish reads as flexing in lockstep rather than a wave travelling
  * from body to tail tip; too large and the tip visibly lags the beat
  * driving it. Tune by eye. */
 export const SWIM_WAVE_LAG = 2.2;
@@ -148,4 +148,9 @@ export function applySwimWave(
   }
   position.needsUpdate = true;
   geometry.computeVertexNormals();
+  // The bend can push vertices outside the bounding sphere three.js cached
+  // from the rest pose — left stale, that sphere still gates both frustum
+  // culling and `Raycaster`, so a swept tail could pop at a view boundary
+  // or silently miss fish-selection clicks.
+  geometry.computeBoundingSphere();
 }
