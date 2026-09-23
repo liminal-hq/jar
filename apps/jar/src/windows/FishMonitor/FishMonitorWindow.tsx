@@ -148,7 +148,12 @@ export function FishMonitorWindow() {
     // through React, so the unmount cleanup below never runs on that path —
     // `onCloseRequested` fires first regardless of how the window closes
     // (title bar, taskbar, OS shortcut), so it's the one reliable hook for
-    // this reset.
+    // this reset. `@tauri-apps/api`'s own `onCloseRequested` completes the
+    // close by calling `destroy()` once every listener returns without
+    // `preventDefault()` — needs `core:window:allow-destroy`
+    // (`capabilities/default.json`), or that final `destroy()` silently
+    // fails and this fires the reset on every close attempt without the
+    // window ever actually closing.
     const unlistenClose = getCurrentWindow().onCloseRequested(() => {
       resetOnClose();
     });

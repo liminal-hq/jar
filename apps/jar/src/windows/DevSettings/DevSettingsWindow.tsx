@@ -143,6 +143,12 @@ export function DevSettingsWindow() {
     // (`TitleBar.tsx`'s `close`, `appWindow.close()`) rather than going
     // through React, so the unmount cleanup below never runs on that path —
     // `onCloseRequested` fires first regardless of how the window closes.
+    // `@tauri-apps/api`'s own `onCloseRequested` completes the close by
+    // calling `destroy()` once every listener returns without
+    // `preventDefault()` — needs `core:window:allow-destroy`
+    // (`capabilities/default.json`), or that final `destroy()` silently
+    // fails and this fires the reset on every close attempt without the
+    // window ever actually closing.
     const unlistenClose = getCurrentWindow().onCloseRequested(() => {
       resetOnClose();
     });
