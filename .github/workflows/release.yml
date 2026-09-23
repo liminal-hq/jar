@@ -379,13 +379,21 @@ jobs:
           mkdir -p "${release_dir}"
 
           exe="target/release/jar.exe"
-          dll="target/release/WebView2Loader.dll"
-          for f in "${exe}" "${dll}"; do
-            if [[ ! -f "${f}" ]]; then
-              echo "Expected build output not found: ${f}" >&2
-              exit 1
-            fi
-          done
+          if [[ ! -f "${exe}" ]]; then
+            echo "Expected build output not found: ${exe}" >&2
+            exit 1
+          fi
+
+          # webview2-com-sys's build script copies WebView2Loader.dll into
+          # its own OUT_DIR/<arch>/, never into target/release/ directly --
+          # that only happens as a side effect of NSIS/WiX bundling, which
+          # --no-bundle skips entirely.
+          mapfile -t dll_matches < <(find target/release/build -path "*/webview2-com-sys-*/out/${ARCH}/WebView2Loader.dll")
+          if [[ "${#dll_matches[@]}" -ne 1 ]]; then
+            echo "Expected exactly one WebView2Loader.dll under target/release/build/webview2-com-sys-*/out/${ARCH}/, found ${#dll_matches[@]}" >&2
+            exit 1
+          fi
+          dll="${dll_matches[0]}"
 
           zip_name="Jar_${RELEASE_VERSION}_${ARCH}-portable.zip"
           7z a "${release_dir}/${zip_name}" "${exe}" "${dll}"
