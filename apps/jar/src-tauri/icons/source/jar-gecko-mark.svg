@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<!-- Secondary/gecko-mode icon source, adopted from the Claude Design project's "4f Gecko
+     mark" (jar-gecko-mark.svg) — terrarium-mode twin of jar-fish-mark.svg, not currently
+     wired to anything (see icons/gecko/ for the generated set, and tauri.conf.json's
+     bundle.icon for the official fish-mark set actually in use). Regenerate with:
+       bun run --cwd apps/jar tauri icon path/to/jar-gecko-mark.svg -o src-tauri/icons/gecko -->
+<defs><linearGradient id="g" x1="100" y1="420" x2="412" y2="100" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5D3147"/><stop offset=".55" stop-color="#CF5D22"/><stop offset="1" stop-color="#F19B18"/></linearGradient></defs>
+<rect width="512" height="512" rx="112" fill="#0A0A0D"/>
+<g fill="none" stroke="url(#g)" stroke-linecap="round" stroke-linejoin="round">
+<path d="M256 320 C256 400 332 424 360 372" stroke-width="34"/>
+<path d="M226 200 L180 184 L170 150 M286 200 L332 184 L342 150 M226 296 L180 314 L172 350 M286 296 L332 314 L340 350" stroke-width="22"/>
+</g>
+<ellipse cx="256" cy="252" rx="48" ry="88" fill="url(#g)"/>
+<ellipse cx="256" cy="142" rx="42" ry="46" fill="url(#g)"/>
+<circle cx="238" cy="130" r="9" fill="#F7E2BA"/>
+<circle cx="274" cy="130" r="9" fill="#F7E2BA"/>
+</svg>
