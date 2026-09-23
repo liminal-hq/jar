@@ -216,7 +216,7 @@ Since there's no bone chain (§6.2), the body, dorsal fin, and tail (whichever f
 
 `sex` (male/female, `SPEC.md` §5) is tracked by the sim and shown on the critter card, but the 2D prototype never gave it a visual form at all — nothing in `svg()` reads it. As shipped (`FishModel.tsx`):
 
-- **Fins:** males get `MALE_TAIL_SCALE = 1.2×` on the tail pivot's own scale (`fishGeometry.ts`, shared with `Fish.tsx`'s collider sizing — see §5.2); females stay at 1×. Only the tail scales, not the dorsal fin (the original spec's "tail and dorsal" was narrowed to tail-only during implementation).
+- **Fins:** males get `MALE_TAIL_SCALE = 1.2×`, baked directly into the tail's own geometry clone as a uniform scale about the hinge-centred origin (`fishGeometry.ts`'s `createTailGeometry` — there's no separate tail pivot group to scale now that the swim wave deforms the tail's vertices in place, §6.6), shared with `Fish.tsx`'s collider sizing — see §5.2; females stay at 1×. Only the tail scales, not the dorsal fin (the original spec's "tail and dorsal" was narrowed to tail-only during implementation).
 - **Saturation:** males render at `sat = 0.75`, females at `0.62`, both at the same `hue` — a larger split than the original spec's "a few percentage points," landing on it by eye once real fish were on screen rather than deriving it on paper.
 - Both are fixed constants applied once at spawn alongside the `fin`/`spots` visual setup (§6.5) — no runtime cost, no interaction with steering or animation.
 - Explicitly **not** doing: a separate body shape, a separate rig, or any behavioral difference — `sex` affects breeding eligibility (`SPEC.md` §5) and this one visual pass, nothing else.
