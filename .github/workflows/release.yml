@@ -395,8 +395,16 @@ jobs:
           fi
           dll="${dll_matches[0]}"
 
+          # Stage as flat filenames before zipping -- 7z stores files under
+          # whatever path is given on the command line, and both source
+          # paths above are several directories deep.
+          release_dir_abs="$(pwd)/${release_dir}"
+          staging_dir="$(mktemp -d)"
+          cp "${exe}" "${staging_dir}/jar.exe"
+          cp "${dll}" "${staging_dir}/WebView2Loader.dll"
+
           zip_name="Jar_${RELEASE_VERSION}_${ARCH}-portable.zip"
-          7z a "${release_dir}/${zip_name}" "${exe}" "${dll}"
+          (cd "${staging_dir}" && 7z a "${release_dir_abs}/${zip_name}" jar.exe WebView2Loader.dll)
 
       - name: Upload staged release assets
         uses: actions/upload-artifact@v7
@@ -435,6 +443,36 @@ jobs:
           pattern: windows-release-assets-*
           path: release-assets
           merge-multiple: true
+
+      - name: Tag each asset with its OS
+        run: |
+          set -euo pipefail
+          cd release-assets
+
+          declare -A os_by_ext=(
+            [deb]=Linux
+            [rpm]=Linux
+            [AppImage]=Linux
+            [exe]=Win
+            [msi]=Win
+            [zip]=Win
+          )
+
+          for file in *; do
+            ext="${file##*.}"
+            os="${os_by_ext[$ext]:-}"
+            if [[ -z "${os}" ]]; then
+              echo "No OS mapping for '${file}' (extension '${ext}') -- leaving as-is" >&2
+              continue
+            fi
+            if [[ "${file}" =~ ^Jar([_-])(.*)$ ]]; then
+              sep="${BASH_REMATCH[1]}"
+              rest="${BASH_REMATCH[2]}"
+              mv "${file}" "Jar${sep}${os}${sep}${rest}"
+            else
+              echo "'${file}' doesn't start with Jar<separator> -- leaving as-is" >&2
+            fi
+          done
 
       - name: Compute checksums
         run: |
