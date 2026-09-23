@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-jar"
-version = "0.1.0"
+version = "0.1.1"
 description = "Native adapter running jar-core's simulation loop in the Jar desktop app — background tick loop, event push, autosave"
 edition.workspace = true
 authors.workspace = true
