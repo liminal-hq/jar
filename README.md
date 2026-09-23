@@ -18,13 +18,15 @@ A tiny simulation in a box. A floating desktop aquarium/terrarium with a few aut
 
 ## Installing a release
 
-Releases aren't signed — no Apple Developer ID, no Windows code-signing certificate — so both platforms show a warning on first launch. Windows: click "More info" then "Run anyway" in the SmartScreen prompt. macOS: right-click → Open no longer bypasses Gatekeeper as of Sequoia (15) — the reliable fix is Terminal:
+Releases aren't signed (no Apple Developer ID, no Windows code-signing certificate), so both platforms warn on first launch.
+
+**Windows:** click "More info," then "Run anyway" in the SmartScreen prompt.
+
+**macOS:** right-click → Open no longer bypasses Gatekeeper as of Sequoia (15). After moving `Jar.app` to `/Applications` (or wherever it'll run from), run this once in Terminal, then launch normally:
 
 ```sh
 xattr -r -d com.apple.quarantine /Applications/Jar.app
 ```
-
-Run that once after moving `Jar.app` to `/Applications` (or wherever it'll run from), then launch normally.
 
 ## Design
 
