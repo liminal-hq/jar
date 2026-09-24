@@ -136,10 +136,26 @@ export function TankWindow() {
   // (selecting a critter — see `Fish.tsx`'s own `onClick`).
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const DRAG_THRESHOLD_PX = 4;
+  // Shows a move cursor for as long as this component can actually
+  // control the cursor — from the initial press until the threshold is
+  // crossed and control hands off to `startDragging()`'s native
+  // interactive move. That hand-off is the real reason this doesn't just
+  // track "is a drag in progress" for its whole duration: once the OS
+  // takes over, GTK/the window manager grabs the pointer for the rest of
+  // the gesture (see the comment below on why an unconditional
+  // `startDragging()` broke plain clicks) — normal DOM events, including
+  // the `mouseup` that ends it, aren't reliably delivered back to this
+  // window, and the release can land anywhere on screen, not necessarily
+  // back over the tank. Desktop window managers already show their own
+  // move cursor for that native phase, the same as dragging any other
+  // window by its title bar, so there's nothing left for this component
+  // to do once it hands off.
+  const [dragging, setDragging] = useState(false);
 
   const handleTankMouseDown = (e: ReactMouseEvent) => {
     if (e.buttons !== 1) return;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
+    setDragging(true);
     const handleMove = (moveEvent: MouseEvent) => {
       const start = dragStartRef.current;
       if (!start) return;
@@ -148,10 +164,12 @@ export function TankWindow() {
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
       dragStartRef.current = null;
       cleanup();
+      setDragging(false);
       void getCurrentWindow().startDragging();
     };
     const handleUp = () => {
       dragStartRef.current = null;
+      setDragging(false);
       cleanup();
     };
     const cleanup = () => {
@@ -195,6 +213,7 @@ export function TankWindow() {
       <PilotCaptureBridge />
       <div
         className={styles.tankInterior}
+        style={dragging ? { cursor: 'move' } : undefined}
         onContextMenu={handleTankContextMenu}
         onMouseDown={handleTankMouseDown}
         data-tauri-drag-region
