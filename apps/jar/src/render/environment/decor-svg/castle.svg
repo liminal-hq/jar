@@ -5,12 +5,13 @@
        `CASTLE_TOWER_OFFSET`), not baked in here. Fills are placeholders:
        colour is applied at runtime via material.
 
-       Proportioned flatter and wider than a real castle would be — the
-       door has to clear a fish's own collider (up to ~1.45 world units
-       across, `Fish.tsx`'s `colliderRadiusFor`), which forced the whole
-       keep wider than the tank's height can comfortably fit at a
-       realistic tall-castle aspect ratio; see `decorLayout.ts`'s header
-       comment for the actual world-unit sizing this maps to.
+       Proportioned flatter and wider than a real castle would be — a
+       fish's own *length* reaches up to ~1.45 world units tip-to-tail
+       (`fishCollider.ts`'s `adultColliderHalfExtentsFor`), which the door
+       needs enough clearance to read as fish-sized against, and which
+       forced the whole keep wider than the tank's height can comfortably
+       fit at a realistic tall-castle aspect ratio; see `decorLayout.ts`'s
+       header comment for the actual world-unit sizing this maps to.
 
        `keep-body` is a compound path: the keep's own rounded-rectangle
        outline, then the arched doorway traced with the *opposite* winding

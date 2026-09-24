@@ -1,4 +1,8 @@
-// Tests for pushFromBox's gating, direction, and graded magnitude.
+// Tests for pushFromBox's gating, direction, and graded magnitude (now
+// per-axis), and for CastleAvoidanceBehaviour's yaw-aware anisotropic
+// margins — including the property that replaced the old doorway
+// exemption mechanism: a nose-on fish's live margin never reaches a
+// flanking wall from the doorway's centreline, so no fish stalls there.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -6,12 +10,19 @@
 import { describe, expect, it } from 'vitest';
 import * as YUKA from 'yuka';
 
-import { CASTLE_POSITION } from '../environment/decorLayout';
+import {
+  CASTLE_KEEP_HALF_WIDTH,
+  CASTLE_POSITION,
+  CASTLE_TOWER_HALF_WIDTH,
+  CASTLE_TOWER_HEIGHT,
+  CASTLE_TOWER_OFFSET,
+} from '../environment/decorLayout';
+import type { ColliderHalfExtents } from '../tank/fishCollider';
 import { CastleAvoidanceBehaviour, pushFromBox } from './castleAvoidanceBehaviour';
 
 const BOX_CENTRE = { x: 1, y: 0.5, z: -0.5 };
 const HALF_EXTENTS = { x: 0.3, y: 0.9, z: 0.3 };
-const MARGIN = 0.5;
+const MARGIN = { x: 0.5, y: 0.5, z: 0.5 };
 const STRENGTH = 4;
 
 describe('pushFromBox', () => {
@@ -27,7 +38,7 @@ describe('pushFromBox', () => {
 
   it('is zero just past the margin, on every axis', () => {
     const justPastX = {
-      x: BOX_CENTRE.x + HALF_EXTENTS.x + MARGIN + 0.01,
+      x: BOX_CENTRE.x + HALF_EXTENTS.x + MARGIN.x + 0.01,
       y: BOX_CENTRE.y,
       z: BOX_CENTRE.z,
     };
@@ -64,7 +75,7 @@ describe('pushFromBox', () => {
 
   it('ramps from 0 at the margin boundary to full strength at the real surface', () => {
     const atMarginEdge = {
-      x: BOX_CENTRE.x + HALF_EXTENTS.x + MARGIN,
+      x: BOX_CENTRE.x + HALF_EXTENTS.x + MARGIN.x,
       y: BOX_CENTRE.y,
       z: BOX_CENTRE.z,
     };
@@ -99,19 +110,75 @@ describe('pushFromBox', () => {
     expect(push.x).toBe(0);
     expect(push.y).toBe(0);
   });
+
+  describe('anisotropic margins', () => {
+    it('gates per axis independently — a tight margin on one axis can exclude a point a looser one would include', () => {
+      const nearXFace = {
+        x: BOX_CENTRE.x + HALF_EXTENTS.x + 0.25,
+        y: BOX_CENTRE.y,
+        z: BOX_CENTRE.z,
+      };
+      const looseX = { x: 0.5, y: 0.5, z: 0.5 };
+      const tightX = { x: 0.2, y: 0.5, z: 0.5 };
+      expect(pushFromBox(nearXFace, BOX_CENTRE, HALF_EXTENTS, looseX, STRENGTH).x).toBeGreaterThan(
+        0,
+      );
+      expect(pushFromBox(nearXFace, BOX_CENTRE, HALF_EXTENTS, tightX, STRENGTH)).toEqual({
+        x: 0,
+        y: 0,
+        z: 0,
+      });
+    });
+
+    it('picks the nearest face by fractional depth, not raw distance, once margins differ', () => {
+      // Fractionally deep in x (small margin, close to its own surface) but
+      // only shallow in z despite a larger raw gap (huge margin there) —
+      // without normalizing by each axis's own margin, the bigger raw z
+      // penetration would wrongly win.
+      const point = {
+        x: BOX_CENTRE.x + HALF_EXTENTS.x + 0.05, // 0.05 into a 0.2 x-margin: 75% depth
+        y: BOX_CENTRE.y,
+        z: BOX_CENTRE.z + HALF_EXTENTS.z + 1, // 1 into a 5 z-margin: 80% depth... see below
+      };
+      const margin = { x: 0.2, y: 0.5, z: 5 };
+      const push = pushFromBox(point, BOX_CENTRE, HALF_EXTENTS, margin, STRENGTH);
+      // x fractional depth = (0.2-0.05)/0.2 = 0.75; z fractional depth =
+      // (5-1)/5 = 0.8 — x is still the nearest face by fractional depth.
+      expect(push.x).toBeGreaterThan(0);
+      expect(push.z).toBe(0);
+    });
+
+    it('still reaches exactly strength at a real surface regardless of that axis margin', () => {
+      const atSurfaceSmallMargin = {
+        x: BOX_CENTRE.x + HALF_EXTENTS.x,
+        y: BOX_CENTRE.y,
+        z: BOX_CENTRE.z,
+      };
+      const push = pushFromBox(
+        atSurfaceSmallMargin,
+        BOX_CENTRE,
+        HALF_EXTENTS,
+        { x: 0.05, y: 5, z: 5 },
+        STRENGTH,
+      );
+      expect(push.x).toBeCloseTo(STRENGTH, 5);
+    });
+  });
 });
 
 describe('CastleAvoidanceBehaviour', () => {
-  it('produces zero force for a fish centred in the doorway, despite overlapping wall margins', () => {
-    // A margin big enough that the flanking wall segments' expanded zones
-    // would otherwise overlap past the doorway's own centre (the exact bug
-    // this exemption exists to prevent) — see CASTLE_DOORWAY_CORRIDOR's
-    // comment for the arithmetic.
-    const bigFishMargin = 0.9;
-    const colliderRadius = 0.3;
-    const behaviour = new CastleAvoidanceBehaviour(bigFishMargin, () => colliderRadius);
+  // The worst case the old doorway exemption could never fully serve —
+  // still just a regular fish here, no special-casing needed.
+  const MALE_VEIL: ColliderHalfExtents = { x: 0.12, y: 0.312, z: 0.725 };
+  const BUFFER = 0.1;
+  // Below the door/lintel's own margin band — a fish actually swimming
+  // through the opening, not testing lintel avoidance.
+  const DOOR_LEVEL_Y = CASTLE_POSITION.y + 0.2;
+
+  it('produces near-zero force for a nose-on fish centred in the doorway (the old exemption is no longer needed)', () => {
+    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
     const vehicle = new YUKA.Vehicle();
-    vehicle.position.set(CASTLE_POSITION.x, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
+    vehicle.position.set(CASTLE_POSITION.x, DOOR_LEVEL_Y, CASTLE_POSITION.z);
     const force = new YUKA.Vector3(1, 1, 1); // non-zero, to prove calculate() resets it
 
     behaviour.calculate(vehicle, force);
@@ -121,13 +188,28 @@ describe('CastleAvoidanceBehaviour', () => {
     expect(force.z).toBe(0);
   });
 
-  it('still pushes a large fish away from a tower, well outside the doorway corridor', () => {
-    const bigFishMargin = 0.9;
-    const colliderRadius = 0.3;
-    const behaviour = new CastleAvoidanceBehaviour(bigFishMargin, () => colliderRadius);
+  it('produces real repulsion for the same position and fish, broadside instead of nose-on', () => {
+    // Not the exact doorway centreline (`CASTLE_POSITION.x`) — the two
+    // flanking walls' pushes cancel there by symmetry regardless of yaw
+    // (the same corner-cancellation `tankContainmentBehaviour.ts`'s own
+    // tests already document), which would make this test pass or fail
+    // for the wrong reason. A slight offset breaks that symmetry.
+    const offCentreX = CASTLE_POSITION.x + 0.1;
+    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI / 2);
+    const vehicle = new YUKA.Vehicle();
+    vehicle.position.set(offCentreX, DOOR_LEVEL_Y, CASTLE_POSITION.z);
+    const force = new YUKA.Vector3();
+
+    behaviour.calculate(vehicle, force);
+
+    expect(force.length()).toBeGreaterThan(0);
+  });
+
+  it('still pushes a large fish away from a tower, well outside the doorway', () => {
+    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
     const vehicle = new YUKA.Vehicle();
     // Just past a tower's real surface, same x as the tower itself.
-    vehicle.position.set(CASTLE_POSITION.x + 1.8, CASTLE_POSITION.y + 0.4, CASTLE_POSITION.z);
+    vehicle.position.set(CASTLE_POSITION.x + CASTLE_TOWER_OFFSET, DOOR_LEVEL_Y, CASTLE_POSITION.z);
     const force = new YUKA.Vector3();
 
     behaviour.calculate(vehicle, force);
@@ -135,84 +217,58 @@ describe('CastleAvoidanceBehaviour', () => {
     expect(force.length()).toBeGreaterThan(0);
   });
 
-  it('does not exempt an off-centre position whose collider would still reach the flanking wall', () => {
-    // Doorway half-width is 0.65; a 0.5-radius collider shrinks the
-    // exemption to ±0.15, so x=0.3 (inside the *raw* 0.65 corridor) must no
-    // longer be exempted — this is the actual regression: checking only the
-    // centre against the full doorway width let a fish's real body already
-    // clip the wall while avoidance sat fully off.
-    const margin = 0.9; // comfortably reaches the flanking wall from x=0.3
-    const colliderRadius = 0.5;
-    const behaviour = new CastleAvoidanceBehaviour(margin, () => colliderRadius);
-    const vehicle = new YUKA.Vehicle();
-    vehicle.position.set(CASTLE_POSITION.x + 0.3, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
-    const force = new YUKA.Vector3();
+  describe('the keep-to-tower gap', () => {
+    // Midpoint of the clear gap between the keep's own edge and the
+    // tower's inner face.
+    const gapX =
+      CASTLE_POSITION.x +
+      (CASTLE_KEEP_HALF_WIDTH + CASTLE_TOWER_OFFSET - CASTLE_TOWER_HALF_WIDTH) / 2;
+    const gapY = CASTLE_POSITION.y + CASTLE_TOWER_HEIGHT / 2;
 
-    behaviour.calculate(vehicle, force);
+    it('a nose-on fish dead-centre in the gap feels only a small net push (the keep wall and tower nearly cancel)', () => {
+      const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
+      const vehicle = new YUKA.Vehicle();
+      vehicle.position.set(gapX, gapY, CASTLE_POSITION.z);
+      const force = new YUKA.Vector3();
 
-    expect(force.length()).toBeGreaterThan(0);
+      behaviour.calculate(vehicle, force);
+
+      expect(force.length()).toBeLessThan(STRENGTH);
+    });
+
+    it('a nose-on fish nudged off-centre in the gap still stays well under full strength', () => {
+      // Off-centre enough to break the dead-centre cancellation above, but
+      // still deep inside the gap, not at either wall's real surface —
+      // demonstrates the push here is a gentle, graded correction (the
+      // fish can occupy this space), not a hard expulsion.
+      const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
+      const vehicle = new YUKA.Vehicle();
+      vehicle.position.set(gapX - 0.05, gapY, CASTLE_POSITION.z);
+      const force = new YUKA.Vector3();
+
+      behaviour.calculate(vehicle, force);
+
+      expect(force.length()).toBeGreaterThan(0);
+      expect(force.length()).toBeLessThan(STRENGTH);
+    });
   });
 
-  it('still exempts the same off-centre position for a small enough fish', () => {
-    const margin = 0.3;
-    const colliderRadius = 0.1; // shrinks the corridor only to ±0.55 — 0.3 stays inside
-    const behaviour = new CastleAvoidanceBehaviour(margin, () => colliderRadius);
+  it('reads yaw live, per call — no reconstruction needed when a fish turns', () => {
+    // Off-centre, same reasoning as the doorway repulsion test above — the
+    // exact centreline cancels regardless of yaw.
+    const offCentreX = CASTLE_POSITION.x + 0.1;
+    let yaw = Math.PI; // nose-on: no push
+    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => yaw);
     const vehicle = new YUKA.Vehicle();
-    vehicle.position.set(CASTLE_POSITION.x + 0.3, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
-    const force = new YUKA.Vector3();
+    vehicle.position.set(offCentreX, DOOR_LEVEL_Y, CASTLE_POSITION.z);
 
-    behaviour.calculate(vehicle, force);
+    const first = new YUKA.Vector3();
+    behaviour.calculate(vehicle, first);
+    expect(first.length()).toBe(0);
 
-    expect(force.x).toBe(0);
-    expect(force.y).toBe(0);
-    expect(force.z).toBe(0);
-  });
-
-  it('never exempts a fish whose own collider radius exceeds the doorway half-width', () => {
-    // The single largest fin/sex combination doesn't fit the exemption at
-    // all, even dead-centre — the doorway was already sized knowing it
-    // wouldn't perfectly fit that one case (decorLayout.ts), so avoidance
-    // staying on here is the documented trade-off, not a regression.
-    const margin = 1.0;
-    const colliderRadius = 0.8; // exceeds CASTLE_DOOR_HALF_WIDTH (0.65)
-    const behaviour = new CastleAvoidanceBehaviour(margin, () => colliderRadius);
-    const vehicle = new YUKA.Vehicle();
-    vehicle.position.set(CASTLE_POSITION.x, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
-    const force = new YUKA.Vector3();
-
-    behaviour.calculate(vehicle, force);
-
-    expect(force.length()).toBeGreaterThan(0);
-  });
-
-  it('exempts a fry whose current collider is small, even though its adult-sized margin alone would not fit', () => {
-    // The regression: `margin` is always this fish's *eventual adult*
-    // radius plus a buffer (`useFishSteering.ts`) — for a still-growing
-    // fry that's comfortably larger than the doorway's own half-width
-    // (0.65), which would zero out the exemption if it were (wrongly)
-    // used to size the corridor too. The getter reports this fry's real,
-    // much smaller *current* radius instead, so the exemption still
-    // applies to the body that's actually there right now.
-    const adultMargin = 0.9; // exceeds CASTLE_DOOR_HALF_WIDTH on its own
-    const fryColliderRadius = 0.15;
-    let currentRadius = fryColliderRadius;
-    const behaviour = new CastleAvoidanceBehaviour(adultMargin, () => currentRadius);
-    const vehicle = new YUKA.Vehicle();
-    vehicle.position.set(CASTLE_POSITION.x, CASTLE_POSITION.y + 0.5, CASTLE_POSITION.z);
-
-    const forceAsFry = new YUKA.Vector3();
-    behaviour.calculate(vehicle, forceAsFry);
-    expect(forceAsFry.x).toBe(0);
-    expect(forceAsFry.y).toBe(0);
-    expect(forceAsFry.z).toBe(0);
-
-    // Once grown, the same behaviour instance (constructed once per fish,
-    // per `useFishSteering.ts`) picks up the larger adult radius on its
-    // own — the getter is read fresh every `calculate()` call, not cached
-    // at construction.
-    currentRadius = 0.8;
-    const forceAsAdult = new YUKA.Vector3();
-    behaviour.calculate(vehicle, forceAsAdult);
-    expect(forceAsAdult.length()).toBeGreaterThan(0);
+    yaw = Math.PI / 2; // broadside: real push
+    const second = new YUKA.Vector3();
+    behaviour.calculate(vehicle, second);
+    expect(second.length()).toBeGreaterThan(0);
   });
 });

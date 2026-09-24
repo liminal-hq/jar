@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as YUKA from 'yuka';
 
 import type { Personality } from '../../domain/protocol/generated/Personality';
+import type { ColliderHalfExtents } from '../tank/fishCollider';
 import { CastleAvoidanceBehaviour } from './castleAvoidanceBehaviour';
 import { ChasePursuitBehaviour } from './chasePursuitBehaviour';
 import { entityManager } from './entityManager';
@@ -45,16 +46,16 @@ const WANDER_DISTANCE = 1.6;
  * releases (`PILOTED_MAX_FORCE`, `manualPilotBehaviour.ts`). */
 export const MAX_STEERING_FORCE = 3;
 
-/** Extra room beyond a fish's own collider radius before the containment
- * push starts — not just enough to clear the glass at zero margin
- * remaining, but enough that the fish has room to actually complete the
- * turn away from the wall before its collider would reach it. Trimmed from
- * an original `0.2`, which (stacked on `maxColliderRadius` already being
- * sized to the tail tip, the model's single farthest point) kept every
- * fish turning away from the glass and the castle well before its actual
- * body silhouette was anywhere near either — a visibly empty buffer band
- * all the way around the tank. */
-const CONTAINMENT_BUFFER = 0.1;
+/** Extra room beyond a fish's own live, yaw-projected extent before the
+ * containment push starts — not just enough to clear the glass at zero
+ * margin remaining, but enough that the fish has room to actually complete
+ * the turn away from the wall before its collider would reach it. Trimmed
+ * from an original `0.2`, which (stacked on the projected extent already
+ * reaching the box's own real edge) kept every fish turning away from the
+ * glass and the castle well before its actual body silhouette was
+ * anywhere near either — a visibly empty buffer band all the way around
+ * the tank. */
+export const CONTAINMENT_BUFFER = 0.1;
 
 /** Same "room to actually turn away" rationale as `CONTAINMENT_BUFFER`,
  * applied to the separation floor below. */
@@ -65,8 +66,8 @@ export function useFishSteering(
   personality: Personality,
   livingPopulation: number,
   favouriteSpotWorld: YUKA.Vector3,
-  maxColliderRadius: number,
-  getColliderRadius: () => number,
+  adultHalfExtents: ColliderHalfExtents,
+  getYaw: () => number,
 ) {
   const params = useMemo(
     () => steeringParamsFor(personality, livingPopulation),
@@ -78,24 +79,27 @@ export function useFishSteering(
     vehicle.updateNeighborhood = true;
     // `neighborhoodRadius` is a *centre-to-centre* distance, so it can never
     // go below `physicalTouchDistance` — a fish's own two-body clearance
-    // (this radius, doubled, approximating "if the other fish is about my
-    // size") — or two `BallCollider`s are already deeply overlapping before
-    // either is even considered a neighbour, and `SeparationBehavior` never
-    // gets a chance to push them apart; Rapier's own hard collision
-    // response takes over instead (contact jitter, not a graceful
-    // turn-away). But that floor alone (a flat `+ SEPARATION_CLEARANCE_
-    // BUFFER`) swamps `params.separationRadius`'s whole personality range —
-    // Shy/Curious/Default all clamp to the exact same value for any
-    // ordinary adult collider size, silently erasing §4.1's documented
-    // trait differentiation. Applying personality as a *delta from
-    // baseline* on top of the physical floor instead keeps both true: the
-    // floor itself is never violated (Curious's negative delta can only
-    // shrink the buffer back down to zero, never past the physical
-    // minimum), while Shy's positive delta still visibly grows the radius,
-    // and Curious's negative one still visibly shrinks it relative to
-    // Default and Shy, just from a physically-safe baseline instead of an
-    // arbitrary one.
-    const physicalTouchDistance = maxColliderRadius * 2;
+    // (this fish's adult length half-extent, doubled, approximating "if the
+    // other fish is about my size") — or two colliders are already deeply
+    // overlapping before either is even considered a neighbour, and
+    // `SeparationBehavior` never gets a chance to push them apart; Rapier's
+    // own hard collision response takes over instead (contact jitter, not a
+    // graceful turn-away). Stays a plain scalar — Yuka's own neighbourhood
+    // check has no directional concept in its API, and this is the one
+    // place a fixed, length-based (worst-case) value is still required;
+    // everything else below reads a live, yaw-projected margin instead. But
+    // that floor alone (a flat `+ SEPARATION_CLEARANCE_BUFFER`) swamps
+    // `params.separationRadius`'s whole personality range — Shy/Curious/
+    // Default all clamp to the exact same value for any ordinary adult
+    // collider size, silently erasing §4.1's documented trait
+    // differentiation. Applying personality as a *delta from baseline* on
+    // top of the physical floor instead keeps both true: the floor itself
+    // is never violated (Curious's negative delta can only shrink the
+    // buffer back down to zero, never past the physical minimum), while
+    // Shy's positive delta still visibly grows the radius, and Curious's
+    // negative one still visibly shrinks it relative to Default and Shy,
+    // just from a physically-safe baseline instead of an arbitrary one.
+    const physicalTouchDistance = adultHalfExtents.z * 2;
     const separationTraitDelta = params.separationRadius - BASE_SEPARATION_RADIUS;
     vehicle.neighborhoodRadius = Math.max(
       physicalTouchDistance,
@@ -111,10 +115,11 @@ export function useFishSteering(
 
     const separation = new YUKA.SeparationBehavior();
     separation.weight = MODE_WEIGHTS.active.separation;
-    const containment = new TankContainmentBehaviour(maxColliderRadius + CONTAINMENT_BUFFER);
+    const containment = new TankContainmentBehaviour(adultHalfExtents, CONTAINMENT_BUFFER, getYaw);
     const castleAvoidance = new CastleAvoidanceBehaviour(
-      maxColliderRadius + CONTAINMENT_BUFFER,
-      getColliderRadius,
+      adultHalfExtents,
+      CONTAINMENT_BUFFER,
+      getYaw,
     );
 
     // Added after `containment` deliberately — Yuka's priority-budget
@@ -178,7 +183,7 @@ export function useFishSteering(
       arrive,
     };
     // Created once per mounted fish instance; personality/params/
-    // maxColliderRadius changes mid-life aren't expected (a critter's
+    // adultHalfExtents changes mid-life aren't expected (a critter's
     // personality/fin/sex never change after spawn per SPEC.md §5), so this
     // intentionally doesn't react to any of them changing.
     // eslint-disable-next-line react-hooks/exhaustive-deps

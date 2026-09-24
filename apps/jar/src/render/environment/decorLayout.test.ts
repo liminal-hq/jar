@@ -138,7 +138,7 @@ function isOutsideEveryColliderBox(
 }
 
 describe('keepClearOfCastle', () => {
-  const MARGIN = 0.3; // a plausible fish collider radius (Fish.tsx's colliderRadiusFor runs 0.46-0.72)
+  const MARGIN = 0.3; // a plausible fish collider length (fishCollider.ts's adultColliderHalfExtentsFor(...).z runs 0.46-0.72)
 
   it('leaves a point that is already clear of every box, well inside the tank, untouched', () => {
     const clear = { x: -2, y: 0, z: 0 };
@@ -214,5 +214,12 @@ describe('keepClearOfCastle', () => {
     expect(Math.abs(pushed.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x - margin + 1e-9);
     expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - margin + 1e-9);
     expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - margin + 1e-9);
+  });
+});
+
+describe('the keep-to-tower gap', () => {
+  it('stays wide enough for the flattest fish collider to fit through (fishCollider.test.ts pins the fish side of this)', () => {
+    const gap = CASTLE_TOWER_OFFSET - CASTLE_TOWER_HALF_WIDTH - CASTLE_KEEP_HALF_WIDTH;
+    expect(gap).toBeCloseTo(0.325, 5);
   });
 });

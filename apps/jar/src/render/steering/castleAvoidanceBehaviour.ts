@@ -13,91 +13,85 @@
 
 import * as YUKA from 'yuka';
 
+import { CASTLE_COLLIDER_BOXES, CASTLE_POSITION } from '../environment/decorLayout';
 import {
-  CASTLE_COLLIDER_BOXES,
-  CASTLE_DOORWAY_CORRIDOR,
-  CASTLE_POSITION,
-} from '../environment/decorLayout';
+  verticalExtent,
+  worldExtentX,
+  worldExtentZ,
+  type ColliderHalfExtents,
+} from '../tank/fishCollider';
 
 /** Same rationale as `TankContainmentBehaviour`'s own `STRENGTH` — has to
  * be able to out-vote `WanderBehavior`'s clamped force
  * (`vehicle.maxForce = 3`, `useFishSteering.ts`) at full penetration. */
 const STRENGTH = 4;
 
-/** A single box's push on a point within `margin` of it, or a zero vector
- * if the point isn't within `margin` on *every* axis — checking axes
- * independently (as `tankContainmentBehaviour.ts`'s `pushAxis` does for
- * the tank's infinite walls) would wrongly push a point that merely shares
- * this box's height or depth from clear across the tank. Once genuinely
- * near the box, the push goes out along whichever axis is closest to the
- * box's real surface (the shortest way clear) — the same "nearest face"
- * idea `decorLayout.ts`'s `keepClearOfCastle` uses for a one-off point
- * correction, applied here as a continuous, smoothly-graded force (0 at
- * `margin` out from the surface, `strength` right at it) instead of a
- * discrete snap. */
+/** A single box's push on a point within `margin` of it (now per-axis, not
+ * a shared scalar — see `CastleAvoidanceBehaviour.calculate`'s own comment
+ * for why), or a zero vector if the point isn't within margin on *every*
+ * axis — checking axes independently (as `tankContainmentBehaviour.ts`'s
+ * `pushAxis` does for the tank's infinite walls) would wrongly push a
+ * point that merely shares this box's height or depth from clear across
+ * the tank. Once genuinely near the box, the push goes out along whichever
+ * axis is closest to the box's real surface, using each axis's own
+ * *fractional* depth (0 at that axis's own margin zone's outer edge, 1 at
+ * the box's real surface) rather than raw distance — with differently
+ * sized margins per axis, raw penetration values aren't comparable (a
+ * length-sized z margin dwarfs a thickness-sized x margin), so both the
+ * nearest-face choice and the graded magnitude use this normalized depth
+ * instead. With equal margins on every axis this reduces exactly to the
+ * previous min-penetration/magnitude logic. */
 export function pushFromBox(
   position: { x: number; y: number; z: number },
   boxCentre: { x: number; y: number; z: number },
   halfExtents: { x: number; y: number; z: number },
-  margin: number,
+  margin: { x: number; y: number; z: number },
   strength: number,
 ): { x: number; y: number; z: number } {
   const dx = position.x - boxCentre.x;
   const dy = position.y - boxCentre.y;
   const dz = position.z - boxCentre.z;
-  const ex = halfExtents.x + margin;
-  const ey = halfExtents.y + margin;
-  const ez = halfExtents.z + margin;
+  const ex = halfExtents.x + margin.x;
+  const ey = halfExtents.y + margin.y;
+  const ez = halfExtents.z + margin.z;
   if (Math.abs(dx) >= ex || Math.abs(dy) >= ey || Math.abs(dz) >= ez) {
     return { x: 0, y: 0, z: 0 };
   }
 
-  const penetration = {
-    x: ex - Math.abs(dx),
-    y: ey - Math.abs(dy),
-    z: ez - Math.abs(dz),
+  const depth = {
+    x: Math.min(ex - Math.abs(dx), margin.x) / margin.x,
+    y: Math.min(ey - Math.abs(dy), margin.y) / margin.y,
+    z: Math.min(ez - Math.abs(dz), margin.z) / margin.z,
   };
-  const minPenetration = Math.min(penetration.x, penetration.y, penetration.z);
-  const magnitude = (Math.min(minPenetration, margin) / margin) * strength;
+  const minDepth = Math.min(depth.x, depth.y, depth.z);
+  const magnitude = minDepth * strength;
 
-  if (minPenetration === penetration.x) return { x: Math.sign(dx || 1) * magnitude, y: 0, z: 0 };
-  if (minPenetration === penetration.y) return { x: 0, y: Math.sign(dy || 1) * magnitude, z: 0 };
+  if (minDepth === depth.x) return { x: Math.sign(dx || 1) * magnitude, y: 0, z: 0 };
+  if (minDepth === depth.y) return { x: 0, y: Math.sign(dy || 1) * magnitude, z: 0 };
   return { x: 0, y: 0, z: Math.sign(dz || 1) * magnitude };
 }
 
-/** Whether `position` falls inside a fixed (non-margin-expanded) box — used
- * for `CASTLE_DOORWAY_CORRIDOR`'s hard exemption, as opposed to
- * `pushFromBox`'s margin-expanded, graded check. */
-export function isInsideBox(
-  position: { x: number; y: number; z: number },
-  boxCentre: { x: number; y: number; z: number },
-  halfExtents: { x: number; y: number; z: number },
-): boolean {
-  return (
-    Math.abs(position.x - boxCentre.x) < halfExtents.x &&
-    Math.abs(position.y - boxCentre.y) < halfExtents.y &&
-    Math.abs(position.z - boxCentre.z) < halfExtents.z
-  );
-}
-
 export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
-  /** `margin`: same derivation contract as `TankContainmentBehaviour` — the
-   * caller (`useFishSteering.ts`) passes this fish's own *eventual adult*
-   * collider radius plus a buffer, so the turn away happens before the
-   * body itself is close enough to actually touch the castle, even once
-   * this fish is fully grown. `getColliderRadius`: a getter (not a fixed
-   * value) for the same fish's real physical radius alone, with no
-   * anticipatory buffer *and no adult-size assumption* — read fresh each
-   * frame to size the doorway exemption below, since a fry's actual
-   * collider is genuinely smaller than its adult one and can fit through
-   * a gap its future self won't; using the fixed adult radius here would
-   * needlessly deny the exemption to every fish that hasn't finished
-   * growing yet. */
+  /** Vertical margin — yaw-independent, computed once (see
+   * `TankContainmentBehaviour`'s identical field for the reasoning). */
+  private readonly marginY: number;
+
+  /** `adultHalfExtents`/`buffer`/`getYaw`: same contract as
+   * `TankContainmentBehaviour`'s constructor — a live yaw-projected
+   * margin, not a fixed scalar. This is also what makes the doorway a
+   * non-issue without any dedicated exemption: a nose-on fish's live
+   * x-margin here (thickness + buffer, ~0.2) never comes close to
+   * reaching the doorway's flanking walls from the centreline (they sit
+   * 0.65 out) — the centreline stall a fixed length-based margin used to
+   * risk simply can't occur once the margin actually reflects the fish's
+   * real approach footprint. */
   constructor(
-    private readonly margin: number,
-    private readonly getColliderRadius: () => number,
+    private readonly adultHalfExtents: ColliderHalfExtents,
+    private readonly buffer: number,
+    private readonly getYaw: () => number,
   ) {
     super();
+    this.marginY = verticalExtent(adultHalfExtents) + this.buffer;
   }
 
   calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
@@ -105,58 +99,20 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
     force.y = 0;
     force.z = 0;
     const position = { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z };
-
-    // A fish lined up with the doorway is meant to be there — exempt it
-    // entirely rather than merely softening the push, or it still gets
-    // deflected before threading the actual opening (see
-    // `CASTLE_DOORWAY_CORRIDOR`'s own comment). The exemption box itself is
-    // shrunk by this fish's own collider radius on the axes that actually
-    // border a wall (x: the flanking wall segments; y: the lintel above) —
-    // checking only the *centre* against the corridor's full width would
-    // exempt a fish whose real body already pokes past the doorway's edge
-    // into the solid wall, avoidance fully off while the body clips. z is
-    // left alone: nothing borders the corridor in that direction. A fish
-    // whose collider radius alone exceeds the door's own half-width (the
-    // single largest fin/sex combination, which the doorway was already
-    // sized knowing wouldn't perfectly fit) gets no exemption at all —
-    // avoidance stays on and it may still brush the frame, the same
-    // documented trade-off `decorLayout.ts` already accepts, not a new one.
-    const corridorCentre = {
-      x: CASTLE_POSITION.x + CASTLE_DOORWAY_CORRIDOR.position.x,
-      y: CASTLE_POSITION.y + CASTLE_DOORWAY_CORRIDOR.position.y,
-      z: CASTLE_POSITION.z + CASTLE_DOORWAY_CORRIDOR.position.z,
+    const yaw = this.getYaw();
+    const margin = {
+      x: worldExtentX(yaw, this.adultHalfExtents) + this.buffer,
+      y: this.marginY,
+      z: worldExtentZ(yaw, this.adultHalfExtents) + this.buffer,
     };
-    const colliderRadius = this.getColliderRadius();
-    const corridorHalfExtents = {
-      x: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.x - colliderRadius),
-      y: Math.max(0, CASTLE_DOORWAY_CORRIDOR.halfExtents.y - colliderRadius),
-      z: CASTLE_DOORWAY_CORRIDOR.halfExtents.z,
-    };
-    if (isInsideBox(position, corridorCentre, corridorHalfExtents)) {
-      return force;
-    }
 
-    // For the one fish size that never gets the exemption above (§ the
-    // comment on it), the two flanking wall boxes are mirror images of each
-    // other around the doorway's own centreline — a fish approaching
-    // dead-centre gets equal, opposite `pushFromBox` contributions from
-    // them that sum to zero in x, leaving only the lintel's downward push
-    // once its collider also fails to clear the doorway height. That's a
-    // stall, not a route-around: known and accepted as part of the same
-    // single-non-fitting-combination trade-off `decorLayout.ts` already
-    // documents, not a new regression, and not a permanent trap in
-    // practice — `WanderBehavior`/`SeparationBehavior` still get whatever's
-    // left of `vehicle.maxForce` each frame (this behaviour's own force
-    // stays well under that cap here) and their own randomness is what
-    // eventually nudges the fish enough off-centre to break the symmetry
-    // and let the horizontal pushes actually diverge again.
     for (const box of CASTLE_COLLIDER_BOXES) {
       const boxCentre = {
         x: CASTLE_POSITION.x + box.position.x,
         y: CASTLE_POSITION.y + box.position.y,
         z: CASTLE_POSITION.z + box.position.z,
       };
-      const push = pushFromBox(position, boxCentre, box.halfExtents, this.margin, STRENGTH);
+      const push = pushFromBox(position, boxCentre, box.halfExtents, margin, STRENGTH);
       force.x += push.x;
       force.y += push.y;
       force.z += push.z;
