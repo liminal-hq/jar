@@ -497,9 +497,13 @@ export function Fish({ critter, livingPopulation }: FishProps) {
         rotation={[0, -Math.PI / 2, 0]}
         onClick={(e) => {
           // Stops propagation to other intersected R3F objects, but not
-          // the underlying native DOM click — that would still bubble to
-          // the canvas's own click handler (TankWindow.tsx's drawer
-          // toggle) without also stopping it there.
+          // the underlying native DOM click — that would still bubble up
+          // to any ancestor DOM click handler without also stopping it
+          // there. The tank background itself has none today
+          // (TankWindow.tsx's `.tankInterior` only listens for
+          // `contextmenu`/`mousedown`, not `click`), but this guards
+          // against a future one firing on a click that was actually a
+          // critter selection.
           e.stopPropagation();
           e.nativeEvent.stopPropagation();
           void selectCritter(critter.id);
