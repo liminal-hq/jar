@@ -55,6 +55,16 @@ export const isFishMonitorEnabled = fishMonitor.isEnabled;
 export const setFishMonitorEnabled = fishMonitor.setEnabled;
 export const useFishMonitorEnabled = fishMonitor.useEnabled;
 
+/** Gates the tank window's ~30Hz pose publisher (`domain/fishPose.ts`,
+ * `SteeringSystem.tsx`) — a much higher rate than `fishMonitor`'s 5Hz
+ * telemetry, since it drives the fish-eye window's camera rather than a
+ * table, so it's worth its own toggle to keep that cost at zero while that
+ * window isn't open. */
+const fishEye = createDevToggle('jar:dev:fishEye');
+export const isFishEyeEnabled = fishEye.isEnabled;
+export const setFishEyeEnabled = fishEye.setEnabled;
+export const useFishEyeEnabled = fishEye.useEnabled;
+
 export type DayNightOverride = 'auto' | 'day' | 'night';
 
 const DAY_NIGHT_OVERRIDE_KEY = 'jar:dev:dayNightOverride';

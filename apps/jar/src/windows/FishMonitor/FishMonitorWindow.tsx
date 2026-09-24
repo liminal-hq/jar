@@ -28,9 +28,9 @@ import {
 } from '../../domain/devSettings';
 import { onFishDebug, type FishDebugEntry, type FishDebugSnapshot } from '../../domain/fishDebug';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
-import { emitPilotKey } from '../../domain/pilotInput';
+import { usePilotKeyForwarding } from '../../domain/usePilotKeyForwarding';
+import { openSatelliteWindow } from '../../domain/windows';
 import { TANK_INNER_BOUNDS } from '../../render/physics/coordinates';
-import { PILOT_KEY_CODES } from '../../render/steering/pilotInputState';
 
 /** SVG viewBox units — arbitrary, each map just needs to be square-ish and
  * proportional to the tank's own footprint on its own two axes. */
@@ -206,55 +206,10 @@ export function FishMonitorWindow() {
   }, [snapshot, pilotedFishId]);
 
   // While a fish is piloted, this window's own keyboard drives it too —
-  // forwarded to the tank window (`PilotCaptureBridge.tsx`) over
-  // `domain/pilotInput.ts` rather than mutating `pilotInputState.ts`
-  // directly, since that module is realm-local (each window's bundle gets
-  // its own copy) and the Yuka vehicles only exist in the tank's realm.
-  // `preventDefault()` on the six mapped keys keeps them from also
-  // scrolling the table underneath.
-  useEffect(() => {
-    if (pilotedFishId === null) return;
-    // This window's own contribution to the shared pressed-key set — *not*
-    // the whole set, which `pilotInputState.ts` also holds keys forwarded
-    // from the tank window's own keyboard in (`PilotCaptureBridge.tsx`). A
-    // blur here used to send `{ clear: true }` unconditionally, which reset
-    // that ENTIRE shared set — including a key still genuinely held in the
-    // tank window — the instant focus left this one, e.g. alt-tabbing to
-    // watch the tank while still driving from it. Releasing only the keys
-    // *this* window actually holds leaves the other source's own input
-    // alone.
-    const heldHere = new Set<string>();
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat || !PILOT_KEY_CODES.includes(e.code)) return;
-      e.preventDefault();
-      heldHere.add(e.code);
-      void emitPilotKey({ code: e.code, pressed: true });
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (!PILOT_KEY_CODES.includes(e.code)) return;
-      e.preventDefault();
-      heldHere.delete(e.code);
-      void emitPilotKey({ code: e.code, pressed: false });
-    };
-    const releaseHeldHere = () => {
-      heldHere.forEach((code) => void emitPilotKey({ code, pressed: false }));
-      heldHere.clear();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', releaseHeldHere);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', releaseHeldHere);
-      // Unmount (window closing or the piloted fish changing) still does a
-      // full `clear: true` — unlike blur, this is meant to fully reset the
-      // pilot's control state, matching `setPilotedId`'s own `clearKeys()`
-      // on the tank side for the same transition.
-      void emitPilotKey({ clear: true });
-    };
-  }, [pilotedFishId]);
+  // shared with the fish-eye window (`domain/usePilotKeyForwarding.ts`),
+  // which also scopes its blur handler to release only the keys *this*
+  // window holds, not the entire cross-window pressed-key set.
+  usePilotKeyForwarding(pilotedFishId !== null);
 
   const staleMs = snapshot ? performance.now() - receivedAtRef.current : null;
 
@@ -369,12 +324,22 @@ export function FishMonitorWindow() {
                           <td>{f.isResting ? '●' : ''}</td>
                           <td>{f.speed.toFixed(2)}</td>
                           <td>{f.turnRate.toFixed(1)}</td>
-                          <td>
+                          <td style={{ display: 'flex', gap: 4 }}>
                             <button
                               style={{ font: 'inherit' }}
                               onClick={() => setPilotedFishId(isPiloted ? null : f.id)}
                             >
                               {isPiloted ? 'Release' : 'Pilot'}
+                            </button>
+                            <button
+                              style={{ font: 'inherit' }}
+                              title="Pilot this fish and open the fish-eye window watching it"
+                              onClick={() => {
+                                setPilotedFishId(f.id);
+                                void openSatelliteWindow('fish-eye');
+                              }}
+                            >
+                              Watch
                             </button>
                           </td>
                         </tr>

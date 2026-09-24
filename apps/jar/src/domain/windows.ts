@@ -19,7 +19,7 @@ interface SatelliteWindowSpec {
 }
 
 const SPECS: Record<
-  'critter-card' | 'family-tree' | 'setup' | 'dev-settings' | 'fish-monitor',
+  'critter-card' | 'family-tree' | 'setup' | 'dev-settings' | 'fish-monitor' | 'fish-eye',
   SatelliteWindowSpec
 > = {
   // Tall enough for the 3D preview panel (a square that scales with width,
@@ -43,6 +43,10 @@ const SPECS: Record<
   // for the pilot status bar below the table too, without the window
   // needing to grow again once a fish is actually piloted.
   'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 760, height: 520 },
+  // First-person "fish eye" view from a piloted fish's own perspective —
+  // its own small 3D scene (`FishEyeScene.tsx`), so a modest window is
+  // enough; wide enough that a 4:3-ish view doesn't feel cramped.
+  'fish-eye': { label: 'fish-eye', title: 'Fish eye', width: 480, height: 380 },
 };
 
 /** Focuses the window if it's already open, otherwise creates it
