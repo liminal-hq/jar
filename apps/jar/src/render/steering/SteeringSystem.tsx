@@ -31,8 +31,16 @@ import {
 import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
 import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
-import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
+import {
+  computePilotTargetHeading,
+  computeTargetHeading,
+  HEADING_COMMIT_SPEED,
+  HEADING_RELEASE_SPEED,
+} from './heading';
+import { PILOTED_MAX_FORCE } from './manualPilotBehaviour';
 import { isSelfPropelledMode, type FishMotionMode } from './motionState';
+import { advancePilotYaw, getPilotYaw, isActivelyPiloted, seedPilotYaw } from './pilotInputState';
+import { MAX_STEERING_FORCE } from './useFishSteering';
 
 /** Extra per-fish detail only `FishModel.tsx` knows (its own animation
  * state) — optional because the standalone critter-card preview drives a
@@ -205,6 +213,32 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       const t = body.translation();
       fish.vehicle.position.set(t.x, t.y, t.z);
       fish.vehicle.maxSpeed = fish.maxSpeed();
+      // Widened while a key is genuinely held for this fish, so
+      // `containment`/`castleAvoidance` can still claim their own full,
+      // unclamped push (up to their own `STRENGTH`, 4) while leaving
+      // `PILOT_STRENGTH`'s worth of budget still free for the player —
+      // `manualPilotBehaviour.ts`'s `PILOTED_MAX_FORCE` comment has the
+      // full reasoning (this used to stay at `MAX_STEERING_FORCE`
+      // unconditionally, which live testing showed silently capped how
+      // close a piloted fish could ever get to a wall). Reverted the
+      // instant no key is held, so an idle piloted fish is indistinguishable
+      // from an unpiloted one.
+      const piloted = isActivelyPiloted(id);
+      fish.vehicle.maxForce = piloted ? PILOTED_MAX_FORCE : MAX_STEERING_FORCE;
+      // Seeded from this fish's own *rendered* heading the first frame
+      // piloting engages (never mid-drive — `pilotYaw` stays seeded across
+      // frames until the key set empties, `pilotInputState.ts`), so there's
+      // no visible snap the instant a key is first pressed. Advanced here,
+      // not in `ManualPilotBehaviour.calculate()` — see that file's own
+      // comment for why turning would silently stall some frames if it
+      // depended on that call happening.
+      if (piloted) {
+        if (getPilotYaw() === null) {
+          scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
+          seedPilotYaw(scratchYawEuler.y);
+        }
+        advancePilotYaw(delta);
+      }
       if (debugPositions) debugPositions[id] = { x: t.x, y: t.y, z: t.z };
     }
     if (debugPositions) {
@@ -214,11 +248,19 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
 
     entityManager.update(delta);
 
-    for (const fish of registry.values()) {
+    for (const [id, fish] of registry.entries()) {
       const body = fish.getBody();
       if (!body) continue;
 
-      if (!isSelfPropelledMode(fish.getMode())) {
+      // Skipped for a fish actively under manual pilot input
+      // (`render/steering/pilotInputState.ts`) even in a non-self-propelled
+      // mode — this decay would otherwise fight the player's held key every
+      // frame (equilibrium speed capped well below the fish's real
+      // `maxSpeed`), which only matters if the daytime roll or night
+      // settling flips a piloted fish out of `active` mid-drive. Checked
+      // per fish, not per mode: the moment keys release, `isActivelyPiloted`
+      // goes false and this fish's own mode machinery resumes untouched.
+      if (!isSelfPropelledMode(fish.getMode()) && !isActivelyPiloted(id)) {
         fish.vehicle.velocity.multiplyScalar(Math.exp(-NON_ACTIVE_VELOCITY_DECAY_RATE * delta));
       }
 
@@ -268,7 +310,32 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
           scratchImpulse.setLength(maxImpulseMagnitude);
         }
         body.applyImpulse(scratchImpulse, true);
+      }
 
+      // Hoisted out of the impulse-application gate above: a piloted fish
+      // turning in place (`KeyA`/`KeyD`, no `KeyW`/`KeyS`) has near-zero
+      // velocity, which `computeTargetHeading`'s own speed threshold would
+      // read as "hold the last heading" rather than commit to — there's no
+      // velocity to derive a turn from in the first place. A driven yaw
+      // needs no such derivation, so it overrides the normal velocity-based
+      // heading unconditionally while seeded, turn-in-place included; an
+      // unpiloted (or idle-piloted) fish falls straight through to the
+      // existing velocity-gated logic, completely unaffected.
+      const pilotYaw = isActivelyPiloted(id) ? getPilotYaw() : null;
+      if (pilotYaw !== null) {
+        // `isHeadingActive` deliberately untouched here — it's the
+        // commit/release hysteresis flag the *other* branch below uses, and
+        // a driven yaw doesn't consult it at all while piloted. Stomping it
+        // to `false` on every piloted frame used to discard whatever
+        // hysteresis state was earned before piloting engaged, so the
+        // instant a key released, the fish could land back in the `else`
+        // branch requiring the higher `HEADING_COMMIT_SPEED` threshold to
+        // re-engage instead of the lower `HEADING_RELEASE_SPEED` its actual
+        // pre-pilot state called for — a momentary heading freeze right
+        // after handing control back. Leaving it alone resumes exactly
+        // where it left off.
+        fish.targetHeading.copy(computePilotTargetHeading(pilotYaw, scratchVelocity));
+      } else if (scratchVelocity.lengthSq() >= MIN_VELOCITY_SQ) {
         const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;
         const target = computeTargetHeading(scratchVelocity, threshold);
         fish.isHeadingActive = target !== null;

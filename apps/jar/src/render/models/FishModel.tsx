@@ -77,6 +77,21 @@ interface FishModelProps {
    * physical speed instead means the tail only works as hard as the fish is
    * actually, physically working. */
   getSpeed?: () => number;
+  /** Whether this fish is being actively driven right now (a manual-pilot
+   * key genuinely held, `render/steering/pilotInputState.ts`'s
+   * `isActivelyPiloted`) — checked *before* the rest-state hysteresis below,
+   * not folded into `getMode`: piloted thrust is pulsed (gated to the tail's
+   * own power stroke, `Fish.tsx`'s `getThrustEnvelope`), so real physical
+   * speed regularly dips below `REST_ENTER_SPEED` between pulses even while
+   * a key is held continuously — routing "is this fish resting" through
+   * `getMode` alone let that dip re-trigger the *separate* low-speed
+   * re-entry path moments after correctly exiting rest on `mode` alone, so
+   * a piloted fish woken from sleep would flicker back into its resting
+   * pose almost immediately. This flag skips the entire hysteresis chain
+   * outright instead: the player holding a key is a stronger, more direct
+   * signal than any speed reading. Absent for the critter-card preview,
+   * which has no pilot concept. */
+  isPiloted?: () => boolean;
   /** This fish's current speed ceiling — `maxSpeedFor(energy)` raised
    * during a chase burst (`Fish.tsx`'s `getSpeedCeiling`). Read imperatively
    * each frame, same rationale as `getMode`. Defaults to the flat
@@ -217,6 +232,7 @@ export function FishModel({
   getMode,
   getSpeed,
   getSpeedCeiling,
+  isPiloted,
   onDebugFrame,
 }: FishModelProps) {
   const rootRef = useRef<THREE.Group>(null);
@@ -424,12 +440,19 @@ export function FishModel({
 
     const t = state.clock.elapsedTime;
     const mode = getMode ? getMode() : 'active';
+    const piloted = isPiloted ? isPiloted() : false;
 
-    // Rest-state hysteresis: `paused`/`settled` force it immediately;
-    // otherwise a real, sustained lull in speed (not a single quiet frame)
-    // earns it, and only a clearly-faster speed (not just crossing back
-    // over the same line) earns the way out.
-    if (mode === 'paused' || mode === 'settled') {
+    // Rest-state hysteresis: a held pilot key wins outright (see
+    // `isPiloted`'s own doc comment — piloted thrust is pulsed, so routing
+    // this through `mode`/`speed` alone lets it flicker back into resting
+    // moments after waking); otherwise `paused`/`settled` force it
+    // immediately; otherwise a real, sustained lull in speed (not a single
+    // quiet frame) earns it, and only a clearly-faster speed (not just
+    // crossing back over the same line) earns the way out.
+    if (piloted) {
+      isRestingRef.current = false;
+      belowRestEnterSinceRef.current = null;
+    } else if (mode === 'paused' || mode === 'settled') {
       isRestingRef.current = true;
       belowRestEnterSinceRef.current = null;
     } else if (isRestingRef.current) {

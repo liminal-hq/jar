@@ -35,6 +35,7 @@ import {
 } from '../steering/chaseParams';
 import { selectChaseTarget, type ChaseCandidate } from '../steering/chaseTarget';
 import type { FishMotionMode } from '../steering/motionState';
+import { isActivelyPiloted } from '../steering/pilotInputState';
 import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
 import { breathingMultiplier } from '../steering/steeringParams';
 import { thrustMultiplierFor } from '../steering/thrustEnvelope';
@@ -192,6 +193,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   }, [critter]);
 
   const steering = useFishSteering(
+    critter.id,
     critter.personality,
     livingPopulation,
     favouriteSpotWorld,
@@ -516,6 +518,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
             return linvel ? Math.hypot(linvel.x, linvel.y, linvel.z) : steering.vehicle.getSpeed();
           }}
           getSpeedCeiling={getSpeedCeiling}
+          isPiloted={() => isActivelyPiloted(critter.id)}
           onDebugFrame={(anim) => {
             debugAnimRef.current = anim;
           }}

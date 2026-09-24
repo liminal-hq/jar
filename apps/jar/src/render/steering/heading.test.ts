@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
 import {
+  computePilotTargetHeading,
   computeTargetHeading,
   HEADING_COMMIT_SPEED,
   HEADING_RELEASE_SPEED,
@@ -110,5 +111,39 @@ describe('computeTargetHeading', () => {
       expect(computeTargetHeading(velocity, HEADING_COMMIT_SPEED)).toBeNull();
       expect(computeTargetHeading(velocity, HEADING_RELEASE_SPEED)).not.toBeNull();
     });
+  });
+});
+
+describe('computePilotTargetHeading', () => {
+  it('faces the supplied yaw directly, independent of velocity', () => {
+    const heading = computePilotTargetHeading(0, new THREE.Vector3(0, 0, 0));
+    const facing = facingDirection(heading);
+    expect(facing.x).toBeCloseTo(0, 5);
+    expect(facing.z).toBeCloseTo(1, 5);
+  });
+
+  it('faces +X for a yaw of pi/2', () => {
+    const heading = computePilotTargetHeading(Math.PI / 2, new THREE.Vector3(0, 0, 0));
+    const facing = facingDirection(heading);
+    expect(facing.x).toBeCloseTo(1, 5);
+    expect(facing.z).toBeCloseTo(0, 5);
+  });
+
+  it('never returns null, even at zero velocity — turning in place has no speed to derive from', () => {
+    const heading = computePilotTargetHeading(1.2, new THREE.Vector3(0, 0, 0));
+    expect(heading).not.toBeNull();
+  });
+
+  it('still derives pitch from velocity and clamps it to MAX_PITCH', () => {
+    const heading = computePilotTargetHeading(0, new THREE.Vector3(0, 10, 1));
+    const facing = facingDirection(heading);
+    const impliedPitch = Math.asin(THREE.MathUtils.clamp(facing.y, -1, 1));
+    expect(impliedPitch).toBeCloseTo(MAX_PITCH, 5);
+  });
+
+  it('never introduces roll', () => {
+    const heading = computePilotTargetHeading(0.5, new THREE.Vector3(0.2, 0.3, 0.4));
+    const euler = new THREE.Euler().setFromQuaternion(heading, 'YXZ');
+    expect(euler.z).toBeCloseTo(0, 10);
   });
 });

@@ -37,9 +37,12 @@ const SPECS: Record<
   // are toggled on, without the window itself needing to grow.
   'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },
   // Same always-available tooling as `dev-settings` — wide enough for the
-  // live table plus the top-down and front tank maps side by side
-  // (`FishMonitorWindow.tsx`).
-  'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 620, height: 480 },
+  // live table (id/name/mode/rest/speed/turn-peak/pilot button) plus the
+  // top-down and front tank maps side by side (`FishMonitorWindow.tsx`),
+  // without the name or actions column clipping or wrapping. Tall enough
+  // for the pilot status bar below the table too, without the window
+  // needing to grow again once a fish is actually piloted.
+  'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 760, height: 520 },
 };
 
 /** Focuses the window if it's already open, otherwise creates it

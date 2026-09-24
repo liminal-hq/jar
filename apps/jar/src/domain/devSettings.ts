@@ -88,6 +88,46 @@ export function useDayNightOverride(): DayNightOverride {
   return value;
 }
 
+const PILOTED_FISH_ID_KEY = 'jar:dev:pilotedFishId';
+
+/** Which fish (by `Critter.id`), if any, is currently under manual keyboard
+ * control — armed from a row in the Fish monitor window
+ * (`windows/FishMonitor/FishMonitorWindow.tsx`), consumed by the tank
+ * window's `ManualPilotBehaviour` (`render/steering/manualPilotBehaviour.ts`)
+ * and `PilotCaptureBridge.tsx`. Same live-sync pattern as
+ * `getDayNightOverride`, a nullable number instead of a 3-way string. The
+ * Fish monitor window is the only writer, and its own `resetOnClose`
+ * guarantees this never survives that window closing — a fish left
+ * "piloted" after the controlling window is gone would just sit there
+ * ignoring its own AI forever. */
+export function getPilotedFishId(): number | null {
+  const raw = localStorage.getItem(PILOTED_FISH_ID_KEY);
+  if (raw === null) return null;
+  const id = Number(raw);
+  return Number.isInteger(id) ? id : null;
+}
+
+export function setPilotedFishId(id: number | null): void {
+  if (id === null) {
+    localStorage.removeItem(PILOTED_FISH_ID_KEY);
+  } else {
+    localStorage.setItem(PILOTED_FISH_ID_KEY, String(id));
+  }
+  window.dispatchEvent(new StorageEvent('storage', { key: PILOTED_FISH_ID_KEY }));
+}
+
+export function usePilotedFishId(): number | null {
+  const [value, setValue] = useState(getPilotedFishId);
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === PILOTED_FISH_ID_KEY) setValue(getPilotedFishId());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  return value;
+}
+
 /** Live per-fish world-coordinate readout (`SteeringSystem.tsx`'s
  * `useFrame` publishes into `domain/debugChannel.ts` only while this is on,
  * so it costs nothing the rest of the time) — useful for chasing "fish swam
