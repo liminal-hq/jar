@@ -10,6 +10,13 @@ export interface MenuItem {
   icon?: string;
   shortcut?: string;
   disabled?: boolean;
+  /** Marks this row as a checkable toggle rather than a plain action —
+   * renders a checkbox glyph in the icon slot instead of `icon`. Whether
+   * this row renders as a checkbox at all is inferred from `checked` being
+   * defined, so there's currently no way to render a checkbox with an
+   * indeterminate state — every checkable item in this codebase always has
+   * a real boolean to show, so this hasn't come up in practice. */
+  checked?: boolean;
   action?: () => void;
 }
 

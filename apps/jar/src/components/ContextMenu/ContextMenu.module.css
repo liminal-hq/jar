@@ -84,6 +84,27 @@
   height: 100%;
 }
 
+.menuItemCheckbox {
+  width: 12px;
+  height: 12px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.menuItemCheckbox.checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
 .menuItemLabel {
   flex: 1;
   white-space: nowrap;

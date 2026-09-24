@@ -30,9 +30,10 @@ const SPECS: Record<
   // Tall enough for every row incl. the variant chip row (SPEC.md §4) and
   // TitleBar's 32px without scrolling — re-check if Setup grows more rows.
   setup: { label: 'setup', title: 'Setup', width: 320, height: 640 },
-  // Supplementary tooling, always available from the drawer (`Drawer.tsx`)
-  // rather than gated to dev builds — not part of SPEC.md/SCREENS.md's core
-  // product screens, but not hidden either. Tall enough for both checkboxes
+  // Supplementary tooling, always available from the tank's right-click
+  // menu (`TankContextMenu.tsx`) rather than gated to dev builds — not
+  // part of SPEC.md/SCREENS.md's core product screens, but not hidden
+  // either. Tall enough for both checkboxes
   // plus their scrollable debug panels (`DevSettingsWindow.tsx`) when both
   // are toggled on, without the window itself needing to grow.
   'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },

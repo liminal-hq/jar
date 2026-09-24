@@ -3,7 +3,7 @@
 // window (`domain/debugChannel.ts`) for display, rather than rendering an
 // in-place overlay itself. A general-purpose tool for diagnosing
 // WebKitGTK's silent mouse/focus events at a window's own outer edge (see
-// `TankWindow.tsx`'s `toggleDrawer`), useful for the same class of
+// `TankWindow.tsx`'s `handleTankMouseDown`), useful for the same class of
 // platform quirk wherever else it turns up.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
