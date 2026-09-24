@@ -22,6 +22,7 @@ import { useJarStore } from '../../domain/jarClient';
 import type { FishPoseEntry, FishPoseSnapshot } from '../../domain/fishPose';
 import { AquariumEnvironment } from '../../render/environment/AquariumEnvironment';
 import { FishModel } from '../../render/models/FishModel';
+import { EmptySteeringRegistry } from '../../render/steering/SteeringSystem';
 import { useRenderLoopPolicy } from '../../render/tank/useRenderLoopPolicy';
 
 /** The two most recent pose snapshots plus when `curr` was actually
@@ -173,7 +174,9 @@ export function FishEyeScene({ posesRef, cameraFishId, tankmateIds }: FishEyeSce
       <ambientLight intensity={0.6} />
       <directionalLight position={[2, 4, 3]} intensity={0.8} />
       <Physics paused gravity={[0, 0, 0]}>
-        <AquariumEnvironment />
+        <EmptySteeringRegistry>
+          <AquariumEnvironment />
+        </EmptySteeringRegistry>
       </Physics>
       {tankmateIds
         .filter((id) => id !== cameraFishId)

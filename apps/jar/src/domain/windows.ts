@@ -37,16 +37,19 @@ const SPECS: Record<
   // are toggled on, without the window itself needing to grow.
   'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },
   // Same always-available tooling as `dev-settings` — wide enough for the
-  // live table (id/name/mode/rest/speed/turn-peak/pilot button) plus the
-  // top-down and front tank maps side by side (`FishMonitorWindow.tsx`),
+  // live table (id/name/mode/rest/speed/turn-peak/pilot+watch buttons) plus
+  // the top-down and front tank maps side by side (`FishMonitorWindow.tsx`),
   // without the name or actions column clipping or wrapping. Tall enough
-  // for the pilot status bar below the table too, without the window
-  // needing to grow again once a fish is actually piloted.
-  'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 760, height: 520 },
+  // for the full pilot status bar below the table (piloting line, key
+  // legend, "keys work in this window or the tank" hint) without scrolling
+  // once a fish is actually piloted.
+  'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 760, height: 580 },
   // First-person "fish eye" view from a piloted fish's own perspective —
   // its own small 3D scene (`FishEyeScene.tsx`), so a modest window is
-  // enough; wide enough that a 4:3-ish view doesn't feel cramped.
-  'fish-eye': { label: 'fish-eye', title: 'Fish eye', width: 480, height: 380 },
+  // enough; wide enough that a 4:3-ish view doesn't feel cramped, tall
+  // enough for `DialogShell`'s own title-bar/heading chrome plus the 4:3
+  // canvas plus the watching/pick-a-fish line below it without scrolling.
+  'fish-eye': { label: 'fish-eye', title: 'Fish eye', width: 480, height: 500 },
 };
 
 /** Focuses the window if it's already open, otherwise creates it
