@@ -40,8 +40,8 @@ import {
   applySwimWave,
   buildWaveTables,
   FIN_SWIM_TIP_GAIN,
-  swimWaveAngle,
   swimWaveU,
+  swimWaveVertexAngle,
   type WaveTables,
 } from './swimWave';
 import { computeTurnRate } from './turnRate';
@@ -177,6 +177,24 @@ const TURN_RATE_AMPLITUDE_CAP = 1.5;
  * `TURN_RATE_AMPLITUDE_CAP` this trims frequency by ~18%. */
 const TURN_RATE_FREQUENCY_DAMP_SCALE = 0.12;
 
+/** The DC (non-oscillating) companion to the symmetric widening above — a
+ * turn now also bends the spine toward the arc, not just widens the wag
+ * (`docs/architecture/notes/fish-turn-bend.md`). `TURN_BEND_SCALE`'s
+ * *sign* is what fixes which way "positive `signedTurnRate`" bends the
+ * body — derived by hand against `heading.ts`'s yaw convention and
+ * `applySwimWave`'s rotation matrix (double-checked, not just a first
+ * guess), then confirmed correct on a real Windows build after this
+ * sandbox's own R3F canvas turned out unable to render a frame at all.
+ * Flip it if a turn is ever seen bending the wrong way after a change
+ * anywhere in that chain. */
+const TURN_BEND_SCALE = -0.2;
+/** Smoothing time constant for the bend value — fast enough to visibly
+ * lead the ~0.17s heading slerp (`SteeringSystem.tsx`'s
+ * `HEADING_SLERP_RATE`) through a sharp turn, slow enough that per-frame
+ * turn-rate jitter doesn't shimmy the spine. Also gives the turn's
+ * ease-out for free: as turn rate decays to 0, the bend decays with it. */
+const TURN_BEND_TIME_CONSTANT_SEC = 0.2;
+
 /** A separate, real-speed-derived signal from `excite`/`speedNorm`: how
  * *steady* the fish's actual speed is right now, not how fast. Speeding up
  * or slowing down is the hardest part of this whole animation to sell (the
@@ -262,6 +280,10 @@ export function FishModel({
   // motion, jumps), even though `phaseRef` itself stays smooth.
   const flutterPhaseRef = useRef(phaseSeed * 1.3 + 0.6);
   const prevDirection = useRef(new THREE.Vector3(0, 0, 1));
+  // Smoothed turn-bend value — see `TURN_BEND_TIME_CONSTANT_SEC`'s doc
+  // comment for the blend, and `isRestingRef` below for why it's forced
+  // to 0 at rest rather than just left to decay on its own schedule.
+  const bendRef = useRef(0);
   // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
   // window only samples a few times a second, so a genuine one/two-frame
   // spike (e.g. right at a night settle/wake mode flip) would otherwise be
@@ -430,7 +452,7 @@ export function FishModel({
     // `turnRate.ts` for why it's gated below a minimum speed rather than
     // measured from every frame's raw velocity direction.
     scratchVelocity.set(vehicle.velocity.x, vehicle.velocity.y, vehicle.velocity.z);
-    const { turnRate, direction } = computeTurnRate(
+    const { turnRate, signedTurnRate, direction } = computeTurnRate(
       speed,
       scratchVelocity,
       prevDirection.current,
@@ -488,6 +510,23 @@ export function FishModel({
     const overdrive = burstOverdrive(speed, baseCeiling);
     const { freqMul, ampMul } = animationMulFor(critter.personality, critter.mood);
     const cappedTurnRate = Math.min(turnRate, TURN_RATE_AMPLITUDE_CAP);
+
+    // The turn-bend target — 0 while resting, so a resting fish never
+    // holds a residual curve regardless of whatever `signedTurnRate` a
+    // stray low-speed sample might otherwise report. Clamped on the same
+    // `TURN_RATE_AMPLITUDE_CAP` input as `cappedTurnRate` above (the same
+    // underlying rad/s quantity, just signed) rather than a second cap
+    // constant of its own.
+    const targetBend = isRestingRef.current
+      ? 0
+      : THREE.MathUtils.clamp(signedTurnRate, -TURN_RATE_AMPLITUDE_CAP, TURN_RATE_AMPLITUDE_CAP) *
+        TURN_BEND_SCALE;
+    bendRef.current = THREE.MathUtils.lerp(
+      bendRef.current,
+      targetBend,
+      1 - Math.exp(-delta / TURN_BEND_TIME_CONSTANT_SEC),
+    );
+    const bend = bendRef.current;
 
     // How steady (vs. actively changing) the fish's real speed is right
     // now — smoothed so an isolated frame's noise doesn't flicker the
@@ -576,19 +615,28 @@ export function FishModel({
     // offset so it shares the body's own rotation pivot instead of its own
     // hinge-local one, keeping the body/tail seam closed as amplitude
     // varies (`applySwimWave`'s own comment).
-    applySwimWave(bodyGeometry, bodyRestPositions, bodyWaveTables, phase, amplitude);
-    applySwimWave(dorsalGeometry, dorsalRestPositions, dorsalWaveTables, phase, amplitude);
-    applySwimWave(tailGeometry, tailRestPositions, tailWaveTables, phase, amplitude, TAIL_PIVOT.x);
+    applySwimWave(bodyGeometry, bodyRestPositions, bodyWaveTables, phase, amplitude, 0, bend);
+    applySwimWave(dorsalGeometry, dorsalRestPositions, dorsalWaveTables, phase, amplitude, 0, bend);
+    applySwimWave(
+      tailGeometry,
+      tailRestPositions,
+      tailWaveTables,
+      phase,
+      amplitude,
+      TAIL_PIVOT.x,
+      bend,
+    );
 
-    // Spots ride the same wave at their own fixed body-space x — a group
-    // rotation about the (untranslated) root's own Y axis reproduces
-    // exactly the same "rotate my (x,z) about the body's local origin"
-    // transform the body mesh's own vertices get at that x.
+    // Spots ride the same wave (bend included) at their own fixed
+    // body-space x — a group rotation about the (untranslated) root's own
+    // Y axis reproduces exactly the same "rotate my (x,z) about the
+    // body's local origin" transform the body mesh's own vertices get at
+    // that x.
     for (let i = 0; i < SPOTS.length; i++) {
       const group = spotGroupRefs.current[i];
       if (!group) continue;
       const { u, env } = spotWave[i]!;
-      group.rotation.y = swimWaveAngle(env, u, phase, amplitude);
+      group.rotation.y = swimWaveVertexAngle(env, u, phase, amplitude, bend);
     }
 
     const flutter = Math.sin(flutterPhase) * PECTORAL_FLUTTER_AMPLITUDE;

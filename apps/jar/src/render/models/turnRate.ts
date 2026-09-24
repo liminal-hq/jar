@@ -26,6 +26,18 @@ export interface TurnRateResult {
    * `MIN_TURN_RATE_SPEED` — not a measurement, a deliberate "nothing to
    * report" value. */
   turnRate: number;
+  /** `turnRate`, signed by which way the heading is rotating about world Y
+   * (`cross(prevDirection, direction).y`'s sign) — feeds `FishModel.tsx`'s
+   * turn-bend term (`docs/architecture/notes/fish-turn-bend.md`). Zero
+   * under the same speed gate as `turnRate`, for the same reason: a signed
+   * value flapping between +/- from low-speed noise would be worse than
+   * the unsigned one ever was. One deliberately-unhandled degenerate case:
+   * `Math.sign` of an exact-zero cross product (a near-180° reversal, e.g.
+   * a fish bouncing straight back off a wall) reads as 0, so `turnRate`
+   * can be large while this is momentarily 0 — self-corrects the very next
+   * frame once the direction has actually diverged, so not worth extra
+   * state to chase. */
+  signedTurnRate: number;
   /** The direction callers should keep as `prevDirection` for next frame's
    * call — unchanged from the input `prevDirection` below the speed gate,
    * so the next trustworthy reading compares against the last *real*
@@ -46,11 +58,17 @@ export function computeTurnRate(
   minSpeed: number = MIN_TURN_RATE_SPEED,
 ): TurnRateResult {
   if (speed <= minSpeed) {
-    return { turnRate: 0, direction: prevDirection };
+    return { turnRate: 0, signedTurnRate: 0, direction: prevDirection };
   }
 
   const direction = velocity.clone().normalize();
   const angleDelta = prevDirection.angleTo(direction);
   const turnRate = delta > 0 ? angleDelta / delta : 0;
-  return { turnRate, direction };
+  // cross(prevDirection, direction).y, computed directly rather than via
+  // THREE.Vector3.crossVectors — this runs once per fish per frame, and a
+  // temp-object allocation per call isn't worth it just to read one
+  // component back out.
+  const crossY = prevDirection.z * direction.x - prevDirection.x * direction.z;
+  const signedTurnRate = turnRate * Math.sign(crossY);
+  return { turnRate, signedTurnRate, direction };
 }
