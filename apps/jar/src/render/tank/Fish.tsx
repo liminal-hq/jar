@@ -37,13 +37,9 @@ import { isActivelyPiloted } from '../steering/pilotInputState';
 import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
 import { breathingMultiplier } from '../steering/steeringParams';
 import { thrustMultiplierFor } from '../steering/thrustEnvelope';
+import { extractYaw } from '../steering/heading';
 import { useFishSteering } from '../steering/useFishSteering';
 import { adultColliderHalfExtentsFor, colliderHalfExtentsFor } from './fishCollider';
-
-// Shared scratch — never allocated per frame/call (matches
-// `SteeringSystem.tsx`'s own `scratchYawEuler` convention). Used to recover
-// yaw from `currentHeadingRef` for the live-heading getter below.
-const scratchYawEuler = new THREE.Euler();
 
 interface FishProps {
   critter: Critter;
@@ -142,10 +138,25 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // Yuka's `entityManager` (and so only gets `calculate()` invoked on it at
   // all) via that same registration effect.
   const currentHeadingRef = useRef<THREE.Quaternion | null>(null);
-  const getYaw = () =>
-    currentHeadingRef.current
-      ? scratchYawEuler.setFromQuaternion(currentHeadingRef.current, 'YXZ').y
-      : 0;
+  const getYaw = () => (currentHeadingRef.current ? extractYaw(currentHeadingRef.current) : 0);
+
+  // Kept fresh via effect (same pattern as `nightRef` below) so
+  // `getColliderHalfExtents` — captured once by `useFishSteering`'s
+  // memoized rig — always reads this fish's *current*, life-stage-scaled
+  // size (grows as it ages), not whatever it was at mount. This is what a
+  // fry's avoidance margin actually shrinks to match: `adultHalfExtents`
+  // above stays fixed for the one place a scalar worst-case is still
+  // required (`useFishSteering.ts`'s `physicalTouchDistance`), but the
+  // containment/castle margins themselves are recomputed fresh every
+  // frame anyway (alongside `getYaw`), so there's no staleness risk in
+  // using the fish's real current size for them instead of its eventual
+  // adult one — a fry gets a proportionally small, honest margin from
+  // birth, growing in step with its actual collider.
+  const critterRef = useRef(critter);
+  useEffect(() => {
+    critterRef.current = critter;
+  }, [critter]);
+  const getColliderHalfExtents = () => colliderHalfExtentsFor(critterRef.current);
 
   const steering = useFishSteering(
     critter.id,
@@ -153,6 +164,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     livingPopulation,
     favouriteSpotWorld,
     adultHalfExtents,
+    getColliderHalfExtents,
     getYaw,
   );
 

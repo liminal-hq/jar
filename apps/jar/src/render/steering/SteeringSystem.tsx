@@ -36,6 +36,7 @@ import { entityManager } from './entityManager';
 import {
   computePilotTargetHeading,
   computeTargetHeading,
+  extractYaw,
   HEADING_COMMIT_SPEED,
   HEADING_RELEASE_SPEED,
 } from './heading';
@@ -206,6 +207,10 @@ const DEBUG_PUBLISH_INTERVAL_SEC = 0.2;
  * second window. Exported so the two stay a single source of truth. */
 export const POSE_PUBLISH_INTERVAL_SEC = 1 / 30;
 
+// Only the debug-telemetry publisher below still needs a raw Euler
+// directly — it reads *both* yaw and pitch from one decomposition;
+// everywhere else that only needs yaw uses `heading.ts`'s shared
+// `extractYaw` instead.
 const scratchYawEuler = new THREE.Euler();
 
 interface SteeringSystemProps {
@@ -274,8 +279,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       // depended on that call happening.
       if (piloted) {
         if (getPilotYaw() === null) {
-          scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
-          seedPilotYaw(scratchYawEuler.y);
+          seedPilotYaw(extractYaw(fish.currentHeading));
         }
         advancePilotYaw(delta);
       }

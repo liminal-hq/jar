@@ -64,14 +64,14 @@ export const CASTLE_ROOF_HALF_WIDTH = 0.325;
  * tower-to-tower span (`CASTLE_TOWER_OFFSET` grew for real tower
  * clearance) still leaves real room between the right tower and the tank
  * wall: at an original `0.5`, that gap was only 0.225 world units — just
- * *under* even the flattest fish's own physical thickness (a Veil's
- * collider box is 0.24 wide, `fishCollider.ts`), so no orientation could
- * actually fit through there no matter how avoidance margins were tuned.
- * `0.375` reopens it to 0.35, matching the keep-to-tower gap's own
- * clearance. The left tower's own gap to the opposite wall starts far more
- * generous (~1.2) and stays comfortably so after the same shift — `z`
- * pulled forward from an original `-0.8`, which read as pressed against
- * the back glass. */
+ * *under* even the widest fish's own physical thickness (a Veil's
+ * collider box is 0.24 wide, the widest of the three fin types,
+ * `fishCollider.ts`), so no orientation could actually fit through there
+ * no matter how avoidance margins were tuned. `0.375` reopens it to 0.35,
+ * matching the keep-to-tower gap's own clearance. The left tower's own
+ * gap to the opposite wall starts far more generous (~1.1) and stays
+ * comfortably so after the same shift — `z` pulled forward from an
+ * original `-0.8`, which read as pressed against the back glass. */
 export const CASTLE_POSITION = { x: 0.375, y: FLOOR_TOP_Y, z: -0.3 };
 
 /** Static collider footprint — left wall segment, right wall segment, and

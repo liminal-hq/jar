@@ -104,7 +104,11 @@ describe('TankContainmentBehaviour', () => {
   const marginY = verticalExtent(HE) + BUFFER;
 
   function makeBehaviour(yaw = 0): TankContainmentBehaviour {
-    return new TankContainmentBehaviour(HE, BUFFER, () => yaw);
+    return new TankContainmentBehaviour(
+      () => HE,
+      BUFFER,
+      () => yaw,
+    );
   }
 
   it('produces zero force in the middle of the tank', () => {
@@ -228,7 +232,11 @@ describe('TankContainmentBehaviour', () => {
       // yaw = π/2: heading.ts's forward = (sin yaw, 0, cos yaw) = (1,0,0),
       // so the fish's length axis faces world x — the same geometry as
       // heading straight at that wall.
-      const behaviour = new TankContainmentBehaviour(THIN_LONG, buffer, () => Math.PI / 2);
+      const behaviour = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => Math.PI / 2,
+      );
       const vehicle = new YUKA.Vehicle();
       const marginX = THIN_LONG.z + buffer; // worldExtentX(π/2) === z
       vehicle.position.set(TANK_INNER_BOUNDS.x - marginX * 0.5, 0, 0);
@@ -243,7 +251,11 @@ describe('TankContainmentBehaviour', () => {
       // yaw = 0: length faces world z, thickness faces world x — the same
       // position that triggered a push nose-on now sits outside the much
       // smaller thickness-based margin.
-      const behaviour = new TankContainmentBehaviour(THIN_LONG, buffer, () => 0);
+      const behaviour = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => 0,
+      );
       const vehicle = new YUKA.Vehicle();
       const noseOnMarginX = THIN_LONG.z + buffer;
       vehicle.position.set(TANK_INNER_BOUNDS.x - noseOnMarginX * 0.5, 0, 0);
@@ -255,9 +267,21 @@ describe('TankContainmentBehaviour', () => {
     });
 
     it('push magnitude at a fixed near-wall position grows monotonically from broadside to nose-on', () => {
-      const behaviour0 = new TankContainmentBehaviour(THIN_LONG, buffer, () => 0);
-      const behaviour45 = new TankContainmentBehaviour(THIN_LONG, buffer, () => Math.PI / 4);
-      const behaviour90 = new TankContainmentBehaviour(THIN_LONG, buffer, () => Math.PI / 2);
+      const behaviour0 = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => 0,
+      );
+      const behaviour45 = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => Math.PI / 4,
+      );
+      const behaviour90 = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => Math.PI / 2,
+      );
       const vehicle = new YUKA.Vehicle();
       vehicle.position.set(TANK_INNER_BOUNDS.x, 0, 0);
 
@@ -276,11 +300,19 @@ describe('TankContainmentBehaviour', () => {
       const vehicle = new YUKA.Vehicle();
       vehicle.position.set(0, TANK_INNER_BOUNDS.y, 0);
 
-      const behaviourA = new TankContainmentBehaviour(THIN_LONG, buffer, () => 0.3);
+      const behaviourA = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => 0.3,
+      );
       const forceA = new YUKA.Vector3();
       behaviourA.calculate(vehicle, forceA);
 
-      const behaviourB = new TankContainmentBehaviour(THIN_LONG, buffer, () => 2.1);
+      const behaviourB = new TankContainmentBehaviour(
+        () => THIN_LONG,
+        buffer,
+        () => 2.1,
+      );
       const forceB = new YUKA.Vector3();
       behaviourB.calculate(vehicle, forceB);
 

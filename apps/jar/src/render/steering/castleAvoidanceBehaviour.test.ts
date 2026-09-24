@@ -176,7 +176,11 @@ describe('CastleAvoidanceBehaviour', () => {
   const DOOR_LEVEL_Y = CASTLE_POSITION.y + 0.2;
 
   it('produces near-zero force for a nose-on fish centred in the doorway (the old exemption is no longer needed)', () => {
-    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
+    const behaviour = new CastleAvoidanceBehaviour(
+      () => MALE_VEIL,
+      BUFFER,
+      () => Math.PI,
+    );
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(CASTLE_POSITION.x, DOOR_LEVEL_Y, CASTLE_POSITION.z);
     const force = new YUKA.Vector3(1, 1, 1); // non-zero, to prove calculate() resets it
@@ -195,7 +199,11 @@ describe('CastleAvoidanceBehaviour', () => {
     // tests already document), which would make this test pass or fail
     // for the wrong reason. A slight offset breaks that symmetry.
     const offCentreX = CASTLE_POSITION.x + 0.1;
-    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI / 2);
+    const behaviour = new CastleAvoidanceBehaviour(
+      () => MALE_VEIL,
+      BUFFER,
+      () => Math.PI / 2,
+    );
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(offCentreX, DOOR_LEVEL_Y, CASTLE_POSITION.z);
     const force = new YUKA.Vector3();
@@ -206,7 +214,11 @@ describe('CastleAvoidanceBehaviour', () => {
   });
 
   it('still pushes a large fish away from a tower, well outside the doorway', () => {
-    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
+    const behaviour = new CastleAvoidanceBehaviour(
+      () => MALE_VEIL,
+      BUFFER,
+      () => Math.PI,
+    );
     const vehicle = new YUKA.Vehicle();
     // Just past a tower's real surface, same x as the tower itself.
     vehicle.position.set(CASTLE_POSITION.x + CASTLE_TOWER_OFFSET, DOOR_LEVEL_Y, CASTLE_POSITION.z);
@@ -226,7 +238,11 @@ describe('CastleAvoidanceBehaviour', () => {
     const gapY = CASTLE_POSITION.y + CASTLE_TOWER_HEIGHT / 2;
 
     it('a nose-on fish dead-centre in the gap feels only a small net push (the keep wall and tower nearly cancel)', () => {
-      const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
+      const behaviour = new CastleAvoidanceBehaviour(
+        () => MALE_VEIL,
+        BUFFER,
+        () => Math.PI,
+      );
       const vehicle = new YUKA.Vehicle();
       vehicle.position.set(gapX, gapY, CASTLE_POSITION.z);
       const force = new YUKA.Vector3();
@@ -241,7 +257,11 @@ describe('CastleAvoidanceBehaviour', () => {
       // still deep inside the gap, not at either wall's real surface —
       // demonstrates the push here is a gentle, graded correction (the
       // fish can occupy this space), not a hard expulsion.
-      const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => Math.PI);
+      const behaviour = new CastleAvoidanceBehaviour(
+        () => MALE_VEIL,
+        BUFFER,
+        () => Math.PI,
+      );
       const vehicle = new YUKA.Vehicle();
       vehicle.position.set(gapX - 0.05, gapY, CASTLE_POSITION.z);
       const force = new YUKA.Vector3();
@@ -258,7 +278,11 @@ describe('CastleAvoidanceBehaviour', () => {
     // exact centreline cancels regardless of yaw.
     const offCentreX = CASTLE_POSITION.x + 0.1;
     let yaw = Math.PI; // nose-on: no push
-    const behaviour = new CastleAvoidanceBehaviour(MALE_VEIL, BUFFER, () => yaw);
+    const behaviour = new CastleAvoidanceBehaviour(
+      () => MALE_VEIL,
+      BUFFER,
+      () => yaw,
+    );
     const vehicle = new YUKA.Vehicle();
     vehicle.position.set(offCentreX, DOOR_LEVEL_Y, CASTLE_POSITION.z);
 
@@ -270,5 +294,45 @@ describe('CastleAvoidanceBehaviour', () => {
     const second = new YUKA.Vector3();
     behaviour.calculate(vehicle, second);
     expect(second.length()).toBeGreaterThan(0);
+  });
+
+  it('reads collider size live too — a fry gets a smaller margin than its own eventual adult size, without reconstruction', () => {
+    // The regression this covers: margins used to be built once from a
+    // fixed *adult* half-extents value, denying a fry a gap its real,
+    // smaller current body could actually pass. Now the getter is read
+    // fresh every calculate() call, same as getYaw — a still-growing fry
+    // should see the corresponding smaller margin immediately, with no
+    // behaviour reconstruction needed as it grows. Nose-on (thickness-based
+    // margin, same yaw as the other tower test above) so the adult/fry
+    // margin difference is small enough in absolute terms to fit a position
+    // just past a tower's real outer surface without also entering the
+    // doorway flanking wall's own, much larger, margin band.
+    const FRY: ColliderHalfExtents = {
+      x: MALE_VEIL.x * 0.45,
+      y: MALE_VEIL.y * 0.45,
+      z: MALE_VEIL.z * 0.45,
+    };
+    let halfExtents: ColliderHalfExtents = MALE_VEIL;
+    const behaviour = new CastleAvoidanceBehaviour(
+      () => halfExtents,
+      BUFFER,
+      () => Math.PI,
+    );
+    const vehicle = new YUKA.Vehicle();
+    const towerOuterX = CASTLE_POSITION.x + CASTLE_TOWER_OFFSET + CASTLE_TOWER_HALF_WIDTH;
+    const towerCentreY = CASTLE_POSITION.y + CASTLE_TOWER_HEIGHT / 2;
+    // 0.19 past the tower's real surface: inside the adult's thickness
+    // margin (0.12 + 0.1 buffer = 0.22) but outside the fry's (0.45x
+    // scaled: 0.054 + 0.1 = 0.154).
+    vehicle.position.set(towerOuterX + 0.19, towerCentreY, CASTLE_POSITION.z);
+
+    const asAdult = new YUKA.Vector3();
+    behaviour.calculate(vehicle, asAdult);
+    expect(asAdult.length()).toBeGreaterThan(0);
+
+    halfExtents = FRY;
+    const asFry = new YUKA.Vector3();
+    behaviour.calculate(vehicle, asFry);
+    expect(asFry.length()).toBe(0);
   });
 });

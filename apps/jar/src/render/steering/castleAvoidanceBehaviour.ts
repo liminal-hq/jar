@@ -14,12 +14,7 @@
 import * as YUKA from 'yuka';
 
 import { CASTLE_COLLIDER_BOXES, CASTLE_POSITION } from '../environment/decorLayout';
-import {
-  verticalExtent,
-  worldExtentX,
-  worldExtentZ,
-  type ColliderHalfExtents,
-} from '../tank/fishCollider';
+import { horizontalExtents, verticalExtent, type ColliderHalfExtents } from '../tank/fishCollider';
 
 /** Same rationale as `TankContainmentBehaviour`'s own `STRENGTH` — has to
  * be able to out-vote `WanderBehavior`'s clamped force
@@ -72,26 +67,38 @@ export function pushFromBox(
 }
 
 export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
-  /** Vertical margin — yaw-independent, computed once (see
-   * `TankContainmentBehaviour`'s identical field for the reasoning). */
-  private readonly marginY: number;
-
-  /** `adultHalfExtents`/`buffer`/`getYaw`: same contract as
-   * `TankContainmentBehaviour`'s constructor — a live yaw-projected
-   * margin, not a fixed scalar. This is also what makes the doorway a
-   * non-issue without any dedicated exemption: a nose-on fish's live
-   * x-margin here (thickness + buffer, ~0.2) never comes close to
+  /** `getColliderHalfExtents`/`buffer`/`getYaw`: same contract as
+   * `TankContainmentBehaviour`'s constructor — a live, current-size,
+   * yaw-projected margin, not a fixed scalar (see that class's own
+   * constructor comment for why using the fish's *live* size here, not
+   * just its eventual adult one, is both safe and correct — a fry's
+   * margin now shrinks to match its real current body).
+   *
+   * This live margin is also what makes the doorway safe *for a fish
+   * approaching it nose-on* without any dedicated exemption: a nose-on
+   * fish's x-margin there (thickness + buffer, ~0.2) never comes close to
    * reaching the doorway's flanking walls from the centreline (they sit
-   * 0.65 out) — the centreline stall a fixed length-based margin used to
-   * risk simply can't occur once the margin actually reflects the fish's
-   * real approach footprint. */
+   * 0.65 out), so the centreline stall a fixed length-based margin used to
+   * risk can't occur for that approach. It's a narrower claim than "can
+   * never happen for any orientation," though: at yaws well off nose-on —
+   * roughly 40°-140° from it, for the widest fin types — `worldExtentX`
+   * itself can still exceed 0.65 (its own peak, `√(thickness²+length²)`,
+   * comfortably clears that for a Male Veil), so a fish that happens to be
+   * sitting broadside-ish exactly on the doorway centreline can still see
+   * the flanking walls' pushes cancel. This is the same class of
+   * accepted, self-resolving edge case the old exemption's own comment
+   * described for its one non-fitting combination — `WanderBehavior`'s
+   * own continuous heading jitter is what breaks the symmetry in
+   * practice, here as there — just covering a wider yaw range now rather
+   * than one fixed case. It doesn't affect the feature this margin exists
+   * for: a fish actually *threading* the doorway is nose-on by
+   * definition. */
   constructor(
-    private readonly adultHalfExtents: ColliderHalfExtents,
+    private readonly getColliderHalfExtents: () => ColliderHalfExtents,
     private readonly buffer: number,
     private readonly getYaw: () => number,
   ) {
     super();
-    this.marginY = verticalExtent(adultHalfExtents) + this.buffer;
   }
 
   calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
@@ -100,10 +107,12 @@ export class CastleAvoidanceBehaviour extends YUKA.SteeringBehavior {
     force.z = 0;
     const position = { x: vehicle.position.x, y: vehicle.position.y, z: vehicle.position.z };
     const yaw = this.getYaw();
+    const halfExtents = this.getColliderHalfExtents();
+    const horizontal = horizontalExtents(yaw, halfExtents);
     const margin = {
-      x: worldExtentX(yaw, this.adultHalfExtents) + this.buffer,
-      y: this.marginY,
-      z: worldExtentZ(yaw, this.adultHalfExtents) + this.buffer,
+      x: horizontal.x + this.buffer,
+      y: verticalExtent(halfExtents) + this.buffer,
+      z: horizontal.z + this.buffer,
     };
 
     for (const box of CASTLE_COLLIDER_BOXES) {

@@ -42,7 +42,7 @@ export interface ColliderHalfExtents {
  * does *not* contain the swimming tail's full lateral sweep at high
  * amplitude — see the collider's own doc comment in `Fish.tsx` for why
  * that's an acceptable, documented deviation. Tune by eye. */
-const COLLIDER_HALF_THICKNESS_SVG: Record<'Fan' | 'Forked' | 'Veil', number> = {
+export const COLLIDER_HALF_THICKNESS_SVG: Record<'Fan' | 'Forked' | 'Veil', number> = {
   Fan: 24,
   Forked: 24,
   Veil: 30,
@@ -97,6 +97,20 @@ export function worldExtentX(yaw: number, he: ColliderHalfExtents): number {
 /** Same projection as `worldExtentX`, for world Z. */
 export function worldExtentZ(yaw: number, he: ColliderHalfExtents): number {
   return Math.abs(Math.sin(yaw)) * he.x + Math.abs(Math.cos(yaw)) * he.z;
+}
+
+/** Both `worldExtentX` and `worldExtentZ` at once, sharing a single
+ * `Math.cos`/`Math.sin` pair instead of each recomputing them — the
+ * behaviours that actually drive avoidance (`TankContainmentBehaviour`,
+ * `CastleAvoidanceBehaviour`) both need both values every `calculate()`
+ * call, so they use this rather than calling the two functions above
+ * separately. `worldExtentX`/`worldExtentZ` stay exported in their own
+ * right — simpler to reach for individually in tests, or anywhere that
+ * only needs one axis. */
+export function horizontalExtents(yaw: number, he: ColliderHalfExtents): { x: number; z: number } {
+  const cos = Math.abs(Math.cos(yaw));
+  const sin = Math.abs(Math.sin(yaw));
+  return { x: cos * he.x + sin * he.z, z: sin * he.x + cos * he.z };
 }
 
 /** Worst-case vertical half-extent under `heading.ts`'s `MAX_PITCH` clamp

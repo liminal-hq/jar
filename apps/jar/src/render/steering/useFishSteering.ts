@@ -67,6 +67,7 @@ export function useFishSteering(
   livingPopulation: number,
   favouriteSpotWorld: YUKA.Vector3,
   adultHalfExtents: ColliderHalfExtents,
+  getColliderHalfExtents: () => ColliderHalfExtents,
   getYaw: () => number,
 ) {
   const params = useMemo(
@@ -115,9 +116,21 @@ export function useFishSteering(
 
     const separation = new YUKA.SeparationBehavior();
     separation.weight = MODE_WEIGHTS.active.separation;
-    const containment = new TankContainmentBehaviour(adultHalfExtents, CONTAINMENT_BUFFER, getYaw);
+    // Live current size, not the fixed `adultHalfExtents` above — margins
+    // are recomputed fresh every `calculate()` call anyway (alongside
+    // `getYaw`), so there's no staleness risk in using the fish's real
+    // current size instead: a fry's margin shrinks to match its actual
+    // small body from birth, rather than treating it as adult-sized
+    // (needlessly cautious, and — for `CastleAvoidanceBehaviour`
+    // specifically — capable of denying a fry passage through a gap its
+    // real current size would clear) until it's actually grown into it.
+    const containment = new TankContainmentBehaviour(
+      getColliderHalfExtents,
+      CONTAINMENT_BUFFER,
+      getYaw,
+    );
     const castleAvoidance = new CastleAvoidanceBehaviour(
-      adultHalfExtents,
+      getColliderHalfExtents,
       CONTAINMENT_BUFFER,
       getYaw,
     );
@@ -186,6 +199,10 @@ export function useFishSteering(
     // adultHalfExtents changes mid-life aren't expected (a critter's
     // personality/fin/sex never change after spawn per SPEC.md §5), so this
     // intentionally doesn't react to any of them changing.
+    // `getColliderHalfExtents`/`getYaw` don't need to be fresh here either
+    // — they're stable getter closures (`Fish.tsx` backs them with refs),
+    // not the live values themselves, so capturing them once is exactly
+    // as current as calling them fresh every frame from `calculate()`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

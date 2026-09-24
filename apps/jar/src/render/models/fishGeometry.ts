@@ -53,13 +53,16 @@ export const TAIL_TIP_SVG_DISTANCE: Record<'Fan' | 'Forked' | 'Veil', number> = 
   Veil: 151,
 };
 
-/** Raw SVG-space distance from the model's local origin to the dorsal
- * crest's highest point — `fish-svg/dorsal-fin.svg`'s crest control point
- * reaches SVG y=−73 exactly. The model's true height bound: higher than
- * the belly's own max extent (`body.svg`'s `body-back` path reaches
- * y=46) and than a male tail's bottom extent, for every fin/sex
- * combination — `render/tank/fishCollider.ts`'s collider sizing uses
- * this directly. */
+/** Raw SVG-space distance from the model's local origin to (just past) the
+ * dorsal crest's highest point — `fish-svg/dorsal-fin.svg`'s crest is
+ * built from a cubic Bezier whose middle control point sits at SVG y=−73;
+ * the curve's own actual extremum is slightly less extreme than that
+ * (a Bezier curve never exceeds its control points' convex hull), so this
+ * is a safe, mildly conservative bound on the true silhouette, not a
+ * laser-measured one. Still comfortably higher than the belly's own max
+ * extent (`body.svg`'s `body-back` path reaches y=46) and a male tail's
+ * bottom extent, for every fin/sex combination —
+ * `render/tank/fishCollider.ts`'s collider sizing uses this directly. */
 export const DORSAL_CREST_SVG_DISTANCE = 73;
 
 /** Hinge points, already converted into three.js's post-`extrude()`-flip

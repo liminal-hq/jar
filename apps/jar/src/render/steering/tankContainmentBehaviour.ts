@@ -13,12 +13,7 @@
 import * as YUKA from 'yuka';
 
 import { TANK_INNER_BOUNDS } from '../physics/coordinates';
-import {
-  verticalExtent,
-  worldExtentX,
-  worldExtentZ,
-  type ColliderHalfExtents,
-} from '../tank/fishCollider';
+import { horizontalExtents, verticalExtent, type ColliderHalfExtents } from '../tank/fishCollider';
 
 /** Must be able to out-vote `WanderBehavior`'s own clamped force
  * (`vehicle.maxForce = 3`, `useFishSteering.ts`) at full penetration, or a
@@ -108,43 +103,44 @@ export class TankContainmentBehaviour extends YUKA.SteeringBehavior {
    * to resolve at all. */
   private readonly handedness: { x: number; y: number; z: number };
 
-  /** Vertical margin — yaw-independent (pitch doesn't interact with yaw
-   * for a vertical extent), so computed once here rather than every
-   * `calculate()` call, unlike the horizontal margins below. */
-  private readonly marginY: number;
-
-  /** `adultHalfExtents`: this fish's eventual adult-size collider box
-   * (`fishCollider.ts`) — fixed once so a growing fry's margin doesn't
-   * need reconstructing, same rationale the old flat-radius margin had.
-   * `buffer`: extra room beyond the box itself before the push starts, so
-   * the turn happens before the body is close enough to actually touch
-   * the glass. `getYaw`: this fish's live current heading — read fresh
-   * every `calculate()` call so the horizontal margins below are the
-   * fish's *actual* current footprint toward each wall, not a fixed
-   * worst-case. A fish approaching a wall nose-on gets the full length
-   * margin (as safe as the old flat-radius margin ever was — it undersized
-   * badly for a male Veil-tailed adult, ~0.72 against a 0.6 margin, which
-   * is exactly the bug the length-based sizing here still guards against);
-   * broadside gets close to just the thickness margin, letting a fish
-   * approach — and pass through — a gap only as wide as its real,
-   * flat body. */
+  /** `getColliderHalfExtents`: this fish's *live*, current-size collider
+   * box (`fishCollider.ts`) — read fresh every `calculate()` call, same as
+   * `getYaw` below, so a still-growing fry's margin shrinks to match its
+   * real current body rather than the size it'll eventually grow into
+   * (recomputing every frame means there's no staleness risk in using the
+   * live size — unlike the old fixed-at-construction radius, which
+   * genuinely needed the eventual adult value to avoid needing to be
+   * reconstructed as the fish grew). `buffer`: extra room beyond the box
+   * itself before the push starts, so the turn happens before the body is
+   * close enough to actually touch the glass. `getYaw`: this fish's live
+   * current heading — read fresh every `calculate()` call so the
+   * horizontal margins below are the fish's *actual* current footprint
+   * toward each wall, not a fixed worst-case. A fish approaching a wall
+   * nose-on gets the full length margin (as safe as the old flat-radius
+   * margin ever was — it undersized badly for a male Veil-tailed adult,
+   * ~0.72 against a 0.6 margin, which is exactly the bug the length-based
+   * sizing here still guards against); broadside gets close to just the
+   * thickness margin, letting a fish approach — and pass through — a gap
+   * only as wide as its real, flat body. */
   constructor(
-    private readonly adultHalfExtents: ColliderHalfExtents,
+    private readonly getColliderHalfExtents: () => ColliderHalfExtents,
     private readonly buffer: number,
     private readonly getYaw: () => number,
   ) {
     super();
-    this.marginY = verticalExtent(adultHalfExtents) + buffer;
     const rollSign = () => (Math.random() < 0.5 ? 1 : -1);
     this.handedness = { x: rollSign(), y: rollSign(), z: rollSign() };
   }
 
   calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
     const yaw = this.getYaw();
-    const marginX = worldExtentX(yaw, this.adultHalfExtents) + this.buffer;
-    const marginZ = worldExtentZ(yaw, this.adultHalfExtents) + this.buffer;
+    const halfExtents = this.getColliderHalfExtents();
+    const horizontal = horizontalExtents(yaw, halfExtents);
+    const marginX = horizontal.x + this.buffer;
+    const marginY = verticalExtent(halfExtents) + this.buffer;
+    const marginZ = horizontal.z + this.buffer;
     const pushX = pushAxis(vehicle.position.x, TANK_INNER_BOUNDS.x, marginX, STRENGTH);
-    const pushY = pushAxis(vehicle.position.y, TANK_INNER_BOUNDS.y, this.marginY, STRENGTH);
+    const pushY = pushAxis(vehicle.position.y, TANK_INNER_BOUNDS.y, marginY, STRENGTH);
     const pushZ = pushAxis(vehicle.position.z, TANK_INNER_BOUNDS.z, marginZ, STRENGTH);
 
     // A fish approaching a wall square-on (centred on the tank's other two

@@ -7,7 +7,9 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { SVG_SCALE } from '../models/fishGeometry';
 import { TANK_INNER_BOUNDS, WALL_THICKNESS } from '../physics/coordinates';
+import { COLLIDER_HALF_THICKNESS_SVG } from '../tank/fishCollider';
 import {
   CASTLE_COLLIDER_BOXES,
   CASTLE_DOOR_HALF_WIDTH,
@@ -237,12 +239,15 @@ describe('the tower-to-glass gap', () => {
     const glassInnerFace = TANK_INNER_BOUNDS.x - WALL_THICKNESS / 2;
     const towerOuterEdge = CASTLE_POSITION.x + CASTLE_TOWER_OFFSET + CASTLE_TOWER_HALF_WIDTH;
     const gap = glassInnerFace - towerOuterEdge;
-    // A Veil's collider box is 0.24 wide (`fishCollider.ts`'s
-    // COLLIDER_HALF_THICKNESS_SVG.Veil = 30 SVG units * SVG_SCALE * 2) —
-    // the single widest fin type, sex-independent for thickness. This gap
-    // used to be 0.225, *under* even that, before `CASTLE_POSITION.x`
-    // moved from 0.5 to 0.375 specifically to fix it.
-    const widestFishDiameter = 0.24;
+    // Computed from the real collider policy constants, not copied as a
+    // literal, so a future change to `COLLIDER_HALF_THICKNESS_SVG` can't
+    // silently widen the fish past this gap without this test catching
+    // it. Sex-independent for thickness, so no fin/sex loop is needed —
+    // just the single widest fin type. This gap used to be 0.225, *under*
+    // even the widest fish, before `CASTLE_POSITION.x` moved from 0.5 to
+    // 0.375 specifically to fix it.
+    const widestFishThicknessSvg = Math.max(...Object.values(COLLIDER_HALF_THICKNESS_SVG));
+    const widestFishDiameter = widestFishThicknessSvg * SVG_SCALE * 2;
     expect(gap).toBeGreaterThan(widestFishDiameter);
   });
 });
