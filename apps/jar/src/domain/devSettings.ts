@@ -105,11 +105,14 @@ const PILOTED_FISH_ID_KEY = 'jar:dev:pilotedFishId';
  * (`windows/FishMonitor/FishMonitorWindow.tsx`), consumed by the tank
  * window's `ManualPilotBehaviour` (`render/steering/manualPilotBehaviour.ts`)
  * and `PilotCaptureBridge.tsx`. Same live-sync pattern as
- * `getDayNightOverride`, a nullable number instead of a 3-way string. The
- * Fish monitor window is the only writer, and its own `resetOnClose`
- * guarantees this never survives that window closing — a fish left
- * "piloted" after the controlling window is gone would just sit there
- * ignoring its own AI forever. */
+ * `getDayNightOverride`, a nullable number instead of a 3-way string. Both
+ * the Fish monitor and Fish eye windows (`windows/FishEye/FishEyeWindow.tsx`)
+ * can release this — Fish monitor's own `resetOnClose` guarantees it never
+ * survives that window closing *unless* Fish eye is still open watching
+ * (Fish eye's own liveness check then becomes the one guaranteeing it can't
+ * outlive the fish itself) — so a fish left "piloted" with neither window
+ * open, or after the fish it names dies, never just sits there ignoring its
+ * own AI forever. */
 export function getPilotedFishId(): number | null {
   const raw = localStorage.getItem(PILOTED_FISH_ID_KEY);
   if (raw === null) return null;

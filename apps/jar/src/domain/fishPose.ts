@@ -32,10 +32,6 @@ export interface FishPoseEntry {
 
 export interface FishPoseSnapshot {
   poses: FishPoseEntry[];
-  /** Which fish (if any) the fish-eye window should follow — mirrors
-   * `devSettings.ts`'s `pilotedFishId` so that window doesn't need its own
-   * separate subscription just to know who the camera fish is. */
-  pilotedId: number | null;
   t: number;
 }
 
