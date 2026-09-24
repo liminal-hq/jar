@@ -22,7 +22,10 @@ import { useJarStore } from '../../domain/jarClient';
 import type { FishPoseEntry, FishPoseSnapshot } from '../../domain/fishPose';
 import { AquariumEnvironment } from '../../render/environment/AquariumEnvironment';
 import { FishModel } from '../../render/models/FishModel';
-import { EmptySteeringRegistry } from '../../render/steering/SteeringSystem';
+import {
+  EmptySteeringRegistry,
+  POSE_PUBLISH_INTERVAL_SEC,
+} from '../../render/steering/SteeringSystem';
 import { useRenderLoopPolicy } from '../../render/tank/useRenderLoopPolicy';
 
 /** The two most recent pose snapshots plus when `curr` was actually
@@ -37,9 +40,11 @@ export interface PoseBuffer {
   receivedAtMs: number;
 }
 
-/** Matches `SteeringSystem.tsx`'s own publish cadence — the interpolation
- * window a fresh `curr` snapshot blends in over. */
-const POSE_PUBLISH_INTERVAL_MS = (1 / 30) * 1000;
+/** `SteeringSystem.tsx`'s own publish cadence, in milliseconds — the
+ * interpolation window a fresh `curr` snapshot blends in over. Derived from
+ * the shared `POSE_PUBLISH_INTERVAL_SEC` rather than a second hardcoded
+ * `1 / 30`, so the two can't drift apart. */
+const POSE_PUBLISH_INTERVAL_MS = POSE_PUBLISH_INTERVAL_SEC * 1000;
 
 /** A small forward-and-up offset from the fish's own centre, in its local
  * space — just far enough past a typical adult collider radius that the

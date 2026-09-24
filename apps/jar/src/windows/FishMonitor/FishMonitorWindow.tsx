@@ -8,9 +8,9 @@
 // Not part of SPEC.md/SCREENS.md — supplementary tooling rather than a core
 // product screen, but not gated behind a dev build either: it's
 // self-contained (opening it is what turns telemetry publishing on, and
-// closing it resets the day/night override and releases the pilot back to
-// `'auto'`/`null`, both via the mount effect below) and just as useful for
-// a curious owner as for tuning.
+// closing it resets the day/night override, and releases the pilot back to
+// `'auto'`/`null` unless the fish-eye window is still watching, both via the
+// mount effect below) and just as useful for a curious owner as for tuning.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
 import {
+  isFishEyeEnabled,
   setDayNightOverride,
   setFishMonitorEnabled,
   setPilotedFishId,
@@ -164,11 +165,19 @@ export function FishMonitorWindow() {
     // control again, never stuck pinned to whatever was last selected.
     // Piloting a fish is the same kind of running override — releasing it
     // here means a fish never keeps ignoring its own AI just because the
-    // window that armed it happened to close.
+    // window that armed it happened to close. *Unless* the fish-eye window
+    // is still open watching that same fish: it drives the pilot from its
+    // own forwarded keyboard too (`usePilotKeyForwarding`) and has its own
+    // liveness check (`FishEyeWindow.tsx`) to release the pilot later if the
+    // fish itself dies — releasing unconditionally here would otherwise yank
+    // the watched fish back to AI control mid-drive just because the
+    // *monitor* window (not fish-eye) happened to be the one that closed.
     const resetOnClose = () => {
       setFishMonitorEnabled(false);
       setDayNightOverride('auto');
-      setPilotedFishId(null);
+      if (!isFishEyeEnabled()) {
+        setPilotedFishId(null);
+      }
     };
     // The title bar's close button destroys this webview directly
     // (`TitleBar.tsx`'s `close`, `appWindow.close()`) rather than going

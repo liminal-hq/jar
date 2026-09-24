@@ -15,7 +15,12 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
-import { setFishEyeEnabled, usePilotedFishId } from '../../domain/devSettings';
+import {
+  isFishMonitorEnabled,
+  setFishEyeEnabled,
+  setPilotedFishId,
+  usePilotedFishId,
+} from '../../domain/devSettings';
 import { onFishPoses, type FishPoseSnapshot } from '../../domain/fishPose';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import { usePilotKeyForwarding } from '../../domain/usePilotKeyForwarding';
@@ -78,8 +83,18 @@ export function FishEyeWindow() {
       unlisten = fn;
     });
 
+    // Mirrors `FishMonitorWindow.tsx`'s own check in the other direction:
+    // closing fish-eye alone shouldn't yank a fish back to AI control while
+    // the monitor window is still open and actively driving it — only
+    // release the pilot here when the monitor isn't around to own that
+    // responsibility itself. Without this, a fish opened only from here
+    // (Fish monitor already closed) would stay "piloted" forever once this
+    // window closes too, with neither window left to ever release it.
     const resetOnClose = () => {
       setFishEyeEnabled(false);
+      if (!isFishMonitorEnabled()) {
+        setPilotedFishId(null);
+      }
     };
     // Same rationale as `FishMonitorWindow.tsx`'s own `onCloseRequested`
     // hook — the title bar's close button destroys this webview directly,
@@ -98,6 +113,25 @@ export function FishEyeWindow() {
   // Lets this window's own keyboard drive the piloted fish too, same as
   // the Fish monitor window.
   usePilotKeyForwarding(pilotedFishId !== null);
+
+  // Releases a camera target the instant its fish is no longer alive —
+  // passed or despawned, most likely. `FishMonitorWindow.tsx` runs its own
+  // version of this for `pilotedFishId`, but only while it's actually
+  // mounted, and closing it no longer force-releases the pilot while this
+  // window is still watching (see `FishMonitorWindow.tsx`'s own
+  // `resetOnClose`) — so a fish that dies with only this window open would
+  // otherwise freeze the camera on its last known pose forever, with no way
+  // back to the picker. Covers `manualPick` too, which has no other
+  // liveness check anywhere.
+  useEffect(() => {
+    if (cameraFishId === null) return;
+    if (critters[cameraFishId]?.alive) return;
+    if (pilotedFishId === cameraFishId) {
+      setPilotedFishId(null);
+    } else {
+      setManualPick(null);
+    }
+  }, [cameraFishId, critters, pilotedFishId]);
 
   const livingFish = useMemo(
     () =>

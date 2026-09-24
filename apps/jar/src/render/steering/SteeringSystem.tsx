@@ -41,13 +41,7 @@ import {
 } from './heading';
 import { PILOTED_MAX_FORCE } from './manualPilotBehaviour';
 import { isSelfPropelledMode, type FishMotionMode } from './motionState';
-import {
-  advancePilotYaw,
-  getPilotedFishId,
-  getPilotYaw,
-  isActivelyPiloted,
-  seedPilotYaw,
-} from './pilotInputState';
+import { advancePilotYaw, getPilotYaw, isActivelyPiloted, seedPilotYaw } from './pilotInputState';
 import { MAX_STEERING_FORCE } from './useFishSteering';
 
 /** Extra per-fish detail only `FishModel.tsx` knows (its own animation
@@ -197,9 +191,11 @@ const NON_ACTIVE_VELOCITY_DECAY_RATE = 4;
 const DEBUG_PUBLISH_INTERVAL_SEC = 0.2;
 
 /** How often the fish-eye window's pose snapshot publishes — smooth enough
- * to drive a camera (interpolated on the receiving end, `FishEyeWindow.tsx`)
- * without publishing every single frame just to feed a second window. */
-const POSE_PUBLISH_INTERVAL_SEC = 1 / 30;
+ * to drive a camera (interpolated on the receiving end, `FishEyeScene.tsx`'s
+ * own `POSE_PUBLISH_INTERVAL_MS`, derived from this rather than a second
+ * hardcoded `1 / 30`) without publishing every single frame just to feed a
+ * second window. Exported so the two stay a single source of truth. */
+export const POSE_PUBLISH_INTERVAL_SEC = 1 / 30;
 
 const scratchYawEuler = new THREE.Euler();
 
@@ -436,7 +432,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
             colliderRadius: fish.getColliderRadius(),
           });
         }
-        void emitFishPoses({ poses, pilotedId: getPilotedFishId(), t: state.clock.elapsedTime });
+        void emitFishPoses({ poses, t: state.clock.elapsedTime });
       }
     }
   });
