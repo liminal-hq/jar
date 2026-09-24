@@ -186,7 +186,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   build-linux:
-    name: Build Linux release bundles
+    name: Linux (${{ matrix.arch }})
     needs: prepare-release
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -194,8 +194,10 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-24.04
+            arch: x64
             artefact_name: linux-release-assets-x64
           - runner: ubuntu-24.04-arm
+            arch: arm64
             artefact_name: linux-release-assets-arm64
     container:
       image: ghcr.io/liminal-hq/tauri-ci-desktop:latest
@@ -250,7 +252,7 @@ jobs:
           if-no-files-found: error
 
   package-appimage:
-    name: Package AppImage
+    name: AppImage (${{ matrix.arch }})
     needs:
       - prepare-release
       - build-linux
@@ -259,8 +261,10 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-24.04
+            arch: x64
             deb-artifact: linux-release-assets-x64
           - runner: ubuntu-24.04-arm
+            arch: arm64
             deb-artifact: linux-release-assets-arm64
     uses: liminal-hq/.github/.github/workflows/package-arch-appimage.yml@main
     with:
@@ -270,7 +274,7 @@ jobs:
     secrets: inherit
 
   build-windows:
-    name: Build Windows release bundles
+    name: Windows (${{ matrix.arch }})
     needs: prepare-release
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -278,8 +282,10 @@ jobs:
       matrix:
         include:
           - runner: windows-latest
+            arch: x64
             artefact_name: windows-release-assets-x64
           - runner: windows-11-arm
+            arch: arm64
             artefact_name: windows-release-assets-arm64
     steps:
       - name: Checkout code
@@ -333,7 +339,7 @@ jobs:
   # (see plugins/tauri-plugin-jar) makes the app store its snapshot beside
   # itself instead of the OS app-data directory.
   build-windows-portable:
-    name: Build Windows portable bundle
+    name: Windows portable (${{ matrix.arch }})
     needs: prepare-release
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -414,7 +420,7 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    name: Build macOS release bundle
+    name: macOS (universal)
     needs: prepare-release
     runs-on: macos-latest
     steps:
