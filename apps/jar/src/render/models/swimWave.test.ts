@@ -197,4 +197,68 @@ describe('applySwimWave', () => {
     expect(tailWorldX).toBeCloseTo(bodyWorldX, 5);
     expect(tailWorldZ).toBeCloseTo(bodyWorldZ, 5);
   });
+
+  it('adds no rotation at the onset (u=0) regardless of bend', () => {
+    // Vertex 0 sits exactly at the onset x (45, the default onsetX
+    // `buildWaveTables` uses), same layout as the buildWaveTables tests
+    // above — u should be 0 there, so a large bend should still leave it
+    // at rest.
+    const restPositions = new Float32Array([45, 0, 0, -60, 1, 0, -150, 2, 0]);
+    const geometry = triangleGeometry(Array.from(restPositions));
+    const tables = buildWaveTables(restPositions, 0, -60, -150, 3);
+
+    applySwimWave(geometry, restPositions, tables, 1.2, 0.5, 0, 5);
+
+    const pos = geometry.attributes.position!;
+    expect(pos.getX(0)).toBeCloseTo(45, 5);
+    expect(pos.getZ(0)).toBeCloseTo(0, 5);
+  });
+
+  it('applies bend*u as the rotation at zero amplitude, additive with the wave', () => {
+    const restPositions = new Float32Array([-150, 0, 0, -140, 1, 0, -145, 2, 0]);
+    const geometry = triangleGeometry(Array.from(restPositions));
+    const tables = buildWaveTables(restPositions, 0, -60, -150, 3);
+    const bend = 0.3;
+
+    applySwimWave(geometry, restPositions, tables, 0, 0, 0, bend);
+
+    const u = tables.u[0]!;
+    const expectedAngle = bend * u; // swimWaveAngle is 0 at amplitude 0
+    const pos = geometry.attributes.position!;
+    expect(pos.getX(0)).toBeCloseTo(-150 * Math.cos(expectedAngle), 5);
+    expect(pos.getZ(0)).toBeCloseTo(-150 * Math.sin(expectedAngle), 5);
+  });
+
+  it('keeps the body/tail seam closed with a nonzero bend, same as with bend=0', () => {
+    // Same regression as the hinge-shifted seam test above, with a bend
+    // applied identically to both meshes — since both share the same `u`
+    // at the seam point by construction, the seam invariant should hold
+    // regardless of bend.
+    const tailPivotX = -60;
+    const bodySpaceX = -56;
+    const tailLocalX = bodySpaceX - tailPivotX;
+
+    const bodyRest = new Float32Array([bodySpaceX, 0, 3, bodySpaceX, 0, -3, bodySpaceX - 5, 4, 0]);
+    const tailRest = new Float32Array([tailLocalX, 0, 3, tailLocalX, 0, -3, tailLocalX - 5, 4, 0]);
+
+    const bodyGeometry = triangleGeometry(Array.from(bodyRest));
+    const tailGeometry = triangleGeometry(Array.from(tailRest));
+
+    const bodyTables = buildWaveTables(bodyRest, 0, tailPivotX, -150, 3);
+    const tailTables = buildWaveTables(tailRest, tailPivotX, tailPivotX, -150, 3);
+
+    const phase = 1.1;
+    const amplitude = 1.0;
+    const bend = -0.4;
+    applySwimWave(bodyGeometry, bodyRest, bodyTables, phase, amplitude, 0, bend);
+    applySwimWave(tailGeometry, tailRest, tailTables, phase, amplitude, tailPivotX, bend);
+
+    const bodyPos = bodyGeometry.attributes.position!;
+    const tailPos = tailGeometry.attributes.position!;
+    const tailWorldX = tailPos.getX(0) + tailPivotX;
+    const tailWorldZ = tailPos.getZ(0);
+
+    expect(tailWorldX).toBeCloseTo(bodyPos.getX(0), 5);
+    expect(tailWorldZ).toBeCloseTo(bodyPos.getZ(0), 5);
+  });
 });

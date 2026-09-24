@@ -30,6 +30,39 @@ describe('computeTurnRate', () => {
     expect(turnRate).toBe(0);
   });
 
+  it('signs signedTurnRate opposite for opposite turn directions, same magnitude as turnRate', () => {
+    const prevDirection = new THREE.Vector3(0, 0, 1);
+
+    const towardPositiveX = new THREE.Vector3(1, 0, 0).multiplyScalar(MIN_TURN_RATE_SPEED * 2);
+    const positiveTurn = computeTurnRate(
+      towardPositiveX.length(),
+      towardPositiveX,
+      prevDirection,
+      0.5,
+    );
+    expect(positiveTurn.signedTurnRate).toBeCloseTo(positiveTurn.turnRate, 5);
+
+    const towardNegativeX = new THREE.Vector3(-1, 0, 0).multiplyScalar(MIN_TURN_RATE_SPEED * 2);
+    const negativeTurn = computeTurnRate(
+      towardNegativeX.length(),
+      towardNegativeX,
+      prevDirection,
+      0.5,
+    );
+    expect(negativeTurn.signedTurnRate).toBeCloseTo(-negativeTurn.turnRate, 5);
+    expect(Math.abs(negativeTurn.signedTurnRate)).toBeCloseTo(
+      Math.abs(positiveTurn.signedTurnRate),
+      5,
+    );
+  });
+
+  it('reports zero signedTurnRate at or below the speed gate', () => {
+    const prevDirection = new THREE.Vector3(0, 0, 1);
+    const velocity = new THREE.Vector3(1, 0, 0).multiplyScalar(MIN_TURN_RATE_SPEED);
+    const { signedTurnRate } = computeTurnRate(velocity.length(), velocity, prevDirection, 0.016);
+    expect(signedTurnRate).toBe(0);
+  });
+
   it('holds the previous direction (not the noisy new one) below the speed gate', () => {
     const prevDirection = new THREE.Vector3(0, 0, 1);
     // A direction that would otherwise register a sharp turn.
@@ -81,6 +114,25 @@ describe('computeTurnRate', () => {
       0.5,
     );
     expect(turnRate).toBeCloseTo(Math.PI / 2 / 0.5, 5);
+  });
+
+  it('resumes a correctly signed reading once speed climbs back above the gate', () => {
+    const originalDirection = new THREE.Vector3(0, 0, 1);
+    const { direction: heldDirection } = computeTurnRate(
+      0.01,
+      new THREE.Vector3(1, 0, 0).multiplyScalar(0.01),
+      originalDirection,
+      0.016,
+    );
+
+    const resumedVelocity = new THREE.Vector3(-1, 0, 0).multiplyScalar(MIN_TURN_RATE_SPEED * 2);
+    const { turnRate, signedTurnRate } = computeTurnRate(
+      resumedVelocity.length(),
+      resumedVelocity,
+      heldDirection,
+      0.5,
+    );
+    expect(signedTurnRate).toBeCloseTo(-turnRate, 5);
   });
 
   it('does not return null/NaN for a zero delta', () => {

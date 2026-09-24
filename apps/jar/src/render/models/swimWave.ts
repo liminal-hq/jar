@@ -128,7 +128,16 @@ export function buildWaveTables(
  * continuously with x, so this isn't a single rigid rotation, and
  * rotating by the local angle alone ignores that variation (most visible
  * as wrong-looking lighting toward high-`tipGain` tail tips, where the
- * angle changes fastest). */
+ * angle changes fastest).
+ *
+ * `bend` is a DC (non-oscillating) term layered onto the same per-vertex
+ * angle, ramping linearly from 0 at the onset (`u=0`) to `bend` itself at
+ * the tail tip (`u=1`) — the turn-curve companion to the oscillating wave
+ * above (`docs/architecture/notes/fish-turn-bend.md`), reusing the same
+ * `u` table rather than a second deformation mechanism. Sharing `u` with
+ * `env` is what keeps it continuous across the body/tail seam for free,
+ * the same property the seam-pivot machinery above protects for the wave
+ * itself. */
 export function applySwimWave(
   geometry: THREE.BufferGeometry,
   restPositions: Float32Array,
@@ -136,11 +145,13 @@ export function applySwimWave(
   phase: number,
   amplitude: number,
   rotationOffsetX = 0,
+  bend = 0,
 ): void {
   const position = geometry.attributes.position;
   if (!position) return;
   for (let v = 0; v < tables.u.length; v++) {
-    const angle = swimWaveAngle(tables.env[v]!, tables.u[v]!, phase, amplitude);
+    const u = tables.u[v]!;
+    const angle = swimWaveAngle(tables.env[v]!, u, phase, amplitude) + bend * u;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const i = v * 3;
