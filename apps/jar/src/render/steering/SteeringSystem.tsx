@@ -31,10 +31,15 @@ import {
 import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
 import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
-import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
+import {
+  computePilotTargetHeading,
+  computeTargetHeading,
+  HEADING_COMMIT_SPEED,
+  HEADING_RELEASE_SPEED,
+} from './heading';
 import { PILOTED_MAX_FORCE } from './manualPilotBehaviour';
 import { isSelfPropelledMode, type FishMotionMode } from './motionState';
-import { isActivelyPiloted } from './pilotInputState';
+import { advancePilotYaw, getPilotYaw, isActivelyPiloted, seedPilotYaw } from './pilotInputState';
 import { MAX_STEERING_FORCE } from './useFishSteering';
 
 /** Extra per-fish detail only `FishModel.tsx` knows (its own animation
@@ -218,7 +223,22 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       // close a piloted fish could ever get to a wall). Reverted the
       // instant no key is held, so an idle piloted fish is indistinguishable
       // from an unpiloted one.
-      fish.vehicle.maxForce = isActivelyPiloted(id) ? PILOTED_MAX_FORCE : MAX_STEERING_FORCE;
+      const piloted = isActivelyPiloted(id);
+      fish.vehicle.maxForce = piloted ? PILOTED_MAX_FORCE : MAX_STEERING_FORCE;
+      // Seeded from this fish's own *rendered* heading the first frame
+      // piloting engages (never mid-drive — `pilotYaw` stays seeded across
+      // frames until the key set empties, `pilotInputState.ts`), so there's
+      // no visible snap the instant a key is first pressed. Advanced here,
+      // not in `ManualPilotBehaviour.calculate()` — see that file's own
+      // comment for why turning would silently stall some frames if it
+      // depended on that call happening.
+      if (piloted) {
+        if (getPilotYaw() === null) {
+          scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
+          seedPilotYaw(scratchYawEuler.y);
+        }
+        advancePilotYaw(delta);
+      }
       if (debugPositions) debugPositions[id] = { x: t.x, y: t.y, z: t.z };
     }
     if (debugPositions) {
@@ -290,7 +310,22 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
           scratchImpulse.setLength(maxImpulseMagnitude);
         }
         body.applyImpulse(scratchImpulse, true);
+      }
 
+      // Hoisted out of the impulse-application gate above: a piloted fish
+      // turning in place (`KeyA`/`KeyD`, no `KeyW`/`KeyS`) has near-zero
+      // velocity, which `computeTargetHeading`'s own speed threshold would
+      // read as "hold the last heading" rather than commit to — there's no
+      // velocity to derive a turn from in the first place. A driven yaw
+      // needs no such derivation, so it overrides the normal velocity-based
+      // heading unconditionally while seeded, turn-in-place included; an
+      // unpiloted (or idle-piloted) fish falls straight through to the
+      // existing velocity-gated logic, completely unaffected.
+      const pilotYaw = isActivelyPiloted(id) ? getPilotYaw() : null;
+      if (pilotYaw !== null) {
+        fish.targetHeading.copy(computePilotTargetHeading(pilotYaw, scratchVelocity));
+        fish.isHeadingActive = false;
+      } else if (scratchVelocity.lengthSq() >= MIN_VELOCITY_SQ) {
         const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;
         const target = computeTargetHeading(scratchVelocity, threshold);
         fish.isHeadingActive = target !== null;

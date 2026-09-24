@@ -383,7 +383,7 @@ export function FishMonitorWindow() {
                     </button>
                   </div>
                   <div style={{ font: '11px monospace', opacity: 0.7 }}>
-                    A/D left/right · W/S back/front glass · R/F up/down
+                    W/S forward/back · A/D turn · R/F up/down
                   </div>
                   <div style={{ opacity: 0.5 }}>Keys work in this window or the tank.</div>
                 </div>

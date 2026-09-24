@@ -75,3 +75,22 @@ export function computeTargetHeading(
   scratchEuler.set(-pitch, yaw, 0, 'YXZ');
   return new THREE.Quaternion().setFromEuler(scratchEuler);
 }
+
+/** Same yaw+clamped-pitch, roll-free construction as `computeTargetHeading`,
+ * but for a manually piloted fish: `yaw` is supplied directly (the driven
+ * angle `pilotInputState.ts`'s `KeyA`/`KeyD` maintain), never derived from
+ * velocity — turning in place has no velocity to derive a yaw from, which
+ * is exactly the case `computeTargetHeading`'s speed threshold would
+ * release rather than commit to. Pitch still comes from velocity (there's
+ * no equivalent "driven pitch" input, `KeyR`/`KeyF` are world-space
+ * vertical thrust, not a pitch control) — at negligible vertical speed this
+ * naturally settles to 0, the same flat-pitch look a stationary or purely-
+ * turning fish should have. Never returns `null`: a driven yaw is never
+ * noisy the way a velocity-derived one can be. */
+export function computePilotTargetHeading(yaw: number, velocity: THREE.Vector3): THREE.Quaternion {
+  const horizSpeed = Math.hypot(velocity.x, velocity.z);
+  const pitch = THREE.MathUtils.clamp(Math.atan2(velocity.y, horizSpeed), -MAX_PITCH, MAX_PITCH);
+
+  scratchEuler.set(-pitch, yaw, 0, 'YXZ');
+  return new THREE.Quaternion().setFromEuler(scratchEuler);
+}

@@ -9,7 +9,7 @@
 
 import * as YUKA from 'yuka';
 
-import { getPilotDirection, getPilotedFishId } from './pilotInputState';
+import { getPilotedFishId, getPilotThrust } from './pilotInputState';
 
 /** How hard the player's own held-key input pushes — Yuka's
  * `SteeringManager` accumulates each behaviour's force in insertion order
@@ -60,18 +60,28 @@ export class ManualPilotBehaviour extends YUKA.SteeringBehavior {
     super();
   }
 
+  // Deliberately no yaw math and no use of the `delta` Yuka passes as a
+  // third argument here — `pilotInputState.ts`'s `advancePilotYaw` owns
+  // that, from `SteeringSystem.tsx`'s `useFrame`, which always runs. This
+  // `calculate()` call itself is not guaranteed to: Yuka's
+  // `SteeringManager._calculateByOrder` stops calling any further
+  // behaviours the instant an earlier one's force exhausts
+  // `vehicle.maxForce` (`_accumulate(force) === false` short-circuits the
+  // whole loop), which a maxed-out avoidance corner can do before this
+  // behaviour is ever reached — turning would silently stall some frames
+  // if it depended on `calculate()` running every one of them.
   calculate(vehicle: YUKA.Vehicle, force: YUKA.Vector3): YUKA.Vector3 {
     force.x = 0;
     force.y = 0;
     force.z = 0;
 
     if (getPilotedFishId() !== this.critterId) return force;
-    const direction = getPilotDirection();
-    if (direction === null) return force;
+    const thrust = getPilotThrust();
+    if (thrust === null) return force;
 
-    force.x = direction.x * PILOT_STRENGTH;
-    force.y = direction.y * PILOT_STRENGTH;
-    force.z = direction.z * PILOT_STRENGTH;
+    force.x = thrust.x * PILOT_STRENGTH;
+    force.y = thrust.y * PILOT_STRENGTH;
+    force.z = thrust.z * PILOT_STRENGTH;
     return force;
   }
 }
