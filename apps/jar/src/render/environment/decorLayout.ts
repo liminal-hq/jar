@@ -62,9 +62,17 @@ export const CASTLE_ROOF_HALF_WIDTH = 0.325;
 
 /** Where the castle sits — `x` pulled toward centre so the wider
  * tower-to-tower span (`CASTLE_TOWER_OFFSET` grew for real tower
- * clearance) still clears the tank wall; `z` pulled forward from an
- * original `-0.8`, which read as pressed against the back glass. */
-export const CASTLE_POSITION = { x: 0.5, y: FLOOR_TOP_Y, z: -0.3 };
+ * clearance) still leaves real room between the right tower and the tank
+ * wall: at an original `0.5`, that gap was only 0.225 world units — just
+ * *under* even the flattest fish's own physical thickness (a Veil's
+ * collider box is 0.24 wide, `fishCollider.ts`), so no orientation could
+ * actually fit through there no matter how avoidance margins were tuned.
+ * `0.375` reopens it to 0.35, matching the keep-to-tower gap's own
+ * clearance. The left tower's own gap to the opposite wall starts far more
+ * generous (~1.2) and stays comfortably so after the same shift — `z`
+ * pulled forward from an original `-0.8`, which read as pressed against
+ * the back glass. */
+export const CASTLE_POSITION = { x: 0.375, y: FLOOR_TOP_Y, z: -0.3 };
 
 /** Static collider footprint — left wall segment, right wall segment, and
  * a lintel above the door opening (leaving the door itself clear), plus
@@ -151,9 +159,15 @@ export const PLANT_BROADLEAF_POSITION = { x: -2.0, y: FLOOR_TOP_Y, z: 0.5 };
 // Original spot — nudged from `-1.0` to `-1.9` for the same reason.
 export const PLANT_SMALL_KELP_POSITION = { x: -1.9, y: FLOOR_TOP_Y, z: -0.3 };
 // New: front-right, standing in front of (not overlapping — separated in
-// z) the right tower, clear of the airstone (~66% x per §8.1, ≈ +0.96
-// world).
-export const PLANT_FRONT_RIGHT_POSITION = { x: 2.3, y: FLOOR_TOP_Y, z: 0.6 };
+// z) the right tower — x tracks the tower's own world x
+// (`CASTLE_POSITION.x + CASTLE_TOWER_OFFSET`) so it stays aligned with it
+// regardless of where the castle sits — clear of the airstone (~66% x per
+// §8.1, ≈ +0.96 world).
+export const PLANT_FRONT_RIGHT_POSITION = {
+  x: CASTLE_POSITION.x + CASTLE_TOWER_OFFSET,
+  y: FLOOR_TOP_Y,
+  z: 0.6,
+};
 // New: in the gap between the left tower and the keep's own left edge,
 // pulled forward of the castle's front face — reads as sitting just left
 // of the keep, in front of it.

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { TANK_INNER_BOUNDS } from '../physics/coordinates';
+import { TANK_INNER_BOUNDS, WALL_THICKNESS } from '../physics/coordinates';
 import {
   CASTLE_COLLIDER_BOXES,
   CASTLE_DOOR_HALF_WIDTH,
@@ -207,7 +207,12 @@ describe('keepClearOfCastle', () => {
     // on that same axis — an infinite oscillation unless the axis choice
     // itself accounts for tank-bounds feasibility.
     const margin = 0.456;
-    const start = { x: 1.4, y: -1.1, z: -0.5 };
+    // x tracks the right wall segment box's own position (`CASTLE_POSITION.x
+    // + CASTLE_KEEP_HALF_WIDTH`-ish), which moved when `CASTLE_POSITION.x`
+    // did (0.5 -> 0.375, widening the tower-to-glass gap) — offset by the
+    // same amount so this still starts inside that box, close to the back
+    // wall, reproducing the same edge case.
+    const start = { x: 1.4 - (0.5 - CASTLE_POSITION.x), y: -1.1, z: -0.5 };
     const pushed = keepClearOfCastle(start, margin);
 
     expect(isOutsideEveryColliderBox(pushed, margin)).toBe(true);
@@ -221,5 +226,23 @@ describe('the keep-to-tower gap', () => {
   it('stays wide enough for the flattest fish collider to fit through (fishCollider.test.ts pins the fish side of this)', () => {
     const gap = CASTLE_TOWER_OFFSET - CASTLE_TOWER_HALF_WIDTH - CASTLE_KEEP_HALF_WIDTH;
     expect(gap).toBeCloseTo(0.325, 5);
+  });
+});
+
+describe('the tower-to-glass gap', () => {
+  it('stays wide enough for even the widest (Veil) fish collider to physically fit through', () => {
+    // Tank glass's clear inner face — `TANK_INNER_BOUNDS.x` is the wall
+    // collider's own *centre* plane (its own doc comment), not the clear
+    // face, so half the wall thickness comes off.
+    const glassInnerFace = TANK_INNER_BOUNDS.x - WALL_THICKNESS / 2;
+    const towerOuterEdge = CASTLE_POSITION.x + CASTLE_TOWER_OFFSET + CASTLE_TOWER_HALF_WIDTH;
+    const gap = glassInnerFace - towerOuterEdge;
+    // A Veil's collider box is 0.24 wide (`fishCollider.ts`'s
+    // COLLIDER_HALF_THICKNESS_SVG.Veil = 30 SVG units * SVG_SCALE * 2) —
+    // the single widest fin type, sex-independent for thickness. This gap
+    // used to be 0.225, *under* even that, before `CASTLE_POSITION.x`
+    // moved from 0.5 to 0.375 specifically to fix it.
+    const widestFishDiameter = 0.24;
+    expect(gap).toBeGreaterThan(widestFishDiameter);
   });
 });
