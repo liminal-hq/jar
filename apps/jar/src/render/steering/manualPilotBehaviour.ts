@@ -11,21 +11,49 @@ import * as YUKA from 'yuka';
 
 import { getPilotDirection, getPilotedFishId } from './pilotInputState';
 
-/** Deliberately equal to `vehicle.maxForce` (`MAX_STEERING_FORCE`,
- * `useFishSteering.ts`) — Yuka's `SteeringManager` accumulates each
- * behaviour's force in insertion order against that budget
- * (`_accumulate`'s real mechanics, verified against the Yuka source), so a
- * force this size claims whatever's left of it once `containment`/
- * `castleAvoidance` (inserted first, and *not* silenced by piloting) have
- * taken their share. That's the point on both ends: it's strong enough to
- * fully silence `wander`/`separation`/`pursuit`/`arrive` — the same
- * accumulator mechanic that already lets wall-avoidance out-vote wander,
- * now doing the "hand the AI's usual slot to the player" work for free —
- * and it's not stronger than the walls, so a piloted fish still can't be
- * forced through the glass. Don't raise this to push harder against a
- * wall; that would let piloting clip through containment instead of
- * exercising the exact budget conflict this tool exists to test. */
+/** How hard the player's own held-key input pushes — Yuka's
+ * `SteeringManager` accumulates each behaviour's force in insertion order
+ * against `vehicle.maxForce` (`_accumulate`'s real mechanics, verified
+ * against the Yuka source), so this is what claims whatever's left of that
+ * budget once `containment`/`castleAvoidance` (inserted first, and *not*
+ * silenced by piloting) have taken their share — the same accumulator
+ * mechanic that already lets wall-avoidance out-vote `wander` silences
+ * `wander`/`separation`/`pursuit`/`arrive` here too, for free.
+ *
+ * This used to equal `vehicle.maxForce` itself (3), on the theory that
+ * matching the whole budget would "win" it after avoidance's share — live
+ * testing (driving a fish toward the glass) showed that reasoning was
+ * wrong: `containment`'s own requested magnitude ramps linearly up to its
+ * `STRENGTH` (4, exceeding the 3-wide budget on purpose, `tankContainment
+ * Behaviour.ts`) and gets clamped to whatever's left of the shared budget —
+ * which means containment ALONE can claim the *entire* budget once its own
+ * push reaches magnitude 3, at only 75% of the way through its margin band
+ * (3/4), not at full penetration. Past that point *nothing* added after it
+ * gets any share, regardless of how large its own requested magnitude is —
+ * so a pilot force capped at exactly 3 could never win any budget back
+ * past that 75% mark, no matter how long a key was held. A piloted fish
+ * visibly couldn't get anywhere near as close to the glass (or fit behind
+ * the castle) as one clearly still fits. See `PILOTED_MAX_FORCE` below for
+ * the actual fix — this constant itself didn't need to change, the shared
+ * budget it competes for did. */
 export const PILOT_STRENGTH = 3;
+
+/** `vehicle.maxForce` while a fish is *actively* piloted (a key genuinely
+ * held, `pilotInputState.ts`'s `isActivelyPiloted` — not merely selected)
+ * — applied per frame in `SteeringSystem.tsx`, reverted to the normal
+ * `MAX_STEERING_FORCE` the instant no key is held, so an idle piloted fish
+ * still behaves exactly like an unpiloted one. Sized as the worst single
+ * avoidance behaviour's own request (`STRENGTH = 4`, shared by both
+ * `TankContainmentBehaviour` and `CastleAvoidanceBehaviour`) plus
+ * `PILOT_STRENGTH`, so a single avoidance source *always* gets its full,
+ * unclamped natural push — identical to how it behaves unpiloted — while
+ * `PILOT_STRENGTH` still has real budget left over to actually contest it,
+ * rather than being starved out by the shared-budget clamp described
+ * above. A fish squeezed by *two* maxed-out avoidance sources at once (a
+ * tight corner between the glass and the castle, up to `4 + 4 = 8`) can
+ * still fully starve the pilot — deliberately: that's a genuinely tight
+ * spot, not the ordinary single-wall approach this tool exists to force. */
+export const PILOTED_MAX_FORCE = 4 + PILOT_STRENGTH;
 
 export class ManualPilotBehaviour extends YUKA.SteeringBehavior {
   constructor(private readonly critterId: number) {

@@ -40,8 +40,10 @@ const WANDER_DISTANCE = 1.6;
 /** Yuka's own default (100) is effectively unclamped at this tank's scale —
  * bounding it keeps the worst-case combined wander+separation+containment
  * force from producing a visible snap in one step; the orientation slerp
- * (`SteeringSystem.tsx`) then smooths whatever's left. */
-const MAX_STEERING_FORCE = 3;
+ * (`SteeringSystem.tsx`) then smooths whatever's left. Exported so
+ * `SteeringSystem.tsx` can restore it on a fish once manual piloting
+ * releases (`PILOTED_MAX_FORCE`, `manualPilotBehaviour.ts`). */
+export const MAX_STEERING_FORCE = 3;
 
 /** Extra room beyond a fish's own collider radius before the containment
  * push starts — not just enough to clear the glass at zero margin

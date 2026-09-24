@@ -32,8 +32,10 @@ import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
 import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
 import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
+import { PILOTED_MAX_FORCE } from './manualPilotBehaviour';
 import { isSelfPropelledMode, type FishMotionMode } from './motionState';
 import { isActivelyPiloted } from './pilotInputState';
+import { MAX_STEERING_FORCE } from './useFishSteering';
 
 /** Extra per-fish detail only `FishModel.tsx` knows (its own animation
  * state) — optional because the standalone critter-card preview drives a
@@ -206,6 +208,17 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       const t = body.translation();
       fish.vehicle.position.set(t.x, t.y, t.z);
       fish.vehicle.maxSpeed = fish.maxSpeed();
+      // Widened while a key is genuinely held for this fish, so
+      // `containment`/`castleAvoidance` can still claim their own full,
+      // unclamped push (up to their own `STRENGTH`, 4) while leaving
+      // `PILOT_STRENGTH`'s worth of budget still free for the player —
+      // `manualPilotBehaviour.ts`'s `PILOTED_MAX_FORCE` comment has the
+      // full reasoning (this used to stay at `MAX_STEERING_FORCE`
+      // unconditionally, which live testing showed silently capped how
+      // close a piloted fish could ever get to a wall). Reverted the
+      // instant no key is held, so an idle piloted fish is indistinguishable
+      // from an unpiloted one.
+      fish.vehicle.maxForce = isActivelyPiloted(id) ? PILOTED_MAX_FORCE : MAX_STEERING_FORCE;
       if (debugPositions) debugPositions[id] = { x: t.x, y: t.y, z: t.z };
     }
     if (debugPositions) {
