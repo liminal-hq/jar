@@ -28,9 +28,9 @@ import {
 } from '../../domain/devSettings';
 import { onFishDebug, type FishDebugEntry, type FishDebugSnapshot } from '../../domain/fishDebug';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
-import { emitPilotKey } from '../../domain/pilotInput';
+import { usePilotKeyForwarding } from '../../domain/usePilotKeyForwarding';
+import { openSatelliteWindow } from '../../domain/windows';
 import { TANK_INNER_BOUNDS } from '../../render/physics/coordinates';
-import { PILOT_KEY_CODES } from '../../render/steering/pilotInputState';
 
 /** SVG viewBox units — arbitrary, each map just needs to be square-ish and
  * proportional to the tank's own footprint on its own two axes. */
@@ -205,37 +205,8 @@ export function FishMonitorWindow() {
     }
   }, [snapshot, pilotedFishId]);
 
-  // While a fish is piloted, this window's own keyboard drives it too —
-  // forwarded to the tank window (`PilotCaptureBridge.tsx`) over
-  // `domain/pilotInput.ts` rather than mutating `pilotInputState.ts`
-  // directly, since that module is realm-local (each window's bundle gets
-  // its own copy) and the Yuka vehicles only exist in the tank's realm.
-  // `preventDefault()` on the six mapped keys keeps them from also
-  // scrolling the table underneath.
-  useEffect(() => {
-    if (pilotedFishId === null) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat || !PILOT_KEY_CODES.includes(e.code)) return;
-      e.preventDefault();
-      void emitPilotKey({ code: e.code, pressed: true });
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (!PILOT_KEY_CODES.includes(e.code)) return;
-      e.preventDefault();
-      void emitPilotKey({ code: e.code, pressed: false });
-    };
-    const onBlur = () => void emitPilotKey({ clear: true });
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
-      void emitPilotKey({ clear: true });
-    };
-  }, [pilotedFishId]);
+  // While a fish is piloted, this window's own keyboard drives it too.
+  usePilotKeyForwarding(pilotedFishId !== null);
 
   const staleMs = snapshot ? performance.now() - receivedAtRef.current : null;
 
@@ -350,12 +321,22 @@ export function FishMonitorWindow() {
                           <td>{f.isResting ? '●' : ''}</td>
                           <td>{f.speed.toFixed(2)}</td>
                           <td>{f.turnRate.toFixed(1)}</td>
-                          <td>
+                          <td style={{ display: 'flex', gap: 4 }}>
                             <button
                               style={{ font: 'inherit' }}
                               onClick={() => setPilotedFishId(isPiloted ? null : f.id)}
                             >
                               {isPiloted ? 'Release' : 'Pilot'}
+                            </button>
+                            <button
+                              style={{ font: 'inherit' }}
+                              title="Pilot this fish and open the fish-eye window watching it"
+                              onClick={() => {
+                                setPilotedFishId(f.id);
+                                void openSatelliteWindow('fish-eye');
+                              }}
+                            >
+                              Watch
                             </button>
                           </td>
                         </tr>
