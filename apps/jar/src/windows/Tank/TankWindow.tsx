@@ -136,6 +136,29 @@ export function TankWindow() {
   // (selecting a critter — see `Fish.tsx`'s own `onClick`).
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const DRAG_THRESHOLD_PX = 4;
+  // Shows a move cursor for as long as this component can actually
+  // control the cursor — from the first real movement after a press until
+  // the threshold is crossed and control hands off to `startDragging()`'s
+  // native interactive move. Deliberately not CSS `:active`: that would
+  // track the same "mouse currently held down" window this component's
+  // own JS state does, and get stuck the exact same way for the exact
+  // same reason — see the "hands off" note below — so it isn't actually a
+  // simpler alternative, just a differently-spelled version of the same
+  // problem, minus the ability to fix it. That hand-off is also why this
+  // doesn't just track "is a drag in progress" for its whole duration:
+  // once the OS takes over, GTK/the window manager grabs the pointer for
+  // the rest of the gesture (see the comment below on why an unconditional
+  // `startDragging()` broke plain clicks) — normal DOM events, including
+  // the `mouseup` that ends it, aren't reliably delivered back to this
+  // window, and the release can land anywhere on screen, not necessarily
+  // back over the tank. Desktop window managers already show their own
+  // move cursor for that native phase, the same as dragging any other
+  // window by its title bar, so there's nothing left for this component
+  // to do once it hands off. Set from the first `mousemove`, not
+  // `mousedown` itself: a plain click never generates a `mousemove` at
+  // all, so waiting for one means an ordinary click-to-toggle-the-drawer
+  // never flashes the cursor for a drag that was never going to happen.
+  const [dragging, setDragging] = useState(false);
 
   const handleTankMouseDown = (e: ReactMouseEvent) => {
     if (e.buttons !== 1) return;
@@ -143,15 +166,18 @@ export function TankWindow() {
     const handleMove = (moveEvent: MouseEvent) => {
       const start = dragStartRef.current;
       if (!start) return;
+      setDragging(true);
       const dx = moveEvent.clientX - start.x;
       const dy = moveEvent.clientY - start.y;
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
       dragStartRef.current = null;
       cleanup();
+      setDragging(false);
       void getCurrentWindow().startDragging();
     };
     const handleUp = () => {
       dragStartRef.current = null;
+      setDragging(false);
       cleanup();
     };
     const cleanup = () => {
@@ -195,6 +221,7 @@ export function TankWindow() {
       <PilotCaptureBridge />
       <div
         className={styles.tankInterior}
+        style={dragging ? { cursor: 'move' } : undefined}
         onContextMenu={handleTankContextMenu}
         onMouseDown={handleTankMouseDown}
         data-tauri-drag-region
