@@ -39,6 +39,35 @@ function createDevToggle(key: string) {
   return { isEnabled, setEnabled, useEnabled };
 }
 
+/** A `localStorage`-backed number dev setting, live-synced the same way
+ * `createDevToggle` is — used for tunables where a plain on/off doesn't fit,
+ * e.g. `fishEyeLensStrength` below. Falls back to `defaultValue` for a
+ * missing or corrupt (non-finite) stored value, so a hand-edited/cleared
+ * `localStorage` entry can't leave a reader with `NaN`. */
+function createDevNumber(key: string, defaultValue: number) {
+  const getValue = () => {
+    const raw = localStorage.getItem(key);
+    const n = raw === null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : defaultValue;
+  };
+  const setValue = (value: number) => {
+    localStorage.setItem(key, String(value));
+    window.dispatchEvent(new StorageEvent('storage', { key }));
+  };
+  const useValue = () => {
+    const [value, setValueState] = useState(getValue);
+    useEffect(() => {
+      const onStorage = (e: StorageEvent) => {
+        if (e.key === null || e.key === key) setValueState(getValue());
+      };
+      window.addEventListener('storage', onStorage);
+      return () => window.removeEventListener('storage', onStorage);
+    }, []);
+    return value;
+  };
+  return { getValue, setValue, useValue };
+}
+
 const mouseOverlay = createDevToggle('jar:dev:mouseOverlay');
 export const isMouseOverlayEnabled = mouseOverlay.isEnabled;
 export const setMouseOverlayEnabled = mouseOverlay.setEnabled;
@@ -168,3 +197,15 @@ export function useFishPositionOverlayEnabled(): boolean {
   }, []);
   return enabled;
 }
+
+/** How strong the Fish eye window's lens-distortion effect
+ * (`render/effects/FishEyeLensEffect.tsx`) looks, from 0 (plain perspective
+ * camera) to 1 (maximum barrel distortion/vignette/fringing) — live-tunable
+ * here rather than hardcoded like `CrtEffect`'s constants, since the right
+ * "unmistakably fisheye but not smeared" strength can only be judged by eye
+ * in the running app. Unlike the toggles above, this isn't reset on this
+ * window's close: it's a real tuned value, not per-session debug capture. */
+const fishEyeLensStrength = createDevNumber('jar:dev:fishEyeLensStrength', 0.75);
+export const getFishEyeLensStrength = fishEyeLensStrength.getValue;
+export const setFishEyeLensStrength = fishEyeLensStrength.setValue;
+export const useFishEyeLensStrength = fishEyeLensStrength.useValue;

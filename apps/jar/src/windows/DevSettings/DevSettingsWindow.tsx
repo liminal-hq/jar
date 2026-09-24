@@ -26,8 +26,10 @@ import {
   type MouseLogEntry,
 } from '../../domain/debugChannel';
 import {
+  getFishEyeLensStrength,
   isFishPositionOverlayEnabled,
   isMouseOverlayEnabled,
+  setFishEyeLensStrength,
   setFishPositionOverlayEnabled,
   setMouseOverlayEnabled,
 } from '../../domain/devSettings';
@@ -125,6 +127,7 @@ export function DevSettingsWindow() {
   const [fishPositionOverlayEnabled, setFishPositionOverlayEnabledState] = useState(
     isFishPositionOverlayEnabled,
   );
+  const [fishEyeLensStrength, setFishEyeLensStrengthState] = useState(getFishEyeLensStrength);
 
   useEffect(() => {
     void ensureJarClientStarted();
@@ -187,6 +190,22 @@ export function DevSettingsWindow() {
           Fish position debug (captured in tank window)
         </label>
         {fishPositionOverlayEnabled && <FishPositionPanel />}
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          Fish eye lens strength ({fishEyeLensStrength.toFixed(2)})
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={fishEyeLensStrength}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              setFishEyeLensStrength(value);
+              setFishEyeLensStrengthState(value);
+            }}
+          />
+        </label>
       </div>
     </DialogShell>
   );
