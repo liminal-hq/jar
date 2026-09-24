@@ -11,7 +11,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
   - **Mode**: Gecko/Fish (mode switch).
   - **Screenshot**: copies the tank canvas to the clipboard as a PNG.
   - **Critters**: Add a critter · Tree · Fish monitor · Fish eye — creating a critter, and the windows that show you the critters/sim itself.
-  - **App**: Setup · Dev · Exit (saves the jar, quits the app — essential on GNOME where there is no tray) — configuration and tooling for the app, not the critters. Dev and Fish monitor are always available, not gated behind a dev build — see "Dev / Fish monitor" below.
+  - **App**: Always on top · Setup · Dev · Exit (saves the jar, quits the app — essential on GNOME where there is no tray) — configuration and tooling for the app, not the critters. Dev and Fish monitor are always available, not gated behind a dev build — see "Dev / Fish monitor" below.
   - Menu styling follows the **dialog theme**, via the same `--jar-*` tokens W2/W3/W4 use.
 
 The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `docs/architecture/3d-engine.md`; only the bezel/right-click menu/toasts/status chip are flat HTML/CSS chrome around it.
