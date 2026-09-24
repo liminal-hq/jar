@@ -13,44 +13,16 @@ import { useEffect, useState } from 'react';
 
 const FISH_POSITION_OVERLAY_KEY = 'jar:dev:fishPositionOverlay';
 
-/** A `localStorage`-backed boolean dev toggle, live-synced across every
- * window of this origin — factors out the exact pattern `isMouseOverlayEnabled`
- * originally hand-rolled (get/set/hook trio) so each new toggle is a
- * one-line call instead of a copy-pasted trio. `storage` only fires in
+/** The get/set/live-sync-hook trio shared by every dev setting below,
+ * parameterized only by how to turn a raw stored string (or `null`, if
+ * unset) into a value of type `T` — factors out the exact trio
+ * `isMouseOverlayEnabled` originally hand-rolled so each new setting is one
+ * `parse` function instead of a copy-pasted trio. `storage` only fires in
  * *other* windows, so `set` also dispatches a synthetic one locally, which
- * is what keeps the window that flipped the toggle in sync with itself. */
-function createDevToggle(key: string) {
-  const isEnabled = () => localStorage.getItem(key) === 'true';
-  const setEnabled = (enabled: boolean) => {
-    localStorage.setItem(key, String(enabled));
-    window.dispatchEvent(new StorageEvent('storage', { key }));
-  };
-  const useEnabled = () => {
-    const [enabled, setEnabledState] = useState(isEnabled);
-    useEffect(() => {
-      const onStorage = (e: StorageEvent) => {
-        if (e.key === null || e.key === key) setEnabledState(isEnabled());
-      };
-      window.addEventListener('storage', onStorage);
-      return () => window.removeEventListener('storage', onStorage);
-    }, []);
-    return enabled;
-  };
-  return { isEnabled, setEnabled, useEnabled };
-}
-
-/** A `localStorage`-backed number dev setting, live-synced the same way
- * `createDevToggle` is — used for tunables where a plain on/off doesn't fit,
- * e.g. `fishEyeLensStrength` below. Falls back to `defaultValue` for a
- * missing or corrupt (non-finite) stored value, so a hand-edited/cleared
- * `localStorage` entry can't leave a reader with `NaN`. */
-function createDevNumber(key: string, defaultValue: number) {
-  const getValue = () => {
-    const raw = localStorage.getItem(key);
-    const n = raw === null ? NaN : Number(raw);
-    return Number.isFinite(n) ? n : defaultValue;
-  };
-  const setValue = (value: number) => {
+ * is what keeps the window that changed the value in sync with itself. */
+function createDevValue<T>(key: string, parse: (raw: string | null) => T) {
+  const getValue = () => parse(localStorage.getItem(key));
+  const setValue = (value: T) => {
     localStorage.setItem(key, String(value));
     window.dispatchEvent(new StorageEvent('storage', { key }));
   };
@@ -66,6 +38,26 @@ function createDevNumber(key: string, defaultValue: number) {
     return value;
   };
   return { getValue, setValue, useValue };
+}
+
+function createDevToggle(key: string) {
+  const {
+    getValue: isEnabled,
+    setValue: setEnabled,
+    useValue: useEnabled,
+  } = createDevValue(key, (raw) => raw === 'true');
+  return { isEnabled, setEnabled, useEnabled };
+}
+
+/** Falls back to `defaultValue` for a missing or corrupt (non-finite)
+ * stored value, so a hand-edited/cleared `localStorage` entry can't leave a
+ * reader with `NaN` — used for tunables where a plain on/off doesn't fit,
+ * e.g. `fishEyeLensStrength` below. */
+function createDevNumber(key: string, defaultValue: number) {
+  return createDevValue(key, (raw) => {
+    const n = raw === null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : defaultValue;
+  });
 }
 
 const mouseOverlay = createDevToggle('jar:dev:mouseOverlay');

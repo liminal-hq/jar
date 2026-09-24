@@ -18,11 +18,11 @@ import { useMemo, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import * as YUKA from 'yuka';
 
-import { getFishEyeLensStrength, useFishEyeLensStrength } from '../../domain/devSettings';
+import { getFishEyeLensStrength } from '../../domain/devSettings';
 import { useJarStore } from '../../domain/jarClient';
 import type { FishPoseEntry, FishPoseSnapshot } from '../../domain/fishPose';
 import { computeFishEyeLensParams } from '../../render/effects/fishEyeLens';
-import { FishEyeLensEffect } from '../../render/effects/FishEyeLensEffect';
+import { FishEyeLensEffect, useFishEyeLensParams } from '../../render/effects/FishEyeLensEffect';
 import { AquariumEnvironment } from '../../render/environment/AquariumEnvironment';
 import { FishModel } from '../../render/models/FishModel';
 import {
@@ -93,8 +93,7 @@ function CameraRig({ posesRef, cameraFishId }: CameraRigProps) {
   const scratchPos = useMemo(() => new THREE.Vector3(), []);
   const scratchQuat = useMemo(() => new THREE.Quaternion(), []);
   const scratchOffset = useMemo(() => new THREE.Vector3(), []);
-  const lensStrength = useFishEyeLensStrength();
-  const { fov } = computeFishEyeLensParams(lensStrength);
+  const { fov } = useFishEyeLensParams();
 
   useFrame(({ camera }) => {
     // Kept in sync here, alongside the position/orientation update below,
@@ -183,6 +182,9 @@ export function FishEyeScene({ posesRef, cameraFishId, tankmateIds }: FishEyeSce
   return (
     <Canvas
       frameloop={frameloop}
+      // `CameraRig` below is the authoritative, ongoing source of `fov` —
+      // this seed only avoids a first-paint flash at R3F's unrelated
+      // default FOV before that component's first frame runs.
       camera={{ fov: computeFishEyeLensParams(getFishEyeLensStrength()).fov, position: [0, 0, 0] }}
       gl={{ alpha: true, antialias: true, premultipliedAlpha: false }}
       onCreated={({ gl, scene }) => {
