@@ -26,13 +26,17 @@ export interface TurnRateResult {
    * `MIN_TURN_RATE_SPEED` — not a measurement, a deliberate "nothing to
    * report" value. */
   turnRate: number;
-  /** Same magnitude as `turnRate`, signed by which way the heading is
-   * rotating about world Y (`cross(prevDirection, direction).y`'s sign) —
-   * feeds `FishModel.tsx`'s turn-bend term
-   * (`docs/architecture/notes/fish-turn-bend.md`). Zero under the same
-   * speed gate as `turnRate`, for the same reason: a signed value flapping
-   * between +/- from low-speed noise would be worse than the unsigned one
-   * ever was. */
+  /** `turnRate`, signed by which way the heading is rotating about world Y
+   * (`cross(prevDirection, direction).y`'s sign) — feeds `FishModel.tsx`'s
+   * turn-bend term (`docs/architecture/notes/fish-turn-bend.md`). Zero
+   * under the same speed gate as `turnRate`, for the same reason: a signed
+   * value flapping between +/- from low-speed noise would be worse than
+   * the unsigned one ever was. One deliberately-unhandled degenerate case:
+   * `Math.sign` of an exact-zero cross product (a near-180° reversal, e.g.
+   * a fish bouncing straight back off a wall) reads as 0, so `turnRate`
+   * can be large while this is momentarily 0 — self-corrects the very next
+   * frame once the direction has actually diverged, so not worth extra
+   * state to chase. */
   signedTurnRate: number;
   /** The direction callers should keep as `prevDirection` for next frame's
    * call — unchanged from the input `prevDirection` below the speed gate,

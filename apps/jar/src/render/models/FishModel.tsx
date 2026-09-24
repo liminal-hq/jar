@@ -40,8 +40,8 @@ import {
   applySwimWave,
   buildWaveTables,
   FIN_SWIM_TIP_GAIN,
-  swimWaveAngle,
   swimWaveU,
+  swimWaveVertexAngle,
   type WaveTables,
 } from './swimWave';
 import { computeTurnRate } from './turnRate';
@@ -179,14 +179,14 @@ const TURN_RATE_FREQUENCY_DAMP_SCALE = 0.12;
 
 /** The DC (non-oscillating) companion to the symmetric widening above — a
  * turn now also bends the spine toward the arc, not just widens the wag
- * (`docs/architecture/notes/fish-turn-bend.md`). Capped on the same
- * rad/s input as `TURN_RATE_AMPLITUDE_CAP` (it's the same underlying
- * quantity, just signed) before scaling into a resulting bend angle.
- * `TURN_BEND_SCALE`'s *sign* is what fixes which way "positive
- * `signedTurnRate`" bends the body — verified live against the manual
- * pilot, not derived from the rotation math on paper (the note's own
- * warning); flip it if a turn ever visibly bends the wrong way. */
-const TURN_BEND_CAP = TURN_RATE_AMPLITUDE_CAP;
+ * (`docs/architecture/notes/fish-turn-bend.md`). `TURN_BEND_SCALE`'s
+ * *sign* is what fixes which way "positive `signedTurnRate`" bends the
+ * body — derived by hand against `heading.ts`'s yaw convention and
+ * `applySwimWave`'s rotation matrix (double-checked, not just a first
+ * guess), then confirmed correct on a real Windows build after this
+ * sandbox's own R3F canvas turned out unable to render a frame at all.
+ * Flip it if a turn is ever seen bending the wrong way after a change
+ * anywhere in that chain. */
 const TURN_BEND_SCALE = -0.2;
 /** Smoothing time constant for the bend value — fast enough to visibly
  * lead the ~0.17s heading slerp (`SteeringSystem.tsx`'s
@@ -513,10 +513,14 @@ export function FishModel({
 
     // The turn-bend target — 0 while resting, so a resting fish never
     // holds a residual curve regardless of whatever `signedTurnRate` a
-    // stray low-speed sample might otherwise report.
+    // stray low-speed sample might otherwise report. Clamped on the same
+    // `TURN_RATE_AMPLITUDE_CAP` input as `cappedTurnRate` above (the same
+    // underlying rad/s quantity, just signed) rather than a second cap
+    // constant of its own.
     const targetBend = isRestingRef.current
       ? 0
-      : THREE.MathUtils.clamp(signedTurnRate, -TURN_BEND_CAP, TURN_BEND_CAP) * TURN_BEND_SCALE;
+      : THREE.MathUtils.clamp(signedTurnRate, -TURN_RATE_AMPLITUDE_CAP, TURN_RATE_AMPLITUDE_CAP) *
+        TURN_BEND_SCALE;
     bendRef.current = THREE.MathUtils.lerp(
       bendRef.current,
       targetBend,
@@ -632,7 +636,7 @@ export function FishModel({
       const group = spotGroupRefs.current[i];
       if (!group) continue;
       const { u, env } = spotWave[i]!;
-      group.rotation.y = swimWaveAngle(env, u, phase, amplitude) + bend * u;
+      group.rotation.y = swimWaveVertexAngle(env, u, phase, amplitude, bend);
     }
 
     const flutter = Math.sin(flutterPhase) * PECTORAL_FLUTTER_AMPLITUDE;

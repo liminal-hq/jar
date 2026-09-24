@@ -13,6 +13,7 @@ import {
   swimWaveAngle,
   swimWaveEnvelope,
   swimWaveU,
+  swimWaveVertexAngle,
 } from './swimWave';
 
 /** A minimal real triangle geometry — `applySwimWave` needs an actual
@@ -90,6 +91,27 @@ describe('swimWaveAngle', () => {
     const near = swimWaveAngle(1, 0, phase, 1); // u=0, no lag applied
     const far = swimWaveAngle(1, 1, phase, 1); // u=1, full lag applied
     expect(near).not.toBeCloseTo(far, 5);
+  });
+});
+
+describe('swimWaveVertexAngle', () => {
+  it('equals swimWaveAngle when bend is 0', () => {
+    expect(swimWaveVertexAngle(0.8, 0.5, 1.2, 0.4, 0)).toBeCloseTo(
+      swimWaveAngle(0.8, 0.5, 1.2, 0.4),
+      10,
+    );
+  });
+
+  it('adds exactly bend*u to swimWaveAngle otherwise', () => {
+    const env = 0.8;
+    const u = 0.6;
+    const phase = 1.2;
+    const amplitude = 0.4;
+    const bend = 0.3;
+    expect(swimWaveVertexAngle(env, u, phase, amplitude, bend)).toBeCloseTo(
+      swimWaveAngle(env, u, phase, amplitude) + bend * u,
+      10,
+    );
   });
 });
 

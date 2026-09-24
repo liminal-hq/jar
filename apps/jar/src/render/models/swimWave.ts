@@ -74,6 +74,23 @@ export function swimWaveAngle(
   return amplitude * env * Math.sin(phase - lag * u);
 }
 
+/** `swimWaveAngle` plus the turn-bend DC term (`docs/architecture/notes/
+ * fish-turn-bend.md`) — the one formula both `applySwimWave`'s per-vertex
+ * loop below and `FishModel.tsx`'s spot rotation need, factored out so
+ * they can't independently drift apart into two hand-kept-in-sync copies
+ * (a spot is supposed to get exactly the angle a body vertex at that same
+ * `u` would). */
+export function swimWaveVertexAngle(
+  env: number,
+  u: number,
+  phase: number,
+  amplitude: number,
+  bend: number,
+  lag = SWIM_WAVE_LAG,
+): number {
+  return swimWaveAngle(env, u, phase, amplitude, lag) + bend * u;
+}
+
 export interface WaveTables {
   u: Float32Array;
   env: Float32Array;
@@ -151,7 +168,7 @@ export function applySwimWave(
   if (!position) return;
   for (let v = 0; v < tables.u.length; v++) {
     const u = tables.u[v]!;
-    const angle = swimWaveAngle(tables.env[v]!, u, phase, amplitude) + bend * u;
+    const angle = swimWaveVertexAngle(tables.env[v]!, u, phase, amplitude, bend);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const i = v * 3;
