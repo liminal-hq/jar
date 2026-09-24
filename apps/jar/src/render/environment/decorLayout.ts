@@ -2,14 +2,18 @@
 // so this is directly unit-testable (`decorLayout.test.ts`) without a
 // renderer. See `decorGeometry.ts` for the geometry these positions place.
 //
-// Castle sizing note: a fish's own collider reaches ~1.45 world units
-// across at its biggest (`Fish.tsx`'s `colliderRadiusFor`, a male Veil at
-// full size) — a castle proportioned like a real (tall, narrow) building
-// can't fit a door that wide without becoming taller than the tank itself.
-// The castle here is deliberately flatter and wider than realistic
-// architecture to make room for a genuinely fish-sized doorway; see
-// `decor-svg/castle.svg`'s own header comment for the geometry this maps
-// onto ground truth for.
+// Castle sizing note: a fish's own *length* reaches ~1.45 world units
+// tip-to-tail at its biggest (`fishCollider.ts`'s `adultColliderHalfExtentsFor`,
+// a male Veil at full size) — a castle proportioned like a real (tall,
+// narrow) building can't fit a door that wide without becoming taller than
+// the tank itself. The castle here is deliberately flatter and wider than
+// realistic architecture to make room for a genuinely fish-sized doorway;
+// see `decor-svg/castle.svg`'s own header comment for the geometry this
+// maps onto ground truth for. Its physics *box*, though, is only ~0.19-0.24
+// world units thick — and `castleAvoidanceBehaviour.ts`'s anticipatory
+// margin is yaw-projected from that box, not a fixed length-sized value —
+// so in practice a fish approaching this doorway nose-on only ever needs
+// clearance close to its own thickness, not its full length.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -32,12 +36,13 @@ export const CASTLE_KEEP_HALF_WIDTH = 1.2;
 export const CASTLE_KEEP_HEIGHT = 1.7;
 
 /** The doorway's own clear opening — a real cut-through hole
- * (`castle.svg`), sized to comfortably clear most fish (the biggest, a
- * male Veil, occasionally brushes the frame; see this file's header). At
- * 0.65, 5 of the 6 fin/sex adult-collider combinations `Fish.tsx`'s
- * `colliderRadiusFor` produces (diameters 0.91-1.45) fit through; only a
- * male Veil, the single biggest at 1.45, still occasionally brushes the
- * frame. */
+ * (`castle.svg`). At 0.65, the opening clears every fin/sex adult
+ * combination's physics-box *thickness* (≤0.24, `fishCollider.ts`) with
+ * room to spare — and since `castleAvoidanceBehaviour.ts`'s anticipatory
+ * margin is yaw-projected from that same box, a nose-on fish's live
+ * margin here (thickness plus a small buffer, ~0.2) never reaches this
+ * half-width from the doorway's own centreline, so no fish stalls or
+ * needs a dedicated exemption to enter. */
 export const CASTLE_DOOR_HALF_WIDTH = 0.65;
 export const CASTLE_DOOR_HEIGHT = 1.15;
 
@@ -57,9 +62,17 @@ export const CASTLE_ROOF_HALF_WIDTH = 0.325;
 
 /** Where the castle sits — `x` pulled toward centre so the wider
  * tower-to-tower span (`CASTLE_TOWER_OFFSET` grew for real tower
- * clearance) still clears the tank wall; `z` pulled forward from an
+ * clearance) still leaves real room between the right tower and the tank
+ * wall: at an original `0.5`, that gap was only 0.225 world units — just
+ * *under* even the widest fish's own physical thickness (a Veil's
+ * collider box is 0.24 wide, the widest of the three fin types,
+ * `fishCollider.ts`), so no orientation could actually fit through there
+ * no matter how avoidance margins were tuned. `0.375` reopens it to 0.35,
+ * matching the keep-to-tower gap's own clearance. The left tower's own
+ * gap to the opposite wall starts far more generous (~1.1) and stays
+ * comfortably so after the same shift — `z` pulled forward from an
  * original `-0.8`, which read as pressed against the back glass. */
-export const CASTLE_POSITION = { x: 0.5, y: FLOOR_TOP_Y, z: -0.3 };
+export const CASTLE_POSITION = { x: 0.375, y: FLOOR_TOP_Y, z: -0.3 };
 
 /** Static collider footprint — left wall segment, right wall segment, and
  * a lintel above the door opening (leaving the door itself clear), plus
@@ -122,22 +135,6 @@ export const CASTLE_COLLIDER_BOXES: Array<{
   },
 ];
 
-/** A safe corridor through the doorway opening — `CastleAvoidanceBehaviour`
- * exempts a fish inside this volume from the flanking wall-segment/lintel
- * push entirely, rather than merely reducing it. Without this, the
- * anticipatory margin those boxes expand by (up to ~0.8 world units for a
- * large fish, `useFishSteering.ts`'s `maxColliderRadius + CONTAINMENT_BUFFER`)
- * comfortably exceeds `CASTLE_DOOR_HALF_WIDTH` (0.65), so the two walls'
- * expanded zones overlap *past the doorway's own centre* — a fish
- * approaching head-on would get deflected sideways before ever reaching
- * the opening the door was specifically sized to let it through. Matches
- * the door's real clear opening in x/y; z is generous enough to cover both
- * the approach from outside and `HIDE_POINT` behind it. */
-export const CASTLE_DOORWAY_CORRIDOR = {
-  position: { x: 0, y: CASTLE_DOOR_HEIGHT / 2, z: 0 },
-  halfExtents: { x: CASTLE_DOOR_HALF_WIDTH, y: CASTLE_DOOR_HEIGHT / 2, z: 1.2 },
-};
-
 /** Where a hiding fish paths to — inside the doorway's own footprint, well
  * behind the keep's front face, so reaching it means genuinely passing
  * through the opening (or around the castle's shallow sides — the
@@ -162,9 +159,15 @@ export const PLANT_BROADLEAF_POSITION = { x: -2.0, y: FLOOR_TOP_Y, z: 0.5 };
 // Original spot — nudged from `-1.0` to `-1.9` for the same reason.
 export const PLANT_SMALL_KELP_POSITION = { x: -1.9, y: FLOOR_TOP_Y, z: -0.3 };
 // New: front-right, standing in front of (not overlapping — separated in
-// z) the right tower, clear of the airstone (~66% x per §8.1, ≈ +0.96
-// world).
-export const PLANT_FRONT_RIGHT_POSITION = { x: 2.3, y: FLOOR_TOP_Y, z: 0.6 };
+// z) the right tower — x tracks the tower's own world x
+// (`CASTLE_POSITION.x + CASTLE_TOWER_OFFSET`) so it stays aligned with it
+// regardless of where the castle sits — clear of the airstone (~66% x per
+// §8.1, ≈ +0.96 world).
+export const PLANT_FRONT_RIGHT_POSITION = {
+  x: CASTLE_POSITION.x + CASTLE_TOWER_OFFSET,
+  y: FLOOR_TOP_Y,
+  z: 0.6,
+};
 // New: in the gap between the left tower and the keep's own left edge,
 // pulled forward of the castle's front face — reads as sitting just left
 // of the keep, in front of it.

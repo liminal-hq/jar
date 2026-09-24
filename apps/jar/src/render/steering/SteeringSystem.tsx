@@ -36,6 +36,7 @@ import { entityManager } from './entityManager';
 import {
   computePilotTargetHeading,
   computeTargetHeading,
+  extractYaw,
   HEADING_COMMIT_SPEED,
   HEADING_RELEASE_SPEED,
 } from './heading';
@@ -68,7 +69,12 @@ export interface RegisteredFish {
   getMode: () => FishMotionMode;
   /** Slerped toward `targetHeading` each frame rather than snapped, so
    * turns visibly "swim through" instead of teleporting — seeded from the
-   * body's actual rotation at registration time (`Fish.tsx`). */
+   * body's actual rotation at registration time (`Fish.tsx`). Also the
+   * live-yaw source for `tankContainmentBehaviour.ts`/
+   * `castleAvoidanceBehaviour.ts`'s anticipatory margins: `Fish.tsx` hands
+   * this exact object to a `currentHeadingRef` its own `getYaw` closure
+   * reads from, so mutating it in place below (`.slerp()`) is what keeps
+   * that live, with no extra wiring. */
   currentHeading: THREE.Quaternion;
   targetHeading: THREE.Quaternion;
   /** Hysteresis state for `computeTargetHeading`'s commit/release threshold
@@ -83,10 +89,14 @@ export interface RegisteredFish {
   /** `Critter.hue`, 0-360 — never changes after spawn, so a plain field
    * rather than a getter. Feeds the fish monitor window's map. */
   hue: number;
-  /** `Fish.tsx`'s `colliderRadiusFor(critter)` — a getter, not a plain
-   * field, since it scales with life-stage and so changes as the fish
-   * grows. Lets another fish's chase-catch check (`Fish.tsx`) account for
-   * this fish's actual current collider size, not just its own. */
+  /** `fishCollider.ts`'s `colliderHalfExtentsFor(critter).z` — this fish's
+   * current *length* (forward/nose-to-tail) half-extent, numerically
+   * identical to what the old spherical collider's own radius was. A
+   * getter, not a plain field, since it scales with life-stage and so
+   * changes as the fish grows. Its two consumers — another fish's
+   * chase-catch check (`Fish.tsx`) and the fish-eye camera's forward
+   * offset (`domain/fishPose.ts`) — both deliberately want this
+   * conservative, worst-orientation scalar, not a heading-projected one. */
   getColliderRadius: () => number;
   /** `thrustMultiplierFor` (`thrustEnvelope.ts`) evaluated at this fish's
    * current tail phase — gates the impulse below so thrust arrives on the
@@ -197,6 +207,10 @@ const DEBUG_PUBLISH_INTERVAL_SEC = 0.2;
  * second window. Exported so the two stay a single source of truth. */
 export const POSE_PUBLISH_INTERVAL_SEC = 1 / 30;
 
+// Only the debug-telemetry publisher below still needs a raw Euler
+// directly — it reads *both* yaw and pitch from one decomposition;
+// everywhere else that only needs yaw uses `heading.ts`'s shared
+// `extractYaw` instead.
 const scratchYawEuler = new THREE.Euler();
 
 interface SteeringSystemProps {
@@ -265,8 +279,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       // depended on that call happening.
       if (piloted) {
         if (getPilotYaw() === null) {
-          scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
-          seedPilotYaw(scratchYawEuler.y);
+          seedPilotYaw(extractYaw(fish.currentHeading));
         }
         advancePilotYaw(delta);
       }

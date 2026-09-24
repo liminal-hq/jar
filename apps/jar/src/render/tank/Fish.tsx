@@ -8,7 +8,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';
-import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import * as YUKA from 'yuka';
@@ -18,10 +18,8 @@ import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { selectCritter } from '../../domain/selection';
-import { lifeStageScale } from '../../domain/simConstants';
 import { keepClearOfCastle } from '../environment/decorLayout';
 import { FishModel } from '../models/FishModel';
-import { MALE_TAIL_SCALE, SVG_SCALE, TAIL_TIP_SVG_DISTANCE } from '../models/fishGeometry';
 import { simPercentToWorld, WALL_THICKNESS } from '../physics/coordinates';
 import {
   burstChanceFor,
@@ -39,62 +37,9 @@ import { isActivelyPiloted } from '../steering/pilotInputState';
 import { useSteeringRegistry, type FishDebugAnim } from '../steering/SteeringSystem';
 import { breathingMultiplier } from '../steering/steeringParams';
 import { thrustMultiplierFor } from '../steering/thrustEnvelope';
+import { extractYaw } from '../steering/heading';
 import { useFishSteering } from '../steering/useFishSteering';
-
-/** A loose bounding sphere around `FishModel`'s combined body/tail/eye
- * geometry at scale 1, hand-picked rather than derived from the mesh —
- * collision doesn't need to trace the model precisely for a creature this
- * small, and a manual sphere sidesteps `colliders="hull"` entirely: its
- * automatic hull generation was producing a malformed collider from the
- * model's nested tail-pivot group, launching fish out of the tank on their
- * very first physics step.
- *
- * Sized from the tail tip, not the nose or body — `TAIL_TIP_SVG_DISTANCE`
- * is always the model's farthest point from its own origin, further out
- * than the nose in every fin type. A flat radius here (as this used to be)
- * undersizes it for a male and/or a Veil-tailed fish badly enough that the
- * tail visibly pokes through the glass or the sand while the RigidBody's
- * centre, which is all a `BallCollider` actually constrains, stays legally
- * inside — exactly the "fish swims through the wall" bug this fixes. */
-function colliderRadiusFor(critter: Critter): number {
-  const finType = critter.fin ?? 'Forked';
-  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
-  return (
-    TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale * lifeStageScale(critter.life_stage)
-  );
-}
-
-/** Same tail-tip sizing as `colliderRadiusFor`, but always at this fish's
- * eventual adult/elder scale (`lifeStageScale` maxes out at `1`) rather
- * than its current age — used anywhere the result gets fixed once at
- * spawn/mount and can't react to the fish growing later: `spotClearance`
- * below (`favourite_spot` is rolled once at spawn and never revisited,
- * `rust-core.md` §6.4, so the clearance reserved around it has to stay
- * clear of whatever size this fish will grow into) and `useFishSteering`'s
- * containment margin (fixed once at mount). A fry-sized reservation would
- * leave an adult's much larger collider overlapping the wall/glass by the
- * time it actually gets there. */
-function maxColliderRadiusFor(critter: Critter): number {
-  const finType = critter.fin ?? 'Forked';
-  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
-  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale;
-}
-
-/** `colliderRadiusFor` at its largest — a fry or juvenile's own radius,
- * used to compute how much clearance a *fixed, one-time* spawn/favourite-
- * spot nudge needs (`keepClearOfCastle`, only ever run once per critter
- * per `Fish`'s own `useMemo`), understates how much clearance that spot
- * will actually need once the fish grows into an adult and its
- * `BallCollider` (sized fresh from the live `colliderRadiusFor` every
- * render) grows to match — a spot safe for a fry could then overlap the
- * castle. Life stage scaling only ever grows a collider, never shrinks
- * it past adult size, so the adult radius is always the correct one-time
- * margin regardless of age at spawn. */
-function adultColliderRadiusFor(critter: Critter): number {
-  const finType = critter.fin ?? 'Forked';
-  const tailScale = critter.sex === 'Male' ? MALE_TAIL_SCALE : 1;
-  return TAIL_TIP_SVG_DISTANCE[finType] * SVG_SCALE * tailScale; // lifeStageScale omitted: always 1 at adult
-}
+import { adultColliderHalfExtentsFor, colliderHalfExtentsFor } from './fishCollider';
 
 interface FishProps {
   critter: Critter;
@@ -128,10 +73,13 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // collider's own half-thickness) needs reserved inside
   // `TANK_INNER_BOUNDS` — see `simPercentToWorld`'s own comment for why
   // mapping onto that bound alone still lets a fish's collider overlap the
-  // wall, and `maxColliderRadiusFor`'s own comment for why this has to be
-  // the fish's eventual size, not its size at spawn.
+  // wall. Deliberately still the fixed, length-based (worst-orientation)
+  // adult extent, not a live yaw-projected value — this reservation is a
+  // one-time, orientation-unknown spawn-time nudge (`useFishSteering.ts`'s
+  // live containment margin is the one that goes yaw-aware, since it's
+  // recomputed every frame and so can actually react to heading).
   const spotClearance = useMemo(
-    () => WALL_THICKNESS / 2 + maxColliderRadiusFor(critter),
+    () => WALL_THICKNESS / 2 + adultColliderHalfExtentsFor(critter).z,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -156,7 +104,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       critter.favourite_spot.z,
       spotClearance,
     );
-    return keepClearOfCastle(p, adultColliderRadiusFor(critter));
+    return keepClearOfCastle(p, adultColliderHalfExtentsFor(critter).z);
     // Favourite spot never changes after spawn (rust-core.md §6.4) — no
     // need to react to it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,34 +119,53 @@ export function Fish({ critter, livingPopulation }: FishProps) {
 
   // Fixed once at spawn, same rationale as `favouriteSpotWorld`/
   // `spawnPosition` above — this fish's `fin`/`sex` never change, so its
-  // eventual max collider size doesn't either.
-  const maxColliderRadius = useMemo(
-    () => maxColliderRadiusFor(critter),
+  // eventual adult collider box doesn't either. `useFishSteering.ts`'s
+  // containment/avoidance margins are built from this fixed size, then
+  // projected live onto whichever world axis matters by `getYaw` below —
+  // a fry swimming inside a still-larger adult-sized margin is the same
+  // deliberately-conservative choice the old radius-based margin made.
+  const adultHalfExtents = useMemo(
+    () => adultColliderHalfExtentsFor(critter),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
+  // The behaviours' live-yaw source. `useFishSteering` (next) runs earlier
+  // in this component than the registration effect below that creates
+  // `currentHeading`, so `getYaw` can't close over that variable directly —
+  // it closes over this ref instead, filled in by that effect. The `?? 0`
+  // fallback is unreachable in practice: a fish's vehicle only enters
+  // Yuka's `entityManager` (and so only gets `calculate()` invoked on it at
+  // all) via that same registration effect.
+  const currentHeadingRef = useRef<THREE.Quaternion | null>(null);
+  const getYaw = () => (currentHeadingRef.current ? extractYaw(currentHeadingRef.current) : 0);
+
   // Kept fresh via effect (same pattern as `nightRef` below) so
-  // `getColliderRadius` — captured once by `useFishSteering`'s memoized rig
-  // — always reads this fish's *current*, life-stage-scaled size (grows as
-  // it ages) rather than whatever it was at mount. Distinct from
-  // `maxColliderRadius` above, which is deliberately the fixed eventual
-  // adult size for the anticipatory containment/avoidance *margin* — a
-  // fry that hasn't grown into its adult collider yet can still genuinely
-  // fit through a gap its future self couldn't, which matters specifically
-  // for the castle doorway exemption (`useFishSteering.ts`).
+  // `getColliderHalfExtents` — captured once by `useFishSteering`'s
+  // memoized rig — always reads this fish's *current*, life-stage-scaled
+  // size (grows as it ages), not whatever it was at mount. This is what a
+  // fry's avoidance margin actually shrinks to match: `adultHalfExtents`
+  // above stays fixed for the one place a scalar worst-case is still
+  // required (`useFishSteering.ts`'s `physicalTouchDistance`), but the
+  // containment/castle margins themselves are recomputed fresh every
+  // frame anyway (alongside `getYaw`), so there's no staleness risk in
+  // using the fish's real current size for them instead of its eventual
+  // adult one — a fry gets a proportionally small, honest margin from
+  // birth, growing in step with its actual collider.
   const critterRef = useRef(critter);
   useEffect(() => {
     critterRef.current = critter;
   }, [critter]);
+  const getColliderHalfExtents = () => colliderHalfExtentsFor(critterRef.current);
 
   const steering = useFishSteering(
     critter.id,
     critter.personality,
     livingPopulation,
     favouriteSpotWorld,
-    maxColliderRadius,
-    () => colliderRadiusFor(critterRef.current),
+    adultHalfExtents,
+    getColliderHalfExtents,
+    getYaw,
   );
 
   // Authoritative — pushed by the sim core on every `TickUpdate`
@@ -273,6 +240,10 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       spawnRotation.z,
       spawnRotation.w,
     );
+    // `SteeringSystem.tsx` mutates this exact object in place every frame
+    // via `.slerp()` — assigning it here is what keeps `getYaw` (above)
+    // live, with no further wiring needed.
+    currentHeadingRef.current = currentHeading;
     registry.set(critter.id, {
       vehicle: steering.vehicle,
       getBody: () => rigidBodyRef.current,
@@ -283,10 +254,11 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       isHeadingActive: false,
       getDebugAnim: () => debugAnimRef.current,
       hue: critter.hue,
-      getColliderRadius: () => colliderRadiusFor(critter),
+      getColliderRadius: () => colliderHalfExtentsFor(critter).z,
       getThrustEnvelope: () => thrustMultiplierFor(debugAnimRef.current?.phase ?? 0),
     });
     return () => {
+      currentHeadingRef.current = null;
       registry.delete(critter.id);
     };
     // `critter.energy` is read imperatively via the closure below on every
@@ -367,7 +339,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       const caught =
         target !== undefined &&
         steering.vehicle.position.distanceTo(target.vehicle.position) -
-          colliderRadiusFor(critter) -
+          colliderHalfExtentsFor(critter).z -
           target.getColliderRadius() <
           CHASE_CAUGHT_SURFACE_GAP;
       const targetInvalid = target === undefined || target.getMode() !== 'active';
@@ -474,6 +446,9 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steering]);
 
+  // Computed once per render, not per JSX reference below.
+  const he = colliderHalfExtentsFor(critter);
+
   return (
     <RigidBody
       ref={rigidBodyRef}
@@ -485,10 +460,31 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       // `setRotation` every frame) — locking all three axes here stops
       // wall/fish collisions from injecting spin between those writes.
       // `angularDamping` doesn't apply now: it only damps physics-driven
-      // spin, and there is none once rotation is locked.
+      // spin, and there is none once rotation is locked (this is also what
+      // makes a hand-sized, flat `CuboidCollider` safe below: it rotates in
+      // lock-step with whatever `SteeringSystem.tsx` commands, never
+      // independently tumbled by physics).
       enabledRotations={[false, false, false]}
     >
-      <BallCollider args={[colliderRadiusFor(critter)]} />
+      {/* Hand-placed, not `colliders="hull"` — automatic hull generation
+       * misreads the model's nested tail-pivot group and produces a
+       * malformed, overlapping collider that Rapier's solver resolves with
+       * a violent corrective impulse on the very first physics step,
+       * ejecting the fish from the tank (`fishCollider.ts`'s own history).
+       * Sized to fully contain the model in every orientation it can
+       * actually take: `he.z` (length) from the tail tip — the model's
+       * farthest point from its own origin — is the fix for an earlier,
+       * flatter radius that let a male/Veil tail visibly poke through the
+       * glass or the sand; `he.y` (height) from the dorsal crest; `he.x`
+       * (thickness) a policy half-thickness with real headroom over the
+       * pectoral fins, the widest static part of the model. One documented
+       * deviation: the *swimming* tail's lateral sweep at high amplitude can
+       * exceed `he.x` — acceptable because the historical glass-poke bug was
+       * specifically the rest pose (rest amplitude is tiny), and the
+       * anticipatory glass/castle steering margins (`useFishSteering.ts`)
+       * stay length-based for a nose-on approach regardless of swim state,
+       * so a swimming tail can never actually reach the glass. */}
+      <CuboidCollider args={[he.x, he.y, he.z]} />
       <group
         // `SteeringSystem.tsx` computes the RigidBody's heading assuming
         // local +Z is forward (`docs/architecture/3d-engine.md` §6.2's own

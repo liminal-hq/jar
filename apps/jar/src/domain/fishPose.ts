@@ -21,8 +21,8 @@ const FISH_POSE_EVENT = 'jar://fish-pose';
  * yaw), not reconstructed from velocity — the fish-eye window's camera and
  * tankmate models can use it directly, no smoothing/hysteresis of their
  * own needed on top. `colliderRadius` sizes the camera's forward offset
- * (`Fish.tsx`'s `colliderRadiusFor`, life-stage scaled) so it sits just
- * ahead of the fish's own body rather than inside it. */
+ * (`fishCollider.ts`'s `colliderHalfExtentsFor(...).z`, life-stage scaled)
+ * so it sits just ahead of the fish's own body rather than inside it. */
 export interface FishPoseEntry {
   id: number;
   pos: [number, number, number];

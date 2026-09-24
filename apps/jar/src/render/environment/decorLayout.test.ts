@@ -7,7 +7,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { TANK_INNER_BOUNDS } from '../physics/coordinates';
+import { SVG_SCALE } from '../models/fishGeometry';
+import { TANK_INNER_BOUNDS, WALL_THICKNESS } from '../physics/coordinates';
+import { COLLIDER_HALF_THICKNESS_SVG } from '../tank/fishCollider';
 import {
   CASTLE_COLLIDER_BOXES,
   CASTLE_DOOR_HALF_WIDTH,
@@ -138,7 +140,7 @@ function isOutsideEveryColliderBox(
 }
 
 describe('keepClearOfCastle', () => {
-  const MARGIN = 0.3; // a plausible fish collider radius (Fish.tsx's colliderRadiusFor runs 0.46-0.72)
+  const MARGIN = 0.3; // a plausible fish collider length (fishCollider.ts's adultColliderHalfExtentsFor(...).z runs 0.46-0.72)
 
   it('leaves a point that is already clear of every box, well inside the tank, untouched', () => {
     const clear = { x: -2, y: 0, z: 0 };
@@ -207,12 +209,45 @@ describe('keepClearOfCastle', () => {
     // on that same axis — an infinite oscillation unless the axis choice
     // itself accounts for tank-bounds feasibility.
     const margin = 0.456;
-    const start = { x: 1.4, y: -1.1, z: -0.5 };
+    // x tracks the right wall segment box's own position (`CASTLE_POSITION.x
+    // + CASTLE_KEEP_HALF_WIDTH`-ish), which moved when `CASTLE_POSITION.x`
+    // did (0.5 -> 0.375, widening the tower-to-glass gap) — offset by the
+    // same amount so this still starts inside that box, close to the back
+    // wall, reproducing the same edge case.
+    const start = { x: 1.4 - (0.5 - CASTLE_POSITION.x), y: -1.1, z: -0.5 };
     const pushed = keepClearOfCastle(start, margin);
 
     expect(isOutsideEveryColliderBox(pushed, margin)).toBe(true);
     expect(Math.abs(pushed.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x - margin + 1e-9);
     expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - margin + 1e-9);
     expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - margin + 1e-9);
+  });
+});
+
+describe('the keep-to-tower gap', () => {
+  it('stays wide enough for the flattest fish collider to fit through (fishCollider.test.ts pins the fish side of this)', () => {
+    const gap = CASTLE_TOWER_OFFSET - CASTLE_TOWER_HALF_WIDTH - CASTLE_KEEP_HALF_WIDTH;
+    expect(gap).toBeCloseTo(0.325, 5);
+  });
+});
+
+describe('the tower-to-glass gap', () => {
+  it('stays wide enough for even the widest (Veil) fish collider to physically fit through', () => {
+    // Tank glass's clear inner face — `TANK_INNER_BOUNDS.x` is the wall
+    // collider's own *centre* plane (its own doc comment), not the clear
+    // face, so half the wall thickness comes off.
+    const glassInnerFace = TANK_INNER_BOUNDS.x - WALL_THICKNESS / 2;
+    const towerOuterEdge = CASTLE_POSITION.x + CASTLE_TOWER_OFFSET + CASTLE_TOWER_HALF_WIDTH;
+    const gap = glassInnerFace - towerOuterEdge;
+    // Computed from the real collider policy constants, not copied as a
+    // literal, so a future change to `COLLIDER_HALF_THICKNESS_SVG` can't
+    // silently widen the fish past this gap without this test catching
+    // it. Sex-independent for thickness, so no fin/sex loop is needed —
+    // just the single widest fin type. This gap used to be 0.225, *under*
+    // even the widest fish, before `CASTLE_POSITION.x` moved from 0.5 to
+    // 0.375 specifically to fix it.
+    const widestFishThicknessSvg = Math.max(...Object.values(COLLIDER_HALF_THICKNESS_SVG));
+    const widestFishDiameter = widestFishThicknessSvg * SVG_SCALE * 2;
+    expect(gap).toBeGreaterThan(widestFishDiameter);
   });
 });

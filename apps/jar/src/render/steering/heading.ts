@@ -51,6 +51,22 @@ export const HEADING_COMMIT_SPEED = 0.12;
 export const MAX_PITCH = 0.44;
 
 const scratchEuler = new THREE.Euler();
+const scratchExtractEuler = new THREE.Euler();
+
+/** Extracts yaw from a heading quaternion built with the same `'YXZ'`
+ * convention `quaternionFromYawPitch` below uses (the inverse of that
+ * composition) — shared so callers that only need a fish's current yaw
+ * (`Fish.tsx`'s live avoidance-margin getter, `SteeringSystem.tsx`'s pilot
+ * yaw seeding) don't each independently reimplement the same
+ * `setFromQuaternion(..., 'YXZ').y` decomposition with their own scratch
+ * `Euler`. A separate scratch object from `scratchEuler` above, since that
+ * one is mid-use composing the *other* direction (yaw/pitch -> quaternion)
+ * whenever this module's own functions run — sharing one would be safe
+ * given neither call chain re-enters the other, but keeping them distinct
+ * is one less thing to reason about for zero extra cost. */
+export function extractYaw(quaternion: THREE.Quaternion): number {
+  return scratchExtractEuler.setFromQuaternion(quaternion, 'YXZ').y;
+}
 
 /** How far a fish noses up/down toward its vertical velocity — shared by
  * both heading functions below, since neither has a "driven pitch" input of

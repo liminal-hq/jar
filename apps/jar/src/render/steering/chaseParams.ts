@@ -13,13 +13,14 @@ import type { Personality } from '../../domain/protocol/generated/Personality';
 
 /** How close a chaser's collider surface has to get to its target's before
  * the chase ends "caught," rather than timing out (`CHASE_MAX_SEC`,
- * `Fish.tsx`) — a gap between the two `BallCollider`s, not a raw
- * centre-to-centre distance: an adult pair's colliders (`Fish.tsx`'s
- * `colliderRadiusFor`, up to ~0.72 each for a male Veil) physically can't
- * get their centres closer than the sum of both radii, so a flat
- * centre-distance threshold this small could never trigger for any adult
- * pair. Chosen small — this is "close enough to count as touching," not a
- * generous catch radius; the chase concludes right around actual contact,
+ * `Fish.tsx`) — a gap between the two colliders' own forward/length
+ * half-extents, not a raw centre-to-centre distance: an adult pair's
+ * length half-extents (`fishCollider.ts`'s `colliderHalfExtentsFor`, up to
+ * ~0.72 each for a male Veil) physically can't get their centres closer
+ * than the sum of both, so a flat centre-distance threshold this small
+ * could never trigger for any adult pair. Chosen small — this is "close
+ * enough to count as touching," not a generous catch radius; the chase
+ * concludes right around actual contact,
  * which is also roughly where `BASE_SEPARATION_RADIUS`
  * (`steeringParams.ts`) would start pushing the two fish apart anyway. */
 export const CHASE_CAUGHT_SURFACE_GAP = 0.15;

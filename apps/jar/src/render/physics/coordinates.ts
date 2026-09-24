@@ -62,11 +62,12 @@ export const TANK_INNER_BOUNDS = {
  *
  * `TANK_INNER_BOUNDS` alone still isn't the fully-clear legal range,
  * though: it's the wall collider's *centre* plane (`WALL_THICKNESS`'s own
- * comment), and a fish's `BallCollider` has its own radius (up to ~0.72 for
- * a male Veil-tailed adult, `Fish.tsx`'s `colliderRadiusFor`) beyond its
- * centre. A spawn/target placed exactly on `TANK_INNER_BOUNDS` still lets
- * that radius overlap the wall, with `ArriveBehavior` continuously steering
- * back into the overlap. `clearance` — the caller's own collider radius
+ * comment), and a fish's collider box has its own forward/length half-extent
+ * (up to ~0.72 for a male Veil-tailed adult, `fishCollider.ts`'s
+ * `adultColliderHalfExtentsFor`) beyond its centre. A spawn/target placed
+ * exactly on `TANK_INNER_BOUNDS` still lets that extent overlap the wall,
+ * with `ArriveBehavior` continuously steering back into the overlap.
+ * `clearance` — the caller's own collider radius
  * plus `WALL_THICKNESS / 2` — reserves that room; pass `0` only for a
  * caller that doesn't need collider clearance (there currently isn't
  * one). */
