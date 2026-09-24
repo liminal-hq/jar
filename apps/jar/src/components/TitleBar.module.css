@@ -58,7 +58,12 @@
 .controlButton {
   background: none;
   border: none;
-  cursor: pointer;
+  /* Not `pointer` — desktop title bar buttons aren't links in the desktop
+   * paradigm, and every real OS shows the plain arrow cursor over its own
+   * minimize/maximize/close buttons. `<button>`'s own UA stylesheet
+   * defaults to `pointer`, so this has to be a real override, not just an
+   * omitted rule. */
+  cursor: default;
   display: flex;
   align-items: center;
   justify-content: center;
