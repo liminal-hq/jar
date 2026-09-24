@@ -22,10 +22,15 @@ tauri-build = { version = "2", features = [] }
 portable = ["tauri-plugin-jar/portable"]
 
 [dependencies]
-tauri = { workspace = true, features = ["tray-icon"] }
+# `image-png` decodes the PNG bytes `Image::from_bytes` receives from the
+# Screenshot menu item (`TankContextMenu.tsx`) — a feature on `tauri`
+# itself, not on `tauri-plugin-clipboard-manager` below, which has no
+# `[features]` of its own.
+tauri = { workspace = true, features = ["tray-icon", "image-png"] }
 tauri-plugin-jar = { path = "../../../plugins/tauri-plugin-jar" }
 tauri-plugin-window-state = "2"
 tauri-plugin-os = "2"
+tauri-plugin-clipboard-manager = "2"
 # Debug-only automation bridge (see `run()` in `src/lib.rs` — only
 # registered under `#[cfg(debug_assertions)]`), lets an agent drive and
 # screenshot the running app during development. Not a dev-dependency:

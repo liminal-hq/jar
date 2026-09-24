@@ -13,6 +13,7 @@ function makeActions(): TankMenuActions {
     toggleAmbient: vi.fn(),
     toggleSound: vi.fn(),
     switchMode: vi.fn(),
+    captureScreenshot: vi.fn(),
     openFamilyTree: vi.fn(),
     openFishMonitor: vi.fn(),
     openFishEye: vi.fn(),
@@ -33,12 +34,13 @@ function itemById(model: ReturnType<typeof buildTankMenuModel>, id: string): Men
 }
 
 describe('buildTankMenuModel', () => {
-  it('has four sections: Tank, Mode, Critters, App', () => {
+  it('has five sections: Tank, Mode, Screenshot, Critters, App', () => {
     const model = buildTankMenuModel(DEFAULT_SETTINGS, makeActions());
-    const [tank, mode, critters, app] = model.sections;
-    expect(model.sections).toHaveLength(4);
+    const [tank, mode, screenshot, critters, app] = model.sections;
+    expect(model.sections).toHaveLength(5);
     expect(items(tank!)).toHaveLength(3);
     expect(items(mode!)).toHaveLength(1);
+    expect(items(screenshot!).map((i) => i.id)).toEqual(['screenshot']);
     expect(items(critters!).map((i) => i.id)).toEqual(['family-tree', 'fish-monitor', 'fish-eye']);
     expect(items(app!).map((i) => i.id)).toEqual(['setup', 'dev-settings', 'exit']);
   });
@@ -81,5 +83,20 @@ describe('buildTankMenuModel', () => {
     expect(actions.openSetup).not.toHaveBeenCalled();
     expect(actions.openDevSettings).not.toHaveBeenCalled();
     expect(actions.exit).not.toHaveBeenCalled();
+  });
+
+  it('wires the Screenshot item to captureScreenshot and nothing else', () => {
+    const actions = makeActions();
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const screenshotItem = itemById(model, 'screenshot');
+
+    expect(screenshotItem.label).toBe('Screenshot');
+    expect(screenshotItem.checked).toBeUndefined();
+
+    screenshotItem.action?.();
+
+    expect(actions.captureScreenshot).toHaveBeenCalledOnce();
+    expect(actions.switchMode).not.toHaveBeenCalled();
+    expect(actions.openFamilyTree).not.toHaveBeenCalled();
   });
 });
