@@ -15,6 +15,7 @@ export interface TankMenuActions {
   toggleSound: () => void;
   switchMode: () => void;
   captureScreenshot: () => void;
+  addCritter: () => void;
   openFamilyTree: () => void;
   openFishMonitor: () => void;
   openFishEye: () => void;
@@ -52,9 +53,11 @@ export function buildTankMenuModel(settings: JarSettings, actions: TankMenuActio
         items: [{ id: 'screenshot', label: 'Screenshot', action: actions.captureScreenshot }],
       },
       {
-        // Windows that show you the critters/sim itself — not app
-        // configuration or tooling, which live in the App section below.
+        // Everything about the critters themselves — creating one, and the
+        // windows that show you them — not app configuration or tooling,
+        // which live in the App section below.
         items: [
+          { id: 'add-critter', label: 'Add a critter', action: actions.addCritter },
           { id: 'family-tree', label: 'Tree', action: actions.openFamilyTree },
           { id: 'fish-monitor', label: 'Fish monitor', action: actions.openFishMonitor },
           { id: 'fish-eye', label: 'Fish eye', action: actions.openFishEye },

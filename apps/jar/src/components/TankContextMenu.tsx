@@ -13,6 +13,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 
 import { jar, useJarStore } from '../domain/jarClient';
+import type { JarSettings } from '../domain/protocol/generated/JarSettings';
 import { buildTankMenuModel } from '../domain/tankMenuModel';
 import { pushToast } from '../domain/toastBus';
 import { openSatelliteWindow } from '../domain/windows';
@@ -34,6 +35,19 @@ async function takeScreenshot(): Promise<void> {
   }
 }
 
+async function addCritter(species: JarSettings['mode']): Promise<void> {
+  try {
+    await jar.addCritter(species);
+  } catch (e) {
+    // The one rejection this can realistically hit is the Rust side's own
+    // population-cap check (`commands.rs`'s `add_critter`) — surfacing its
+    // message directly rather than a generic one, since it's already
+    // written for a person to read.
+    console.error('add critter failed', e);
+    pushToast(typeof e === 'string' ? e : 'Could not add a critter');
+  }
+}
+
 interface TankContextMenuProps {
   position: MenuPosition;
   onClose: () => void;
@@ -48,6 +62,7 @@ export function TankContextMenu({ position, onClose }: TankContextMenuProps) {
     toggleSound: () => void jar.setToggle('sound', !settings.sound_on),
     switchMode: () => void jar.setMode(settings.mode === 'Fish' ? 'Gecko' : 'Fish'),
     captureScreenshot: () => void takeScreenshot(),
+    addCritter: () => void addCritter(settings.mode),
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
     openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),

@@ -84,6 +84,13 @@ pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
 #[command]
 pub fn add_critter(plugin: State<'_, JarPlugin>, species: Species) -> Result<Critter> {
     let critter = with_jar_mut(&plugin, |jar, rng| {
+        // `try_breed` (jar-core's tick.rs) already enforces this cap on the
+        // breeding path — this is the same cap, checked here too, since an
+        // original critter enters the population through this command
+        // instead, not through breeding.
+        if jar.living_count(species) >= jar_core::state::population_cap(species) {
+            return Err(Error::PopulationCapReached);
+        }
         let id = jar.next_critter_id();
         let existing_names: Vec<String> = jar.critters.iter().map(|c| c.name.clone()).collect();
         let critter = jar_core::genetics::roll_original(

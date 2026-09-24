@@ -58,3 +58,29 @@ impl JarState {
             .count()
     }
 }
+
+/// SPEC.md §5's hard population cap ("10 fish + 4 gecko, ever" — not just
+/// via breeding), one source of truth for every caller that needs to check
+/// it: `tick.rs`'s `try_breed` and `tauri-plugin-jar`'s `add_critter`
+/// command each enforce it independently, since a critter can enter the
+/// population through either path.
+pub fn population_cap(species: jar_protocol::Species) -> usize {
+    match species {
+        jar_protocol::Species::Fish => 10,
+        jar_protocol::Species::Gecko => 4,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pins the exact values SPEC.md §5 documents ("10 fish + 4 gecko") —
+    /// both `try_breed` and `add_critter` trust this function for the real
+    /// cap, so a typo here would silently move the cap for both at once.
+    #[test]
+    fn population_cap_matches_documented_values() {
+        assert_eq!(population_cap(jar_protocol::Species::Fish), 10);
+        assert_eq!(population_cap(jar_protocol::Species::Gecko), 4);
+    }
+}
