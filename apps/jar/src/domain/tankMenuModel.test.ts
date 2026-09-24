@@ -14,6 +14,7 @@ function makeActions(): TankMenuActions {
     toggleSound: vi.fn(),
     switchMode: vi.fn(),
     captureScreenshot: vi.fn(),
+    addCritter: vi.fn(),
     openFamilyTree: vi.fn(),
     openFishMonitor: vi.fn(),
     openFishEye: vi.fn(),
@@ -41,7 +42,12 @@ describe('buildTankMenuModel', () => {
     expect(items(tank!)).toHaveLength(3);
     expect(items(mode!)).toHaveLength(1);
     expect(items(screenshot!).map((i) => i.id)).toEqual(['screenshot']);
-    expect(items(critters!).map((i) => i.id)).toEqual(['family-tree', 'fish-monitor', 'fish-eye']);
+    expect(items(critters!).map((i) => i.id)).toEqual([
+      'add-critter',
+      'family-tree',
+      'fish-monitor',
+      'fish-eye',
+    ]);
     expect(items(app!).map((i) => i.id)).toEqual(['setup', 'dev-settings', 'exit']);
   });
 
@@ -98,5 +104,20 @@ describe('buildTankMenuModel', () => {
     expect(actions.captureScreenshot).toHaveBeenCalledOnce();
     expect(actions.switchMode).not.toHaveBeenCalled();
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
+  });
+
+  it('wires Add a critter to addCritter and nothing else', () => {
+    const actions = makeActions();
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const addCritterItem = itemById(model, 'add-critter');
+
+    expect(addCritterItem.label).toBe('Add a critter');
+    expect(addCritterItem.checked).toBeUndefined();
+
+    addCritterItem.action?.();
+
+    expect(actions.addCritter).toHaveBeenCalledOnce();
+    expect(actions.openFamilyTree).not.toHaveBeenCalled();
+    expect(actions.captureScreenshot).not.toHaveBeenCalled();
   });
 });

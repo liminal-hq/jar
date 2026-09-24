@@ -48,6 +48,7 @@ export function TankContextMenu({ position, onClose }: TankContextMenuProps) {
     toggleSound: () => void jar.setToggle('sound', !settings.sound_on),
     switchMode: () => void jar.setMode(settings.mode === 'Fish' ? 'Gecko' : 'Fish'),
     captureScreenshot: () => void takeScreenshot(),
+    addCritter: () => void jar.addCritter(settings.mode),
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
     openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),
