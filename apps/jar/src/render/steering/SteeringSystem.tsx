@@ -2,8 +2,8 @@
 // registered fish, per `docs/architecture/3d-engine.md` §3's per-frame
 // order: read the RigidBody's actual position into the Yuka vehicle (so
 // steering always reasons from ground truth) -> advance the shared
-// `entityManager` (computes neighbors for separation, then each vehicle's
-// steering behaviors) -> apply the resulting desired velocity to the
+// `entityManager` (computes neighbours for separation, then each vehicle's
+// steering behaviours) -> apply the resulting desired velocity to the
 // RigidBody as an impulse, with heading set from the same vector.
 //
 // Deliberately *one* `useFrame` call for all fish, with no render-priority

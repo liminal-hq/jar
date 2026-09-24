@@ -7,18 +7,18 @@
 interface StatBarProps {
   label: string;
   value: number; // 0-100
-  colorByValue?: boolean;
+  colourByValue?: boolean;
 }
 
-function moodColor(value: number): string {
+function moodColour(value: number): string {
   if (value > 60) return '#4caf50';
   if (value > 35) return '#e0a020';
   return '#d1453b';
 }
 
-export function StatBar({ label, value, colorByValue = false }: StatBarProps) {
+export function StatBar({ label, value, colourByValue = false }: StatBarProps) {
   const clamped = Math.max(0, Math.min(100, value));
-  const color = colorByValue ? moodColor(clamped) : 'var(--jar-accent, #3a8dde)';
+  const colour = colourByValue ? moodColour(clamped) : 'var(--jar-accent, #3a8dde)';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
@@ -32,7 +32,7 @@ export function StatBar({ label, value, colorByValue = false }: StatBarProps) {
           overflow: 'hidden',
         }}
       >
-        <div style={{ width: `${clamped}%`, height: '100%', background: color }} />
+        <div style={{ width: `${clamped}%`, height: '100%', background: colour }} />
       </div>
     </div>
   );

@@ -208,7 +208,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // fixed per-fish value.
   const burstMulTargetRef = useRef(1);
   // A short, untargeted burst of speed during ordinary active wandering —
-  // independent of `modeRef`/chasing entirely (no steering-behavior change,
+  // independent of `modeRef`/chasing entirely (no steering-behaviour change,
   // just a temporary lift on the same speed ceiling), so a fish can burst
   // while still just wandering, not only while pursuing a tankmate.
   const spontaneousBurstActiveRef = useRef(false);
@@ -296,8 +296,8 @@ export function Fish({ critter, livingPopulation }: FishProps) {
 
     // Fades wander/separation/arrive/pursuit toward whatever `setMode` last
     // targeted, every frame and every mode — not just while settling. See
-    // `useFishSteering.ts`'s `BEHAVIOR_WEIGHT_RAMP_RATE` comment for why an
-    // instant behavior-set flip was the actual cause of fish visibly
+    // `useFishSteering.ts`'s `BEHAVIOUR_WEIGHT_RAMP_RATE` comment for why an
+    // instant behaviour-set flip was the actual cause of fish visibly
     // "shaking" for a moment at every night settle/wake transition.
     steering.rampWeights(delta);
 
@@ -346,7 +346,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       if (caught || targetInvalid || chaseElapsedRef.current > CHASE_MAX_SEC) {
         // The evader is deliberately left assigned — `pursuit.weight` is
         // still fading toward 0 over the same ramp, and an inert pursuit
-        // behavior with a stale evader is harmless; it's just overwritten
+        // behaviour with a stale evader is harmless; it's just overwritten
         // the next time this fish starts a chase.
         lastChasedIdRef.current = chaseTargetIdRef.current;
         lastChasedElapsedRef.current = 0;
@@ -393,7 +393,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
     return true;
   };
 
-  /** A short, untargeted burst of speed — no steering-behavior change,
+  /** A short, untargeted burst of speed — no steering-behaviour change,
    * just a temporary lift on the same ceiling `startChase` raises. */
   const startSpontaneousBurst = () => {
     burstMulTargetRef.current = burstMultiplierFor(critter.personality);

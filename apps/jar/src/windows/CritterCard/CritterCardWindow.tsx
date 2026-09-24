@@ -85,7 +85,7 @@ export function CritterCardWindow() {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '8px 0' }}>
-        <StatBar label="Mood" value={critter.mood} colorByValue />
+        <StatBar label="Mood" value={critter.mood} colourByValue />
         <StatBar label="Energy" value={critter.energy} />
       </div>
       <p style={{ fontStyle: 'italic' }}>

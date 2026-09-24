@@ -1,4 +1,4 @@
-// Pure per-mode behavior-weight targets and ramping math for
+// Pure per-mode behaviour-weight targets and ramping math for
 // `useFishSteering.ts` — split out specifically so the ramp itself is
 // unit-testable without mocking a Yuka vehicle/`useFrame` loop.
 //
@@ -14,7 +14,7 @@ export interface ModeWeights {
   pursuit: number;
 }
 
-/** Target `.weight` (Yuka's own per-behavior force-contribution scalar,
+/** Target `.weight` (Yuka's own per-behaviour force-contribution scalar,
  * applied after `calculate()` — `SteeringManager._calculateByOrder`) for
  * each mode. `containment` is deliberately absent — it stays at a fixed
  * weight of 1 in every mode (`useFishSteering.ts`), since even a resting
@@ -32,7 +32,7 @@ export const MODE_WEIGHTS: Record<FishMotionMode, ModeWeights> = {
   chasing: { wander: 0, separation: 1, arrive: 0, pursuit: 1 },
 };
 
-/** ~0.5s time constant — softens a mode flip's behavior-set change from an
+/** ~0.5s time constant — softens a mode flip's behaviour-set change from an
  * instant on/off into a smooth fade, so `ArriveBehavior`'s own steering
  * force (`desiredVelocity - vehicle.velocity`, effectively unbounded by
  * anything but `vehicle.maxForce`) doesn't suddenly apply at full strength
@@ -42,7 +42,7 @@ export const MODE_WEIGHTS: Record<FishMotionMode, ModeWeights> = {
  * every settle/wake transition — confirmed via the fish monitor window's
  * peak turn-rate readout spiking exactly then
  * (`windows/FishMonitor/FishMonitorWindow.tsx`). */
-export const BEHAVIOR_WEIGHT_RAMP_RATE = 2;
+export const BEHAVIOUR_WEIGHT_RAMP_RATE = 2;
 
 /** Moves `current` a framerate-independent step toward `target` — the same
  * `1 - exp(-rate * delta)` exponential-approach shape used elsewhere in
@@ -52,7 +52,7 @@ export function rampWeights(
   current: ModeWeights,
   target: ModeWeights,
   delta: number,
-  rate: number = BEHAVIOR_WEIGHT_RAMP_RATE,
+  rate: number = BEHAVIOUR_WEIGHT_RAMP_RATE,
 ): ModeWeights {
   const t = 1 - Math.exp(-rate * delta);
   return {

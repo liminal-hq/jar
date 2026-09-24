@@ -1,6 +1,6 @@
 // Per-`Personality` steering parameter table — `docs/architecture/3d-engine.md`
 // §4.1's trait-modulation table, re-expressed as numbers `FishController`
-// applies to a `YUKA.Vehicle`'s behaviors. Population-dependent effects
+// applies to a `YUKA.Vehicle`'s behaviours. Population-dependent effects
 // (shy/curious separation radius) take the current living population as an
 // argument rather than baking it in, since that count changes at runtime.
 //

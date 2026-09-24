@@ -54,7 +54,7 @@ describe('TANK_FRAMES', () => {
     for (const frame of ALL_TANK_FRAMES) {
       const tokens = TANK_FRAMES[frame];
       expect(tokens.bezelWidth).toBeTruthy();
-      expect(tokens.bezelColor).toBeTruthy();
+      expect(tokens.bezelColour).toBeTruthy();
     }
   });
 });
@@ -182,6 +182,6 @@ describe('applyTankFrame', () => {
     const root = document.documentElement.style;
 
     expect(root.getPropertyValue('--jar-bezel-width')).toBe(TANK_FRAMES.WoodStand.bezelWidth);
-    expect(root.getPropertyValue('--jar-bezel-color')).toBe(TANK_FRAMES.WoodStand.bezelColor);
+    expect(root.getPropertyValue('--jar-bezel-colour')).toBe(TANK_FRAMES.WoodStand.bezelColour);
   });
 });
