@@ -40,22 +40,25 @@ export function PilotCaptureBridge() {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
 
-    let unlistenPilotKey: (() => void) | undefined;
-    void onPilotKey((event) => {
+    // Chained onto the promise itself (`CritterCardWindow.tsx`'s own
+    // `onCritterSelected` pattern), not stashed into a captured variable for
+    // the cleanup to read later — under StrictMode's mount/unmount/remount
+    // double-invoke, cleanup can run before this promise resolves, and a
+    // captured variable would still be `undefined` at that point, leaking
+    // the first invocation's listener with nothing left able to call it.
+    const unlistenPilotKey = onPilotKey((event) => {
       if ('clear' in event) {
         clearKeys();
       } else {
         setKey(event.code, event.pressed);
       }
-    }).then((fn) => {
-      unlistenPilotKey = fn;
     });
 
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
-      unlistenPilotKey?.();
+      void unlistenPilotKey.then((unlisten) => unlisten());
       clearKeys();
     };
   }, []);

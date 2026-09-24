@@ -1,6 +1,12 @@
 // Tests for ManualPilotBehaviour: idle when unpiloted, idle, or unseeded;
-// correct thrust direction/magnitude relative to the driven yaw once
-// engaged; and that switching the piloted fish clears stale key state.
+// correct thrust direction relative to the driven yaw once engaged; and
+// that switching the piloted fish clears stale key state. Magnitude
+// assertions use `PILOTED_MAX_FORCE`, not `PILOT_STRENGTH` — the behaviour
+// deliberately requests the wider constant so Yuka's real accumulator clips
+// it down to whatever budget is actually left (see `manualPilotBehaviour.ts`'s
+// own comments); these isolated unit tests call `calculate()` directly, with
+// no accumulator to do that clipping, so the raw requested magnitude is what
+// they see.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -8,7 +14,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as YUKA from 'yuka';
 
-import { ManualPilotBehaviour, PILOT_STRENGTH } from './manualPilotBehaviour';
+import { ManualPilotBehaviour, PILOTED_MAX_FORCE } from './manualPilotBehaviour';
 import {
   clearKeys,
   REVERSE_THRUST_FACTOR,
@@ -84,7 +90,7 @@ describe('ManualPilotBehaviour', () => {
 
     expect(force.x).toBeCloseTo(0);
     expect(force.y).toBeCloseTo(0);
-    expect(force.z).toBeCloseTo(PILOT_STRENGTH);
+    expect(force.z).toBeCloseTo(PILOTED_MAX_FORCE);
   });
 
   it('KeyW thrusts along the driven yaw (yaw pi/2 -> +X)', () => {
@@ -97,7 +103,7 @@ describe('ManualPilotBehaviour', () => {
 
     behaviour.calculate(vehicle, force);
 
-    expect(force.x).toBeCloseTo(PILOT_STRENGTH);
+    expect(force.x).toBeCloseTo(PILOTED_MAX_FORCE);
     expect(force.y).toBeCloseTo(0);
     expect(force.z).toBeCloseTo(0, 4);
   });
@@ -112,7 +118,7 @@ describe('ManualPilotBehaviour', () => {
 
     behaviour.calculate(vehicle, force);
 
-    expect(force.z).toBeCloseTo(-PILOT_STRENGTH * REVERSE_THRUST_FACTOR);
+    expect(force.z).toBeCloseTo(-PILOTED_MAX_FORCE * REVERSE_THRUST_FACTOR);
   });
 
   it('is zero on KeyA alone — turning does not thrust', () => {
@@ -139,7 +145,7 @@ describe('ManualPilotBehaviour', () => {
 
     behaviour.calculate(vehicle, force);
 
-    expect(force.length()).toBeCloseTo(PILOT_STRENGTH);
+    expect(force.length()).toBeCloseTo(PILOTED_MAX_FORCE);
   });
 
   it('clears held keys and un-seeds yaw when the piloted fish changes', () => {

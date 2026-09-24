@@ -153,9 +153,10 @@ export function useFishSteering(
     // nominally out-voting the others. `manualPilot` goes in `wander`'s own
     // slot, right after both avoidance behaviours: a piloted fish still
     // can't be forced through the glass (avoidance keeps first claim on the
-    // budget), but an engaged pilot force is sized to claim the entire
-    // remainder (`PILOT_STRENGTH`'s own comment), which silences
-    // `wander`/`separation`/`pursuit`/`arrive` via the same accumulator
+    // budget), but an engaged pilot force deliberately over-requests to claim
+    // the entire remainder (`manualPilotBehaviour.ts`'s `PILOT_STRENGTH`
+    // comment), which silences `wander`/`separation`/`pursuit`/`arrive` via
+    // the same accumulator
     // mechanic that already lets avoidance out-vote wander — no mode-system
     // changes needed to make manual input "take over".
     vehicle.steering.add(containment);

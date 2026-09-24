@@ -323,8 +323,18 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       // existing velocity-gated logic, completely unaffected.
       const pilotYaw = isActivelyPiloted(id) ? getPilotYaw() : null;
       if (pilotYaw !== null) {
+        // `isHeadingActive` deliberately untouched here — it's the
+        // commit/release hysteresis flag the *other* branch below uses, and
+        // a driven yaw doesn't consult it at all while piloted. Stomping it
+        // to `false` on every piloted frame used to discard whatever
+        // hysteresis state was earned before piloting engaged, so the
+        // instant a key released, the fish could land back in the `else`
+        // branch requiring the higher `HEADING_COMMIT_SPEED` threshold to
+        // re-engage instead of the lower `HEADING_RELEASE_SPEED` its actual
+        // pre-pilot state called for — a momentary heading freeze right
+        // after handing control back. Leaving it alone resumes exactly
+        // where it left off.
         fish.targetHeading.copy(computePilotTargetHeading(pilotYaw, scratchVelocity));
-        fish.isHeadingActive = false;
       } else if (scratchVelocity.lengthSq() >= MIN_VELOCITY_SQ) {
         const threshold = fish.isHeadingActive ? HEADING_RELEASE_SPEED : HEADING_COMMIT_SPEED;
         const target = computeTargetHeading(scratchVelocity, threshold);
