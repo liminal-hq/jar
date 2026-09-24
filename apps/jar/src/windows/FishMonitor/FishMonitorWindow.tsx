@@ -1,10 +1,11 @@
-// Fish tuning rig (opened via the drawer's always-available "Fish monitor"
-// button, `Drawer.tsx`) — a live table plus top-down and front maps of
-// every fish's steering/animation state, for tuning wander/rest/pause
-// behaviour against real numbers instead of guessing from screen
-// recordings, and the home for the manual fish pilot's own "take over this
-// one" control — you're already looking at each fish's live row here, so
-// arming pilot mode belongs next to it rather than in a different window.
+// Fish tuning rig (opened via the tank's right-click menu, always-available
+// "Fish monitor" item, `TankContextMenu.tsx`) — a live table plus top-down
+// and front maps of every fish's steering/animation state, for tuning
+// wander/rest/pause behaviour against real numbers instead of guessing from
+// screen recordings, and the home for the manual fish pilot's own "take
+// over this one" control — you're already looking at each fish's live row
+// here, so arming pilot mode belongs next to it rather than in a different
+// window.
 // Not part of SPEC.md/SCREENS.md — supplementary tooling rather than a core
 // product screen, but not gated behind a dev build either: it's
 // self-contained (opening it is what turns telemetry publishing on, and

@@ -1,9 +1,10 @@
 // Theme tokens for SPEC.md §4's two independent axes: the tank frame
 // (bezel of the Tank window) and the dialog theme (critter card, family
-// tree, setup, and the drawer). Applied as CSS custom properties on
-// `document.documentElement` rather than through a CSS-in-JS runtime, so
-// plain CSS modules (see `windows/Tank/TankWindow.module.css`) can consume
-// them with `var(--jar-...)`.
+// tree, setup, and the tank's right-click menu). Applied as CSS custom
+// properties on `document.documentElement` rather than through a
+// CSS-in-JS runtime, so plain CSS modules (see
+// `windows/Tank/TankWindow.module.css`) can consume them with
+// `var(--jar-...)`.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT

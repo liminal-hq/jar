@@ -5,18 +5,19 @@
 // opaque frame chrome around it would work against that rather than for
 // it. `.bezel` (the outer div below) still doubles as the Tauri drag
 // region. The tank *interior* is a 3D scene
-// (`docs/architecture/3d-engine.md`); only the drawer, toasts and status
-// chip here are flat HTML/CSS.
+// (`docs/architecture/3d-engine.md`); only the right-click menu, toasts and
+// status chip here are flat HTML/CSS.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { currentMonitor, getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Drawer } from '../../components/Drawer';
+import type { MenuPosition } from '../../components/ContextMenu/types';
 import { MouseDebugCapture } from '../../components/MouseDebugCapture';
+import { TankContextMenu } from '../../components/TankContextMenu';
 import { ToastLayer } from '../../components/Toast';
 import { useMouseOverlayEnabled } from '../../domain/devSettings';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
@@ -26,44 +27,16 @@ import { applyDialogTheme } from '../../theme/theme';
 import { PilotCaptureBridge } from './PilotCaptureBridge';
 import styles from './TankWindow.module.css';
 
-/** How much wider the window grows to fit the drawer open (SCREENS.md W1) —
- * see `Drawer.tsx` for the button list this needs to comfortably fit
- * ("Switch to gecko" is the long pole), plus its own padding. */
-const DRAWER_WIDTH = 180;
-
-/** Auto-close the drawer after this long with no `mousemove` at all —
- * the primary "the cursor left" signal (there's no boundary event for
- * that, see below), so short enough to feel responsive, long enough
- * that pausing to read a button doesn't trigger it. */
-const DRAWER_IDLE_MS = 1500;
+/** A defensive backstop, not the primary dismissal path: `ContextMenu`'s
+ * own outside-`mousedown`/Escape/blur handlers close the menu normally, but
+ * none of those fire if the cursor leaves this window entirely and the
+ * next click lands in a different app — the same missing-boundary-event
+ * gap noted on `handleTankMouseDown` below. Long enough to stay out of the
+ * way of someone actually reading the menu. */
+const MENU_IDLE_BACKSTOP_MS = 8000;
 
 export function TankWindow() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  // The tank's own pixel width, captured right before growing the window
-  // for the drawer and pinned via inline style only while the drawer is
-  // open — without this the 3D scene's container would stretch to fill
-  // the wider window too, resizing/reflowing the tank contents on every
-  // toggle instead of just exposing a new strip on the right for the
-  // drawer to occupy. Re-derived fresh on every open rather than cached
-  // across toggles, so a window resized (it's user-resizable) while the
-  // drawer was closed is picked up correctly instead of pinning to a
-  // stale width.
-  const [tankWidth, setTankWidth] = useState<number | null>(null);
-  // True when the window can't grow far enough right to fit the drawer
-  // (maximized, or already against the monitor's work-area edge) — the
-  // drawer then renders as an in-window overlay over part of the tank
-  // instead of a strip exposed by resizing, so Setup/Exit stay reachable
-  // rather than landing off-screen. `openDrawer` decides this per open;
-  // `closeDrawer` reads it back to skip the resize it never did.
-  const [drawerOverlay, setDrawerOverlay] = useState(false);
-  // Guards against overlapping open/close calls: `setSize`/`outerSize`
-  // are IPC round-trips (async from JS even though the underlying GTK
-  // resize is a synchronous, blocking call once it reaches the Rust main
-  // thread), so a second click before the first one's resize has
-  // actually settled can read the window mid-transition — two racing
-  // `openDrawer` calls would each add another +180px on top of an
-  // already-widened window instead of a single 420 → 600.
-  const resizingRef = useRef(false);
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const mouseOverlayEnabled = useMouseOverlayEnabled();
   const settings = useJarStore((s) => s.settings);
   const critters = useJarStore((s) => s.critters);
@@ -131,84 +104,16 @@ export function TankWindow() {
     return `${livingCount} ${label}`;
   }, [critters, hydrated, settings.mode]);
 
-  // Growing/shrinking the window itself, not moving a second window, is
-  // deliberate: Wayland silently refuses a client's request to
-  // reposition an *existing* window after creation, so a
-  // separately-positioned floating drawer window is a dead end here.
-  // Resizing the tank window right and pinning its own content width
-  // instead sits entirely inside what Wayland actually allows a client
-  // to do.
-  const openDrawer = async () => {
-    if (drawerOpen || resizingRef.current) return;
-    resizingRef.current = true;
-    try {
-      const win = getCurrentWindow();
-      const [scale, position, size, monitor] = await Promise.all([
-        win.scaleFactor(),
-        win.outerPosition(),
-        win.outerSize(),
-        currentMonitor(),
-      ]);
-      const width = size.width / scale;
-      const height = size.height / scale;
-      // Physical pixels throughout: `position`/`size`/`workArea` are all
-      // physical already, so only `DRAWER_WIDTH` (a logical constant) needs
-      // converting before comparing.
-      const fitsOnScreen =
-        monitor === null ||
-        position.x + size.width + DRAWER_WIDTH * scale <=
-          monitor.workArea.position.x + monitor.workArea.size.width;
-      if (!fitsOnScreen) {
-        setDrawerOverlay(true);
-        setDrawerOpen(true);
-        return;
-      }
-      setTankWidth(width);
-      setDrawerOpen(true);
-      await win.setSize(new LogicalSize(width + DRAWER_WIDTH, height));
-    } finally {
-      resizingRef.current = false;
-    }
-  };
-
-  const closeDrawer = async () => {
-    if (!drawerOpen || resizingRef.current) return;
-    resizingRef.current = true;
-    try {
-      if (drawerOverlay) {
-        setDrawerOpen(false);
-        setDrawerOverlay(false);
-        return;
-      }
-      if (tankWidth === null) return;
-      const win = getCurrentWindow();
-      const [scale, size] = await Promise.all([win.scaleFactor(), win.outerSize()]);
-      // Shrink the window *before* clearing `drawerOpen`: the pinned tank
-      // width (see `tankWidth` above) stays in effect for the whole resize,
-      // so the canvas never stretches into the strip the window is in the
-      // middle of giving back.
-      await win.setSize(new LogicalSize(tankWidth, size.height / scale));
-      setDrawerOpen(false);
-    } finally {
-      resizingRef.current = false;
-    }
-  };
-
-  // Hover-based open/close is a dead end: WebKitGTK never dispatches
-  // *any* boundary event — no mouseenter/mouseleave, no
-  // mouseover/mouseout, not even a window blur — when the cursor crosses
-  // the tank window's own outer edge, in either direction, so nothing
-  // built on that signal (a hover handler, `:hover` polling,
-  // `onFocusChanged`) can ever fire for it. Crossing an *internal* DOM
-  // boundary, e.g. canvas into the drawer area, fires all of those
-  // correctly — it's specifically the window's own edge that's silent.
-  // (`MouseDebugCapture`, toggled from the Dev settings window, relays raw
-  // mouse events there live for diagnosing this class of platform quirk.) A
-  // click is always delivered correctly regardless, so open/close is a
-  // deliberate click on the tank instead of a passive hover.
-  const toggleDrawer = () => {
-    if (drawerOpen) void closeDrawer();
-    else void openDrawer();
+  // A fixed-position overlay over the tank, not a second window or a
+  // window resize (the previous drawer's approach) — sidesteps Wayland
+  // silently refusing a client's request to reposition an *existing*
+  // window after creation, since nothing here ever needs repositioning.
+  // Right-click is already excluded from `handleTankMouseDown`'s
+  // drag-start path below (it bails on anything but the primary button),
+  // so there's no click/drag ambiguity to resolve here.
+  const handleTankContextMenu = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    setMenuPosition({ x: e.clientX, y: e.clientY });
   };
 
   // `data-tauri-drag-region` alone doesn't cover the tank: Tauri's drag
@@ -227,7 +132,8 @@ export function TankWindow() {
   // begins, a plain click may have already released, and GTK can end up
   // grabbing a pointer that's no longer down, swallowing the click
   // entirely instead of letting it resolve normally. Confirmed live: an
-  // unconditional call on every mousedown made the drawer stop opening.
+  // unconditional call on every mousedown broke plain clicks on the tank
+  // (selecting a critter — see `Fish.tsx`'s own `onClick`).
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const DRAG_THRESHOLD_PX = 4;
 
@@ -256,27 +162,20 @@ export function TankWindow() {
     window.addEventListener('mouseup', handleUp);
   };
 
-  // Backstop for closing without another click: `mousemove` fires
-  // reliably and continuously the whole time the cursor is genuinely
-  // inside the window (there's no event for "the cursor left" — see
+  // `MENU_IDLE_BACKSTOP_MS` above: `mousemove` fires reliably and
+  // continuously the whole time the cursor is genuinely inside the window
+  // (there's no event for "the cursor left" — see `handleTankMouseDown`
   // above), so debounce on that instead of polling for an absence: reset
   // the timer on every mousemove, and treat a quiet stretch as "gone,"
   // whether that's because the cursor actually left or the user's just
   // done interacting and parked it somewhere.
-  //
-  // Deliberately doesn't also close on `onFocusChanged`/`isFocused()`:
-  // this frameless/always-on-top tank window doesn't reliably report
-  // itself as OS-focused at all, click or not, so wiring a close to that
-  // fires immediately after every open — racing openDrawer's own
-  // not-yet-settled resize and shrinking the window well past its actual
-  // closed width.
   useEffect(() => {
-    if (!drawerOpen) return;
+    if (!menuPosition) return;
     let idleTimeout: ReturnType<typeof setTimeout>;
 
     const resetIdleTimer = () => {
       clearTimeout(idleTimeout);
-      idleTimeout = setTimeout(() => void closeDrawer(), DRAWER_IDLE_MS);
+      idleTimeout = setTimeout(() => setMenuPosition(null), MENU_IDLE_BACKSTOP_MS);
     };
     resetIdleTimer();
     document.addEventListener('mousemove', resetIdleTimer);
@@ -286,16 +185,7 @@ export function TankWindow() {
       clearTimeout(idleTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawerOpen]);
-
-  // Opening Setup/Tree/Dev creates and focuses a new window — proactively
-  // close the drawer right here rather than waiting on the next idle
-  // tick, since we already know this is the one interaction that always
-  // means "done with the drawer." Returns the resize's own promise so
-  // `Drawer.tsx` can await it: positioning a satellite window beside the
-  // tank, or closing the app on Exit, both need the tank back at its
-  // real closed width first, not mid-resize.
-  const handleDrawerNavigate = () => closeDrawer();
+  }, [menuPosition]);
 
   return (
     // No `data-frame` attribute — see this file's header on why the tank
@@ -305,12 +195,7 @@ export function TankWindow() {
       <PilotCaptureBridge />
       <div
         className={styles.tankInterior}
-        style={
-          drawerOpen && !drawerOverlay && tankWidth !== null
-            ? { flex: `0 0 ${tankWidth}px` }
-            : undefined
-        }
-        onClick={toggleDrawer}
+        onContextMenu={handleTankContextMenu}
         onMouseDown={handleTankMouseDown}
         data-tauri-drag-region
       >
@@ -319,10 +204,8 @@ export function TankWindow() {
         <div className={styles.statusChip}>{statusText}</div>
       </div>
 
-      {drawerOpen && (
-        <div className={drawerOverlay ? styles.drawerOverlay : styles.drawerArea}>
-          <Drawer onNavigate={handleDrawerNavigate} />
-        </div>
+      {menuPosition && (
+        <TankContextMenu position={menuPosition} onClose={() => setMenuPosition(null)} />
       )}
     </div>
   );

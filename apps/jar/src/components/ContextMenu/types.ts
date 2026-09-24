@@ -10,6 +10,9 @@ export interface MenuItem {
   icon?: string;
   shortcut?: string;
   disabled?: boolean;
+  /** Marks this row as a checkable toggle rather than a plain action —
+   * renders a checkbox glyph in the icon slot instead of `icon`. */
+  checked?: boolean;
   action?: () => void;
 }
 

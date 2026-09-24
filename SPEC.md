@@ -37,7 +37,7 @@ Two independent axes, both chosen in Setup and persisted:
 
 **Tank frame**: Bevelled 98 · Wood stand · Brushed metal · Rounded glass (0 px bezel, truly edge-to-edge) · Neon/CRT (adds scanlines) · Cardboard cutout. Setup-selectable and persisted, but not currently applied to W1 — the translucent glass tank enclosure (§3, `docs/architecture/3d-engine.md` §8.1) is the window's whole visual boundary while this axis is revisited; see `SCREENS.md`'s W1 entry.
 
-**Dialog theme** (W2, W3, W4 and the drawer):
+**Dialog theme** (W2, W3, W4 and the tank's right-click menu):
 
 - Modern (default): warm off-white `#fbfaf6`, 18 px radius, soft shadow, Nunito, pill buttons.
 - Modern dark: same shapes on `#1c1a22` with `#f1eee6` ink. On first run the app follows the OS light/dark preference (`prefers-color-scheme`) to pick Modern vs Modern dark; an explicit pick in Setup overrides it.

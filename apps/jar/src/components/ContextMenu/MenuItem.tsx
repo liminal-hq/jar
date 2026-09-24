@@ -22,6 +22,7 @@ export function MenuItem({ item, onItemClick }: MenuItemProps) {
     onItemClick(item.id, item.action);
   }
 
+  const isCheckable = item.checked !== undefined;
   const iconNode = getIconByName(item.icon);
 
   return (
@@ -29,9 +30,19 @@ export function MenuItem({ item, onItemClick }: MenuItemProps) {
       className={`${styles.menuItem} ${item.disabled ? styles.disabled : ''}`}
       onClick={handleClick}
       disabled={item.disabled}
-      role="menuitem"
+      role={isCheckable ? 'menuitemcheckbox' : 'menuitem'}
+      aria-checked={isCheckable ? item.checked : undefined}
     >
-      <span className={styles.menuItemIcon}>{iconNode}</span>
+      <span className={styles.menuItemIcon}>
+        {isCheckable ? (
+          <span
+            className={`${styles.menuItemCheckbox} ${item.checked ? styles.checked : ''}`}
+            aria-hidden="true"
+          />
+        ) : (
+          iconNode
+        )}
+      </span>
       <span className={styles.menuItemLabel}>{item.label}</span>
       {item.shortcut && <span className={styles.menuItemShortcut}>{item.shortcut}</span>}
     </button>

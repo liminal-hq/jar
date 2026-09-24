@@ -73,7 +73,7 @@ export function AquariumEnvironment() {
       </mesh>
 
       {/* Surface highlight (§8.1's last bullet): a soft light band toggled
-          by the drawer's Light control, plus the real hood-mounted fixture
+          by the tank menu's Light control, plus the real hood-mounted fixture
           (`LedLightStrip`) that band stands in front of — a fish tank's
           actual light source, not just a cosmetic glow. */}
       {lightOn && (
