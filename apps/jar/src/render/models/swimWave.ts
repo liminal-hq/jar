@@ -13,14 +13,16 @@ import * as THREE from 'three';
  * smoothly from 1x at the body/tail seam to this value at the tail's own
  * tip — the body portion is always 1x regardless of fin type. Veil (the
  * flowing motion its shape calls for) highest; Fan/Forked moderate. Trimmed
- * a smidge from an earlier pass (Veil 4.2, Fan/Forked 2.4) that read as a
- * touch too whippy at the tail tip specifically, independent of the overall
- * body amplitude (`CALM_AMPLITUDE`/`EXCITED_AMPLITUDE`, `FishModel.tsx`),
- * which is unchanged. Tune by eye. */
+ * from an original pass (Veil 4.2, Fan/Forked 2.4) that read as too whippy
+ * at the tail tip specifically, via a couple of live-tuned steps: a first
+ * cut to 3.6/2.0 still swung too far side to side, a second cut to 2.6/1.5
+ * overcorrected, settling here. The overall body amplitude
+ * (`CALM_AMPLITUDE`/`EXCITED_AMPLITUDE`, `FishModel.tsx`) is untouched by
+ * any of these passes. Tune by eye. */
 export const FIN_SWIM_TIP_GAIN: Record<'Fan' | 'Forked' | 'Veil', number> = {
-  Veil: 3.6,
-  Fan: 2.0,
-  Forked: 2.0,
+  Veil: 3.0,
+  Fan: 1.7,
+  Forked: 1.7,
 };
 
 /** Body-space x at/beyond which the wave is zero — protects the rigid head
