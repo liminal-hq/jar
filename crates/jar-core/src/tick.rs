@@ -398,8 +398,21 @@ mod tests {
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
 
-        tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
-        assert_eq!(state.living_count(Species::Fish), 9);
+        // Aging/death and breeding both run within the same `tick()` call,
+        // in that order, so the death already clears the cap in time for
+        // breeding to fire on this very first tick too — asserting a fixed
+        // `living_count` of 9 here would be flaky (a same-tick birth brings
+        // it back to 10). Only assert the death itself, which a same-tick
+        // birth can't affect, and treat an immediate birth as success
+        // rather than a race to guard against.
+        let first = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
+        assert!(
+            !state.critters[0].alive,
+            "the short-lived critter should have died on the first tick"
+        );
+        if !first.born.is_empty() {
+            return;
+        }
 
         // At the new breed_chance coefficient, 9 survivors leave well over
         // a dozen eligible pairs, so the expected wait is a couple dozen
