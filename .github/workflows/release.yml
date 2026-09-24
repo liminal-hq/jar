@@ -448,7 +448,18 @@ jobs:
           release_dir="release-assets/macos"
           mkdir -p "${release_dir}"
 
-          mapfile -t bundle_files < <(find target/universal-apple-darwin/release/bundle -type f -name '*.dmg' | sort)
+          # macOS runners default to Apple's stock /bin/bash (3.2, frozen
+          # for licensing reasons), which lacks the `mapfile`/`readarray`
+          # builtin -- collect into the array via a plain read loop instead,
+          # which works back to bash 3.2. `read -r file` (a single target
+          # variable) captures each whole line -- including any spaces --
+          # so this stays filename-safe without needing `find -print0` /
+          # `sort -z`, which aren't reliably available under macOS's BSD
+          # coreutils.
+          bundle_files=()
+          while IFS= read -r file; do
+            bundle_files+=("${file}")
+          done < <(find target/universal-apple-darwin/release/bundle -type f -name '*.dmg' | sort)
           if [[ "${#bundle_files[@]}" -eq 0 ]]; then
             echo "No macOS release artefacts found under target/universal-apple-darwin/release/bundle" >&2
             exit 1
