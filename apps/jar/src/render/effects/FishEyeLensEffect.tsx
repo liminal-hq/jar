@@ -30,6 +30,16 @@ const LensDistortion = wrapEffect(LensDistortionEffect);
 const LENS_PRINCIPAL_POINT = new Vector2(0, 0);
 const LENS_FOCAL_LENGTH = new Vector2(1, 1);
 
+// Changing any effect's props here (as the Dev Settings strength slider
+// does) makes `@react-three/postprocessing` reconstruct that effect and
+// rebuild the composer's merged shader pass, rather than updating its
+// uniforms in place — `wrapEffect` (`util.js`) memoizes each effect's
+// constructor `args` on `JSON.stringify(props)`, and an `args` reference
+// change is what makes `EffectComposer` recreate the whole `EffectPass`.
+// That's an inherent property of driving these stock effects from React
+// state, not something this file works around: it only costs a shader
+// recompile while a person is actively dragging the tuning slider, never
+// during ordinary always-on play once a strength value is settled.
 export function FishEyeLensEffect() {
   const strength = useFishEyeLensStrength();
   const { distortion, vignetteDarkness, chromaticOffset } = computeFishEyeLensParams(strength);

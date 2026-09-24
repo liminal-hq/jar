@@ -17,7 +17,21 @@ export const FISH_EYE_MAX_CHROMATIC_OFFSET = 0.004;
 
 export interface FishEyeLensParams {
   fov: number;
-  /** Negative = barrel distortion. */
+  /** Negative = barrel distortion, fed straight into
+   * `LensDistortionEffect`'s `mainUv` hook, which computes the *source*
+   * sample UV for a given *output* pixel as `(1 + distortion * r²) * xn`
+   * (r = radial distance from centre). A negative coefficient makes that
+   * mapping compressive — an output pixel near the edge samples source
+   * content from *closer to the centre* than its own position — which
+   * stretches the centre of the frame to fill the screen and crops the
+   * source image's own edges. That "zoom the centre, lose the edges" effect
+   * is exactly why `FISH_EYE_MAX_FOV` widens the camera: the extra FOV
+   * supplies the source content this distortion crops away, which wouldn't
+   * make sense to add if the sign here produced pincushion distortion
+   * (stretched edges) instead. Derived from the shader math, not visually
+   * confirmed live — this environment's WebGL canvas doesn't render actual
+   * pixels (see the PR description), so treat this as informed, not proven,
+   * until checked on a real display. */
   distortion: number;
   vignetteDarkness: number;
   chromaticOffset: number;
