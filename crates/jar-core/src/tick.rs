@@ -128,10 +128,7 @@ pub struct BornEvent {
 
 fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) {
     for species in [Species::Fish, Species::Gecko] {
-        let cap = match species {
-            Species::Fish => 10,
-            Species::Gecko => 4,
-        };
+        let cap = crate::state::population_cap(species);
         if state.living_count(species) >= cap {
             continue;
         }

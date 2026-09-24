@@ -15,6 +15,8 @@ pub enum Error {
     NotStarted,
     #[error("no critter with that id exists")]
     UnknownCritter,
+    #[error("this species is already at its population cap")]
+    PopulationCapReached,
     #[error(transparent)]
     Snapshot(#[from] jar_core::snapshot::SnapshotError),
     #[error(transparent)]
