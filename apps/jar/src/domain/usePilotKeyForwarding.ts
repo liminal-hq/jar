@@ -23,25 +23,45 @@ import { PILOT_KEY_CODES } from '../render/steering/pilotInputState';
 export function usePilotKeyForwarding(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
+    // This window's own contribution to the shared pressed-key set —
+    // `render/steering/pilotInputState.ts`'s `pressed` set also holds keys
+    // forwarded from whichever *other* window is driving (the tank's own
+    // keyboard via `PilotCaptureBridge.tsx`, or this same hook running in a
+    // second caller window). A blur here used to send `{ clear: true }`
+    // unconditionally, which reset that ENTIRE shared set — including a key
+    // still genuinely held elsewhere — the instant focus left this one
+    // window, e.g. alt-tabbing to watch the tank while still driving from
+    // it. Releasing only the keys *this* hook instance actually holds
+    // leaves any other source's own input alone.
+    const heldHere = new Set<string>();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat || !PILOT_KEY_CODES.includes(e.code)) return;
       e.preventDefault();
+      heldHere.add(e.code);
       void emitPilotKey({ code: e.code, pressed: true });
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (!PILOT_KEY_CODES.includes(e.code)) return;
       e.preventDefault();
+      heldHere.delete(e.code);
       void emitPilotKey({ code: e.code, pressed: false });
     };
-    const onBlur = () => void emitPilotKey({ clear: true });
+    const releaseHeldHere = () => {
+      heldHere.forEach((code) => void emitPilotKey({ code, pressed: false }));
+      heldHere.clear();
+    };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
+    window.addEventListener('blur', releaseHeldHere);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('blur', releaseHeldHere);
+      // Unmount (window closing or `enabled` flipping false) still does a
+      // full `clear: true` — unlike blur, this is meant to fully reset the
+      // pilot's control state, matching `setPilotedId`'s own `clearKeys()`
+      // on the tank side for the same transition.
       void emitPilotKey({ clear: true });
     };
   }, [enabled]);
