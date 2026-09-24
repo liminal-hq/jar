@@ -14,6 +14,7 @@ export interface TankMenuActions {
   toggleAmbient: () => void;
   toggleSound: () => void;
   switchMode: () => void;
+  captureScreenshot: () => void;
   openFamilyTree: () => void;
   openFishMonitor: () => void;
   openFishEye: () => void;
@@ -46,6 +47,9 @@ export function buildTankMenuModel(settings: JarSettings, actions: TankMenuActio
       },
       {
         items: [{ id: 'mode', label: `Switch to ${otherMode}`, action: actions.switchMode }],
+      },
+      {
+        items: [{ id: 'screenshot', label: 'Screenshot', action: actions.captureScreenshot }],
       },
       {
         // Windows that show you the critters/sim itself — not app

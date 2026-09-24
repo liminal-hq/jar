@@ -9,6 +9,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 - Right-click the tank → a context menu opens at the cursor, over the tank (no window resize, no second window). Clicking elsewhere, Escape, or losing focus closes it; a plain left-click on the tank background does nothing (dragging the window and clicking a critter still work as their own gestures).
   - **Tank**: Light · Bubbles (aquarium) / Mist (terrarium) · Critter sounds — checkboxes, reflecting the live setting.
   - **Mode**: Gecko/Fish (mode switch).
+  - **Screenshot**: copies the tank canvas to the clipboard as a PNG.
   - **Critters**: Tree · Fish monitor · Fish eye — windows that show you the critters/sim itself.
   - **App**: Setup · Dev · Exit (saves the jar, quits the app — essential on GNOME where there is no tray) — configuration and tooling for the app, not the critters. Dev and Fish monitor are always available, not gated behind a dev build — see "Dev / Fish monitor" below.
   - Menu styling follows the **dialog theme**, via the same `--jar-*` tokens W2/W3/W4 use.

@@ -17,6 +17,7 @@ import { AquariumEnvironment } from '../environment/AquariumEnvironment';
 import { CrtEffect } from '../effects/CrtEffect';
 import { Bubbles } from '../particles/Bubbles';
 import { SteeringSystem } from '../steering/SteeringSystem';
+import { setTankCanvasElement } from './canvasCapture';
 import { clampClockDelta } from './clampClockDelta';
 import { CrittersLayer } from './CrittersLayer';
 import { useRenderLoopPolicy } from './useRenderLoopPolicy';
@@ -35,6 +36,11 @@ export function TankScene() {
   const settings = useJarStore((s) => s.settings);
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
+  // The Screenshot menu item (`TankContextMenu.tsx`) reads the canvas
+  // element via `canvasCapture.ts` well outside this component's own
+  // lifetime — clear the reference on unmount so a stale element never
+  // outlives the scene that owned it.
+  useEffect(() => () => setTankCanvasElement(null), []);
   if (!ready) return null;
 
   return (
@@ -47,12 +53,21 @@ export function TankScene() {
         antialias: true,
         premultipliedAlpha: false,
         powerPreference: 'low-power',
+        // Without this, `canvas.toBlob()` called on demand from the
+        // Screenshot menu item — well after this frame's already been
+        // presented, not synchronously inside the render loop — can read
+        // a cleared buffer instead of the last drawn frame. Usually a
+        // negligible cost at this canvas's size; not a default to reach
+        // for lightly on a `gl` config this file's header already calls
+        // load-bearing (docs/architecture/3d-engine.md §1.1).
+        preserveDrawingBuffer: true,
       }}
       onCreated={({ gl, scene, clock }) => {
         gl.setClearColor(0x000000, 0);
         scene.background = null;
         scene.environment = null;
         clampClockDelta(clock, MAX_FRAME_DELTA_SEC);
+        setTankCanvasElement(gl.domElement);
       }}
     >
       <ambientLight intensity={0.6} />

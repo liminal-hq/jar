@@ -36,6 +36,7 @@ Net effect: W1's tank interior becomes a `@react-three/fiber` `<Canvas>` sitting
     antialias: true,
     premultipliedAlpha: false,
     powerPreference: 'low-power', // this is a background desktop toy, not a game
+    preserveDrawingBuffer: true, // W1's Screenshot menu item reads the buffer on demand, outside the render loop
   }}
   onCreated={({ gl, scene }) => {
     gl.setClearColor(0x000000, 0); // fully transparent clear
@@ -44,6 +45,8 @@ Net effect: W1's tank interior becomes a `@react-three/fiber` `<Canvas>` sitting
   }}
 />
 ```
+
+`preserveDrawingBuffer` isn't part of the transparency setup above — it's there so `canvas.toBlob()`, called from a menu click well after the frame's already been presented, still reads the last-rendered frame instead of a cleared buffer. Usually a negligible cost at this canvas's size, but not a default to reach for lightly on a `gl` config that's otherwise entirely about transparency.
 
 `THREE.ColorManagement.enabled = false` before the `Canvas` mounts, and avoid R3F's `legacy` prop unless a specific color-management symptom (washed-out or oversaturated hues) forces it — try without first, since newer R3F/three versions have largely fixed the transparency-vs-color-space conflict that made `legacy={true}` necessary in older stacks. Verify visually on both target platforms before assuming either setting is right.
 

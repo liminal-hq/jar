@@ -8,13 +8,31 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import { Image } from '@tauri-apps/api/image';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 
 import { jar, useJarStore } from '../domain/jarClient';
 import { buildTankMenuModel } from '../domain/tankMenuModel';
+import { pushToast } from '../domain/toastBus';
 import { openSatelliteWindow } from '../domain/windows';
+import { captureTankPng } from '../render/tank/canvasCapture';
 import { ContextMenu } from './ContextMenu/ContextMenu';
 import type { MenuPosition } from './ContextMenu/types';
+
+async function takeScreenshot(): Promise<void> {
+  try {
+    const blob = await captureTankPng();
+    if (!blob) throw new Error('tank canvas not ready');
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const image = await Image.fromBytes(bytes);
+    await writeImage(image);
+    pushToast('Screenshot copied to clipboard');
+  } catch (e) {
+    console.error('screenshot capture failed', e);
+    pushToast('Screenshot failed');
+  }
+}
 
 interface TankContextMenuProps {
   position: MenuPosition;
@@ -29,6 +47,7 @@ export function TankContextMenu({ position, onClose }: TankContextMenuProps) {
     toggleAmbient: () => void jar.setToggle('ambientParticles', !settings.ambient_particles_on),
     toggleSound: () => void jar.setToggle('sound', !settings.sound_on),
     switchMode: () => void jar.setMode(settings.mode === 'Fish' ? 'Gecko' : 'Fish'),
+    captureScreenshot: () => void takeScreenshot(),
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
     openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),
