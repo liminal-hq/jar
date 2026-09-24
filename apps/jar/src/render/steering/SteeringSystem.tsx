@@ -111,6 +111,26 @@ export function useSteeringRegistry(): Registry {
   return registry;
 }
 
+/** A permanently-empty registry provider — for a view-only scene that needs
+ * to satisfy `useSteeringRegistry`'s context requirement (`Plants.tsx`
+ * reads it to find the nearest fish to sway away from) without actually
+ * running the tank's real per-frame steering/physics sync or its telemetry
+ * publishers (`windows/FishEye/FishEyeScene.tsx`: mounting a real
+ * `<SteeringSystem>` there instead would start a second, always-empty
+ * publisher racing the tank's own real one on the exact same event
+ * channels). An empty registry is a completely safe substitute for
+ * `Plants.tsx`'s specific use — "no fish nearby" for every blade, same as
+ * a real tank with zero fish in it, and this window never registers real
+ * fish here regardless. */
+export function EmptySteeringRegistry({ children }: { children: ReactNode }) {
+  const emptyRegistry = useRef<Registry>(new Map()).current;
+  return (
+    <SteeringRegistryContext.Provider value={emptyRegistry}>
+      {children}
+    </SteeringRegistryContext.Provider>
+  );
+}
+
 const scratchImpulse = new THREE.Vector3();
 const scratchVelocity = new THREE.Vector3();
 const scratchLinvel = new THREE.Vector3();
