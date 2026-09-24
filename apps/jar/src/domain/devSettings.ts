@@ -55,6 +55,16 @@ export const isFishMonitorEnabled = fishMonitor.isEnabled;
 export const setFishMonitorEnabled = fishMonitor.setEnabled;
 export const useFishMonitorEnabled = fishMonitor.useEnabled;
 
+/** Gates the tank window's ~30Hz pose publisher (`domain/fishPose.ts`,
+ * `SteeringSystem.tsx`) — a much higher rate than `fishMonitor`'s 5Hz
+ * telemetry, since it drives the fish-eye window's camera rather than a
+ * table, so it's worth its own toggle to keep that cost at zero while that
+ * window isn't open. */
+const fishEye = createDevToggle('jar:dev:fishEye');
+export const isFishEyeEnabled = fishEye.isEnabled;
+export const setFishEyeEnabled = fishEye.setEnabled;
+export const useFishEyeEnabled = fishEye.useEnabled;
+
 export type DayNightOverride = 'auto' | 'day' | 'night';
 
 const DAY_NIGHT_OVERRIDE_KEY = 'jar:dev:dayNightOverride';
@@ -95,11 +105,14 @@ const PILOTED_FISH_ID_KEY = 'jar:dev:pilotedFishId';
  * (`windows/FishMonitor/FishMonitorWindow.tsx`), consumed by the tank
  * window's `ManualPilotBehaviour` (`render/steering/manualPilotBehaviour.ts`)
  * and `PilotCaptureBridge.tsx`. Same live-sync pattern as
- * `getDayNightOverride`, a nullable number instead of a 3-way string. The
- * Fish monitor window is the only writer, and its own `resetOnClose`
- * guarantees this never survives that window closing — a fish left
- * "piloted" after the controlling window is gone would just sit there
- * ignoring its own AI forever. */
+ * `getDayNightOverride`, a nullable number instead of a 3-way string. Both
+ * the Fish monitor and Fish eye windows (`windows/FishEye/FishEyeWindow.tsx`)
+ * can release this — Fish monitor's own `resetOnClose` guarantees it never
+ * survives that window closing *unless* Fish eye is still open watching
+ * (Fish eye's own liveness check then becomes the one guaranteeing it can't
+ * outlive the fish itself) — so a fish left "piloted" with neither window
+ * open, or after the fish it names dies, never just sits there ignoring its
+ * own AI forever. */
 export function getPilotedFishId(): number | null {
   const raw = localStorage.getItem(PILOTED_FISH_ID_KEY);
   if (raw === null) return null;

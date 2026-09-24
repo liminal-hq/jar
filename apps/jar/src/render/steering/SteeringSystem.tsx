@@ -25,10 +25,12 @@ import type * as YUKA from 'yuka';
 import { publishFishPositions } from '../../domain/debugChannel';
 import {
   useDayNightOverride,
+  useFishEyeEnabled,
   useFishMonitorEnabled,
   useFishPositionOverlayEnabled,
 } from '../../domain/devSettings';
 import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
+import { emitFishPoses, type FishPoseEntry } from '../../domain/fishPose';
 import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
 import {
@@ -103,6 +105,26 @@ export function useSteeringRegistry(): Registry {
   return registry;
 }
 
+/** A permanently-empty registry provider — for a view-only scene that needs
+ * to satisfy `useSteeringRegistry`'s context requirement (`Plants.tsx`
+ * reads it to find the nearest fish to sway away from) without actually
+ * running the tank's real per-frame steering/physics sync or its telemetry
+ * publishers (`windows/FishEye/FishEyeScene.tsx`: mounting a real
+ * `<SteeringSystem>` there instead would start a second, always-empty
+ * publisher racing the tank's own real one on the exact same event
+ * channels). An empty registry is a completely safe substitute for
+ * `Plants.tsx`'s specific use — "no fish nearby" for every blade, same as
+ * a real tank with zero fish in it, and this window never registers real
+ * fish here regardless. */
+export function EmptySteeringRegistry({ children }: { children: ReactNode }) {
+  const emptyRegistry = useRef<Registry>(new Map()).current;
+  return (
+    <SteeringRegistryContext.Provider value={emptyRegistry}>
+      {children}
+    </SteeringRegistryContext.Provider>
+  );
+}
+
 const scratchImpulse = new THREE.Vector3();
 const scratchVelocity = new THREE.Vector3();
 const scratchLinvel = new THREE.Vector3();
@@ -168,6 +190,13 @@ const NON_ACTIVE_VELOCITY_DECAY_RATE = 4;
  * for no visible benefit. */
 const DEBUG_PUBLISH_INTERVAL_SEC = 0.2;
 
+/** How often the fish-eye window's pose snapshot publishes — smooth enough
+ * to drive a camera (interpolated on the receiving end, `FishEyeScene.tsx`'s
+ * own `POSE_PUBLISH_INTERVAL_MS`, derived from this rather than a second
+ * hardcoded `1 / 30`) without publishing every single frame just to feed a
+ * second window. Exported so the two stay a single source of truth. */
+export const POSE_PUBLISH_INTERVAL_SEC = 1 / 30;
+
 const scratchYawEuler = new THREE.Euler();
 
 interface SteeringSystemProps {
@@ -177,6 +206,8 @@ interface SteeringSystemProps {
 export function SteeringSystem({ children }: SteeringSystemProps) {
   const registryRef = useRef<Registry>(new Map());
   const monitorEnabled = useFishMonitorEnabled();
+  const fishEyeEnabled = useFishEyeEnabled();
+  const posePublishElapsedRef = useRef(0);
   const simSeconds = useJarStore((s) => s.simSeconds);
   // Authoritative — pushed by the sim core on every `TickUpdate`
   // (`jarClient.ts`'s `isNight` store field) rather than re-derived here,
@@ -376,6 +407,32 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
           });
         }
         void emitFishDebug({ entries, simSeconds, isNight: effectiveIsNight });
+      }
+    }
+
+    if (fishEyeEnabled) {
+      posePublishElapsedRef.current += delta;
+      if (posePublishElapsedRef.current >= POSE_PUBLISH_INTERVAL_SEC) {
+        posePublishElapsedRef.current = 0;
+        const poses: FishPoseEntry[] = [];
+        for (const [id, fish] of registry) {
+          poses.push({
+            id,
+            pos: [fish.vehicle.position.x, fish.vehicle.position.y, fish.vehicle.position.z],
+            // Exactly this frame's rendered orientation — already slerped,
+            // already includes a piloted fish's driven yaw — not
+            // reconstructed from velocity, so the fish-eye window needs no
+            // smoothing of its own beyond interpolating between snapshots.
+            quat: [
+              fish.currentHeading.x,
+              fish.currentHeading.y,
+              fish.currentHeading.z,
+              fish.currentHeading.w,
+            ],
+            colliderRadius: fish.getColliderRadius(),
+          });
+        }
+        void emitFishPoses({ poses, t: state.clock.elapsedTime });
       }
     }
   });

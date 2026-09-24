@@ -20,7 +20,14 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 
 import { closeAllSatelliteWindows } from './windows';
 
-const KNOWN_LABELS = ['critter-card', 'family-tree', 'setup', 'dev-settings', 'fish-monitor'];
+const KNOWN_LABELS = [
+  'critter-card',
+  'family-tree',
+  'setup',
+  'dev-settings',
+  'fish-monitor',
+  'fish-eye',
+];
 
 describe('closeAllSatelliteWindows', () => {
   beforeEach(() => {
