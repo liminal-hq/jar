@@ -192,6 +192,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   }, [critter]);
 
   const steering = useFishSteering(
+    critter.id,
     critter.personality,
     livingPopulation,
     favouriteSpotWorld,

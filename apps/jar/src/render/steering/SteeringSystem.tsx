@@ -33,6 +33,7 @@ import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
 import { computeTargetHeading, HEADING_COMMIT_SPEED, HEADING_RELEASE_SPEED } from './heading';
 import { isSelfPropelledMode, type FishMotionMode } from './motionState';
+import { isActivelyPiloted } from './pilotInputState';
 
 /** Extra per-fish detail only `FishModel.tsx` knows (its own animation
  * state) — optional because the standalone critter-card preview drives a
@@ -214,11 +215,19 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
 
     entityManager.update(delta);
 
-    for (const fish of registry.values()) {
+    for (const [id, fish] of registry.entries()) {
       const body = fish.getBody();
       if (!body) continue;
 
-      if (!isSelfPropelledMode(fish.getMode())) {
+      // Skipped for a fish actively under manual pilot input
+      // (`render/steering/pilotInputState.ts`) even in a non-self-propelled
+      // mode — this decay would otherwise fight the player's held key every
+      // frame (equilibrium speed capped well below the fish's real
+      // `maxSpeed`), which only matters if the daytime roll or night
+      // settling flips a piloted fish out of `active` mid-drive. Checked
+      // per fish, not per mode: the moment keys release, `isActivelyPiloted`
+      // goes false and this fish's own mode machinery resumes untouched.
+      if (!isSelfPropelledMode(fish.getMode()) && !isActivelyPiloted(id)) {
         fish.vehicle.velocity.multiplyScalar(Math.exp(-NON_ACTIVE_VELOCITY_DECAY_RATE * delta));
       }
 

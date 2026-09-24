@@ -2,12 +2,15 @@
 // button, `Drawer.tsx`) — a live table plus top-down and front maps of
 // every fish's steering/animation state, for tuning wander/rest/pause
 // behaviour against real numbers instead of guessing from screen
-// recordings. Not part of SPEC.md/SCREENS.md — supplementary tooling
-// rather than a core product screen, but not gated behind a dev build
-// either: it's self-contained (opening it is what turns telemetry
-// publishing on, and closing it resets the day/night override back to
-// `'auto'`, both via the mount effect below) and just as useful for a
-// curious owner as for tuning.
+// recordings, and the home for the manual fish pilot's own "take over this
+// one" control — you're already looking at each fish's live row here, so
+// arming pilot mode belongs next to it rather than in a different window.
+// Not part of SPEC.md/SCREENS.md — supplementary tooling rather than a core
+// product screen, but not gated behind a dev build either: it's
+// self-contained (opening it is what turns telemetry publishing on, and
+// closing it resets the day/night override and releases the pilot back to
+// `'auto'`/`null`, both via the mount effect below) and just as useful for
+// a curious owner as for tuning.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -19,11 +22,15 @@ import { DialogShell } from '../../components/DialogShell';
 import {
   setDayNightOverride,
   setFishMonitorEnabled,
+  setPilotedFishId,
   useDayNightOverride,
+  usePilotedFishId,
 } from '../../domain/devSettings';
 import { onFishDebug, type FishDebugEntry, type FishDebugSnapshot } from '../../domain/fishDebug';
-import { ensureJarClientStarted } from '../../domain/jarClient';
+import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
+import { emitPilotKey } from '../../domain/pilotInput';
 import { TANK_INNER_BOUNDS } from '../../render/physics/coordinates';
+import { PILOT_KEY_CODES } from '../../render/steering/pilotInputState';
 
 /** SVG viewBox units — arbitrary, each map just needs to be square-ish and
  * proportional to the tank's own footprint on its own two axes. */
@@ -60,9 +67,12 @@ interface FishMapProps {
   project: (f: FishDebugEntry) => { h: number; v: number; tickH: number; tickV: number };
   hBound: number;
   vBound: number;
+  /** Draws a dashed highlight ring around the piloted fish's dot, if any —
+   * `null`/`undefined` (nobody piloted) draws no ring at all. */
+  pilotedFishId?: number | null;
 }
 
-function FishMap({ title, entries, project, hBound, vBound }: FishMapProps) {
+function FishMap({ title, entries, project, hBound, vBound, pilotedFishId }: FishMapProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ opacity: 0.6, fontSize: 11 }}>{title}</div>
@@ -104,6 +114,17 @@ function FishMap({ title, entries, project, hBound, vBound }: FishMapProps) {
                 stroke={MODE_COLOUR[f.mode] ?? '#fff'}
                 strokeWidth={1}
               />
+              {f.id === pilotedFishId && (
+                <circle
+                  cx={mh}
+                  cy={mv}
+                  r={6}
+                  fill="none"
+                  stroke="#fff"
+                  strokeWidth={1}
+                  strokeDasharray="2 2"
+                />
+              )}
             </g>
           );
         })}
@@ -115,6 +136,8 @@ function FishMap({ title, entries, project, hBound, vBound }: FishMapProps) {
 export function FishMonitorWindow() {
   const [snapshot, setSnapshot] = useState<FishDebugSnapshot | null>(null);
   const dayNightOverride = useDayNightOverride();
+  const pilotedFishId = usePilotedFishId();
+  const critters = useJarStore((s) => s.critters);
   const receivedAtRef = useRef(0);
   const [, forceRerender] = useState(0);
 
@@ -139,9 +162,13 @@ export function FishMonitorWindow() {
     // overlay — resetting it is what keeps this window self-contained:
     // closing it always leaves the jar's own real day/night clock in
     // control again, never stuck pinned to whatever was last selected.
+    // Piloting a fish is the same kind of running override — releasing it
+    // here means a fish never keeps ignoring its own AI just because the
+    // window that armed it happened to close.
     const resetOnClose = () => {
       setFishMonitorEnabled(false);
       setDayNightOverride('auto');
+      setPilotedFishId(null);
     };
     // The title bar's close button destroys this webview directly
     // (`TitleBar.tsx`'s `close`, `appWindow.close()`) rather than going
@@ -164,6 +191,51 @@ export function FishMonitorWindow() {
       clearInterval(tick);
     };
   }, []);
+
+  // Releases the pilot the moment its fish is no longer in a fresh
+  // snapshot — passed or despawned mid-drive, most likely — rather than
+  // leaving `pilotedFishId` pointed at a fish that no longer exists.
+  // Guarded on `snapshot` actually being present so a momentarily-stopped
+  // publisher (e.g. the tank window itself closing) can't be mistaken for
+  // "the fish is gone" and release a pilot that's still perfectly valid.
+  useEffect(() => {
+    if (pilotedFishId === null || !snapshot) return;
+    if (!snapshot.entries.some((f) => f.id === pilotedFishId)) {
+      setPilotedFishId(null);
+    }
+  }, [snapshot, pilotedFishId]);
+
+  // While a fish is piloted, this window's own keyboard drives it too —
+  // forwarded to the tank window (`PilotCaptureBridge.tsx`) over
+  // `domain/pilotInput.ts` rather than mutating `pilotInputState.ts`
+  // directly, since that module is realm-local (each window's bundle gets
+  // its own copy) and the Yuka vehicles only exist in the tank's realm.
+  // `preventDefault()` on the six mapped keys keeps them from also
+  // scrolling the table underneath.
+  useEffect(() => {
+    if (pilotedFishId === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || !PILOT_KEY_CODES.includes(e.code)) return;
+      e.preventDefault();
+      void emitPilotKey({ code: e.code, pressed: true });
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!PILOT_KEY_CODES.includes(e.code)) return;
+      e.preventDefault();
+      void emitPilotKey({ code: e.code, pressed: false });
+    };
+    const onBlur = () => void emitPilotKey({ clear: true });
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      void emitPilotKey({ clear: true });
+    };
+  }, [pilotedFishId]);
 
   const staleMs = snapshot ? performance.now() - receivedAtRef.current : null;
 
@@ -209,6 +281,7 @@ export function FishMonitorWindow() {
                   entries={snapshot.entries}
                   hBound={TANK_INNER_BOUNDS.x}
                   vBound={TANK_INNER_BOUNDS.z}
+                  pilotedFishId={pilotedFishId}
                   project={(f) => {
                     const rad = (f.yawDeg * Math.PI) / 180;
                     return {
@@ -224,6 +297,7 @@ export function FishMonitorWindow() {
                   entries={snapshot.entries}
                   hBound={TANK_INNER_BOUNDS.x}
                   vBound={TANK_INNER_BOUNDS.y}
+                  pilotedFishId={pilotedFishId}
                   project={(f) => {
                     const yawRad = (f.yawDeg * Math.PI) / 180;
                     const pitchRad = (f.pitchDeg * Math.PI) / 180;
@@ -242,37 +316,78 @@ export function FishMonitorWindow() {
                   <thead>
                     <tr style={{ textAlign: 'left', opacity: 0.7 }}>
                       <th>id</th>
+                      <th>name</th>
                       <th>mode</th>
                       <th>rest</th>
                       <th>speed</th>
                       <th title="Peak turn rate over the last ~1s, not instantaneous">turn (pk)</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
-                    {snapshot.entries.map((f) => (
-                      <tr key={f.id}>
-                        <td>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              width: 8,
-                              height: 8,
-                              borderRadius: '50%',
-                              background: `hsl(${f.hue}, 65%, 55%)`,
-                              marginRight: 4,
-                            }}
-                          />
-                          {f.id}
-                        </td>
-                        <td style={{ color: MODE_COLOUR[f.mode] }}>{f.mode}</td>
-                        <td>{f.isResting ? '●' : ''}</td>
-                        <td>{f.speed.toFixed(2)}</td>
-                        <td>{f.turnRate.toFixed(1)}</td>
-                      </tr>
-                    ))}
+                    {snapshot.entries.map((f) => {
+                      const isPiloted = f.id === pilotedFishId;
+                      return (
+                        <tr
+                          key={f.id}
+                          style={isPiloted ? { background: 'rgba(88, 166, 255, 0.15)' } : undefined}
+                        >
+                          <td>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: `hsl(${f.hue}, 65%, 55%)`,
+                                marginRight: 4,
+                              }}
+                            />
+                            {f.id}
+                          </td>
+                          <td>{critters[f.id]?.name ?? '—'}</td>
+                          <td style={{ color: MODE_COLOUR[f.mode] }}>{f.mode}</td>
+                          <td>{f.isResting ? '●' : ''}</td>
+                          <td>{f.speed.toFixed(2)}</td>
+                          <td>{f.turnRate.toFixed(1)}</td>
+                          <td>
+                            <button
+                              style={{ font: 'inherit' }}
+                              onClick={() => setPilotedFishId(isPiloted ? null : f.id)}
+                            >
+                              {isPiloted ? 'Release' : 'Pilot'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            <div
+              style={{
+                font: '12px "Nunito", sans-serif',
+                opacity: pilotedFishId === null ? 0.6 : 1,
+              }}
+            >
+              {pilotedFishId === null ? (
+                'Pilot a fish from its row to drive it manually.'
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div>
+                    Piloting: {critters[pilotedFishId]?.name ?? '—'} (#{pilotedFishId}){' '}
+                    <button style={{ font: 'inherit' }} onClick={() => setPilotedFishId(null)}>
+                      Release
+                    </button>
+                  </div>
+                  <div style={{ font: '11px monospace', opacity: 0.7 }}>
+                    A/D left/right · W/S back/front glass · R/F up/down
+                  </div>
+                  <div style={{ opacity: 0.5 }}>Keys work in this window or the tank.</div>
+                </div>
+              )}
             </div>
           </>
         )}

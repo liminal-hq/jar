@@ -23,6 +23,7 @@ import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import { closeAllSatelliteWindows } from '../../domain/windows';
 import { TankScene } from '../../render/tank/TankScene';
 import { applyDialogTheme } from '../../theme/theme';
+import { PilotCaptureBridge } from './PilotCaptureBridge';
 import styles from './TankWindow.module.css';
 
 /** How much wider the window grows to fit the drawer open (SCREENS.md W1) —
@@ -301,6 +302,7 @@ export function TankWindow() {
     // doesn't apply frame chrome.
     <div className={styles.bezel} data-tauri-drag-region>
       {mouseOverlayEnabled && <MouseDebugCapture />}
+      <PilotCaptureBridge />
       <div
         className={styles.tankInterior}
         style={

@@ -16,6 +16,7 @@ import type { Personality } from '../../domain/protocol/generated/Personality';
 import { CastleAvoidanceBehaviour } from './castleAvoidanceBehaviour';
 import { ChasePursuitBehaviour } from './chasePursuitBehaviour';
 import { entityManager } from './entityManager';
+import { ManualPilotBehaviour } from './manualPilotBehaviour';
 import type { FishMotionMode } from './motionState';
 import { BASE_SEPARATION_RADIUS, maxSpeedFor, steeringParamsFor } from './steeringParams';
 import {
@@ -58,6 +59,7 @@ const CONTAINMENT_BUFFER = 0.1;
 const SEPARATION_CLEARANCE_BUFFER = 0.1;
 
 export function useFishSteering(
+  critterId: number,
   personality: Personality,
   livingPopulation: number,
   favouriteSpotWorld: YUKA.Vector3,
@@ -131,6 +133,14 @@ export function useFishSteering(
     // (cheap for a handful of fish); see `rampWeights`'s comment for why
     // that's the point.
 
+    // Never targeted by `setMode`/`rampWeights` — like `containment`/
+    // `castleAvoidance`, this stays permanently live. Idle it costs nothing
+    // (`ManualPilotBehaviour` returns a zero force for any fish that isn't
+    // the currently-piloted one); engaged, it's meant to fully take over
+    // this fish's locomotion, which its insertion slot below achieves
+    // without this file needing to know anything about manual piloting.
+    const manualPilot = new ManualPilotBehaviour(critterId);
+
     // `containment`/`castleAvoidance` go first: Yuka's `SteeringManager`
     // accumulates each behaviour's force in insertion order and stops once
     // the running total already reaches `vehicle.maxForce` — added last, a
@@ -138,15 +148,32 @@ export function useFishSteering(
     // whole force budget on `wander`/`separation` before either avoidance
     // behaviour ever got a chance to contribute, letting it collide and
     // jitter against the glass or the castle despite their own strength
-    // nominally out-voting the others.
+    // nominally out-voting the others. `manualPilot` goes in `wander`'s own
+    // slot, right after both avoidance behaviours: a piloted fish still
+    // can't be forced through the glass (avoidance keeps first claim on the
+    // budget), but an engaged pilot force is sized to claim the entire
+    // remainder (`PILOT_STRENGTH`'s own comment), which silences
+    // `wander`/`separation`/`pursuit`/`arrive` via the same accumulator
+    // mechanic that already lets avoidance out-vote wander — no mode-system
+    // changes needed to make manual input "take over".
     vehicle.steering.add(containment);
     vehicle.steering.add(castleAvoidance);
+    vehicle.steering.add(manualPilot);
     vehicle.steering.add(wander);
     vehicle.steering.add(separation);
     vehicle.steering.add(pursuit);
     vehicle.steering.add(arrive);
 
-    return { vehicle, wander, separation, containment, castleAvoidance, pursuit, arrive };
+    return {
+      vehicle,
+      wander,
+      separation,
+      containment,
+      castleAvoidance,
+      manualPilot,
+      pursuit,
+      arrive,
+    };
     // Created once per mounted fish instance; personality/params/
     // maxColliderRadius changes mid-life aren't expected (a critter's
     // personality/fin/sex never change after spawn per SPEC.md §5), so this
