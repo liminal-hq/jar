@@ -2,7 +2,7 @@
 
 This document specifies a native Rust core for Jar's discrete simulation logic — the aging/mood/breeding/genetics/passing rules currently described only in prose in `SPEC.md` §5 (and referenced, but not specified, as `/src/sim` in `docs/architecture/3d-engine.md` §3). It replaces that module's _implementation language and process boundary_ — Rust, running natively in the Tauri backend, instead of TypeScript running in the webview. It does not change what the sim does, and it does not touch rendering, steering, physics, or animation, all of which stay exactly as `docs/architecture/3d-engine.md` specifies, in the webview, in JS/R3F/Yuka/Rapier.
 
-Read this alongside the other two: `SPEC.md` (and its companion `SCREENS.md`) still owns product behavior and every rule number in §5; `docs/architecture/3d-engine.md` still owns the render/physics/steering pipeline in full. This doc owns the boundary between "the jar's facts" and "what the jar looks like doing them."
+Read this alongside the other two: `SPEC.md` (and its companion `SCREENS.md`) still owns product behaviour and every rule number in §5; `docs/architecture/3d-engine.md` still owns the render/physics/steering pipeline in full. This doc owns the boundary between "the jar's facts" and "what the jar looks like doing them."
 
 ## 0. Where this comes from, and the one scoping call it rests on
 
@@ -171,7 +171,7 @@ Structure mirrors `tauri-plugin-city-sim` directly: `lib.rs` (plugin init, `invo
 
 ### 5.1 Background loop
 
-A native loop, independent of the webview, driving `jar-core`'s tick via the fixed-timestep accumulator (§4.3). Because this runs in the Tauri backend process rather than as a JS timer, it is **not subject to any webview visibility throttling** — this is what actually guarantees the "simulation keeps running while the window is hidden/minimized" behavior established earlier in this project's brainstorming, more robustly than a JS-side `setInterval` ever could, since it isn't sharing a thread or a scheduler with anything the OS might deprioritize.
+A native loop, independent of the webview, driving `jar-core`'s tick via the fixed-timestep accumulator (§4.3). Because this runs in the Tauri backend process rather than as a JS timer, it is **not subject to any webview visibility throttling** — this is what actually guarantees the "simulation keeps running while the window is hidden/minimized" behaviour established earlier in this project's brainstorming, more robustly than a JS-side `setInterval` ever could, since it isn't sharing a thread or a scheduler with anything the OS might deprioritize.
 
 ### 5.2 Push model
 
@@ -219,7 +219,7 @@ On each `TickUpdate`, the frontend updates the **stats fields only** (mood, ener
 
 ## 7. Development-experience trade-off worth naming
 
-One honest cost of this split, not mentioned elsewhere: the JS/R3F side of Jar hot-reloads on save, same as any Vite/React app. The Rust side does not — a change to `jar-core` or `tauri-plugin-jar` requires a recompile and app restart before it's visible. For a hobby project worked in short, irregular sessions, this changes the rhythm of iterating on sim-rule tweaks (mood formula constants, breeding odds) versus iterating on visual behavior (steering parameters, animation) — worth knowing going in rather than discovering as friction later.
+One honest cost of this split, not mentioned elsewhere: the JS/R3F side of Jar hot-reloads on save, same as any Vite/React app. The Rust side does not — a change to `jar-core` or `tauri-plugin-jar` requires a recompile and app restart before it's visible. For a hobby project worked in short, irregular sessions, this changes the rhythm of iterating on sim-rule tweaks (mood formula constants, breeding odds) versus iterating on visual behaviour (steering parameters, animation) — worth knowing going in rather than discovering as friction later.
 
 ---
 
