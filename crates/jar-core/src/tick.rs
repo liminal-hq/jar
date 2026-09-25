@@ -129,7 +129,7 @@ pub struct BornEvent {
 // Deliberately no floor or reseed mechanism below: a species that craters
 // to zero living critters, or to only one sex, stays that way forever —
 // accepted as an honest outcome of a small stochastic population, not a bug
-// to paper over with a new "restock" mechanic. `breed_chance` above is
+// to paper over with a new "restock" mechanic. `breed_chance` below is
 // tuned to make this rare, not to make it impossible.
 fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) {
     for species in [Species::Fish, Species::Gecko] {
@@ -176,17 +176,31 @@ fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) 
     }
 }
 
+/// The general per-pair rate — unchanged from this constant's original,
+/// well-balanced value. A species with many eligible pairs breeds at
+/// `pair_count * BASE_BREED_CHANCE_PER_PAIR` per tick, same as always.
+const BASE_BREED_CHANCE_PER_PAIR: f32 = 0.002;
+
+/// A floor applied only when there's exactly one eligible pair — the
+/// smallest realistic population after a cap-driven die-off crash, and the
+/// one case whose recovery speed actually mattered (see `breed_chance`'s
+/// own doc comment). Chosen so a single pair's expected wait for a first
+/// birth is roughly halved (~4 real minutes at 1x speed) versus the base
+/// rate alone. Deliberately *not* a multiplier applied to every pair count
+/// — that would also double ordinary steady-state breeding cadence at
+/// every larger, already-balanced population, which was never the reported
+/// problem.
+const SINGLE_PAIR_RECOVERY_CHANCE: f32 = 0.004;
+
 /// Chance per tick that a species breeds, proportional to the number of
 /// eligible opposite-sex adult pairs (SPEC.md §5), capped at 0.2. Neither
-/// the 0.004 coefficient nor the 0.2 ceiling is pinned by the spec, which
-/// only requires the proportionality — 0.004 is chosen so a single eligible
-/// pair's expected wait for a first birth is roughly halved (~4 real
-/// minutes at 1x speed) versus this constant's original, slower value: the
-/// smallest realistic population after a cap-driven die-off crash is just
-/// one pair, and that case's recovery speed was the one that actually
-/// mattered.
+/// the base coefficient nor the 0.2 ceiling is pinned by the spec, which
+/// only requires the proportionality.
 fn breed_chance(pair_count: usize) -> f32 {
-    (0.004 * pair_count as f32).min(0.2)
+    if pair_count == 0 {
+        return 0.0;
+    }
+    (BASE_BREED_CHANCE_PER_PAIR * pair_count as f32).clamp(SINGLE_PAIR_RECOVERY_CHANCE, 0.2)
 }
 
 fn sex_of(state: &JarState, id: CritterId) -> Option<Sex> {
@@ -329,16 +343,23 @@ mod tests {
     #[test]
     fn breed_chance_scales_with_pair_count_and_caps_at_0_2() {
         assert_eq!(breed_chance(0), 0.0);
+        // The single-pair recovery floor — 0.002 * 1 alone would be 0.002.
         assert!((breed_chance(1) - 0.004).abs() < 1e-6);
-        assert!((breed_chance(25) - 0.1).abs() < 1e-6);
-        assert!((breed_chance(50) - 0.2).abs() < 1e-6);
+        // Two pairs already clears the floor under the base rate alone.
+        assert!((breed_chance(2) - 0.004).abs() < 1e-6);
+        assert!((breed_chance(25) - 0.05).abs() < 1e-6);
+        assert!((breed_chance(100) - 0.2).abs() < 1e-6);
         assert_eq!(breed_chance(1000), 0.2); // well above the cap
     }
 
-    #[test]
-    fn no_births_at_the_fish_population_cap() {
+    /// `pairs` male/female Fish pairs, ages/energy fixed at values both
+    /// cap-boundary tests below need: exactly `population_cap(Fish)` (10)
+    /// worth of pairs (5) puts the population precisely at the cap, which
+    /// is what both tests are actually exercising — fewer pairs would never
+    /// reach the cap at all.
+    fn fish_pairs(pairs: u32) -> Vec<Critter> {
         let mut critters = Vec::new();
-        for i in 0..5 {
+        for i in 0..pairs {
             critters.push(make_critter(
                 i,
                 Species::Fish,
@@ -348,7 +369,7 @@ mod tests {
                 100.0,
             ));
             critters.push(make_critter(
-                i + 5,
+                i + pairs,
                 Species::Fish,
                 Sex::Female,
                 Personality::Bold,
@@ -356,7 +377,12 @@ mod tests {
                 100.0,
             ));
         }
-        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        critters
+    }
+
+    #[test]
+    fn no_births_at_the_fish_population_cap() {
+        let mut state = state_with(fish_pairs(5), DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
         for _ in 0..200 {
             let outcome = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
@@ -372,25 +398,7 @@ mod tests {
         // bug — `living_count` and the cap check are both recomputed live
         // every tick, so nothing here should actually be latched. This
         // exercises that end to end rather than just trusting the reading.
-        let mut critters = Vec::new();
-        for i in 0..5 {
-            critters.push(make_critter(
-                i,
-                Species::Fish,
-                Sex::Male,
-                Personality::Bold,
-                ADULT_AGE,
-                100.0,
-            ));
-            critters.push(make_critter(
-                i + 5,
-                Species::Fish,
-                Sex::Female,
-                Personality::Bold,
-                ADULT_AGE,
-                100.0,
-            ));
-        }
+        let mut critters = fish_pairs(5);
         // One critter dies after exactly one tick (`age_sec += 1.0` per
         // tick, dies once `age_sec >= life`), dropping the population below
         // the cap of 10 while several eligible pairs remain either way.
@@ -398,28 +406,26 @@ mod tests {
         let mut state = state_with(critters, DAY_SIM_SECONDS, true);
         let mut rng = JarRng::new();
 
-        // Aging/death and breeding both run within the same `tick()` call,
-        // in that order, so the death already clears the cap in time for
-        // breeding to fire on this very first tick too — asserting a fixed
-        // `living_count` of 9 here would be flaky (a same-tick birth brings
-        // it back to 10). Only assert the death itself, which a same-tick
-        // birth can't affect, and treat an immediate birth as success
-        // rather than a race to guard against.
-        let first = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
-        assert!(
-            !state.critters[0].alive,
-            "the short-lived critter should have died on the first tick"
-        );
-        if !first.born.is_empty() {
-            return;
-        }
-
-        // At the new breed_chance coefficient, 9 survivors leave well over
-        // a dozen eligible pairs, so the expected wait is a couple dozen
-        // ticks at most — 5,000 makes a spurious failure astronomically
-        // unlikely rather than actually bounding real behaviour.
-        for _ in 0..5_000 {
+        // With 9 survivors (4 males, 5 females) forming 20 eligible pairs,
+        // `breed_chance`'s base per-pair rate alone already gives roughly a
+        // 1-in-25 chance per tick — the single-pair recovery floor only
+        // matters when exactly one pair is left, nowhere near this case.
+        // 5,000 ticks makes a spurious failure astronomically unlikely
+        // rather than actually bounding real behaviour.
+        for i in 0..5_000 {
             let outcome = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
+            if i == 0 {
+                // Aging/death and breeding both run within the same
+                // `tick()` call, in that order, so the death already
+                // clears the cap in time for breeding to fire on this very
+                // first tick too — asserted here, not as a fixed
+                // `living_count`, since a same-tick birth would make a
+                // fixed count of 9 flaky.
+                assert!(
+                    !state.critters[0].alive,
+                    "the short-lived critter should have died on the first tick"
+                );
+            }
             if !outcome.born.is_empty() {
                 return;
             }
