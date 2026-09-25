@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{Critter, CritterId, CritterStats, JarSettings};
+use crate::{Critter, CritterId, CritterStats, JarSettings, SnapshotView};
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -49,5 +49,16 @@ pub enum SimEvent {
     /// reusing `Born`'s "A & B had a fry" phrasing.
     Added {
         critter: Critter,
+    },
+    /// The whole jar was replaced at once — pushed by `reset_jar` and by
+    /// `load_snapshot`, the only two commands that swap `critters`,
+    /// `clock`, and `settings` together rather than touching one fact.
+    /// Every other variant here describes a single fact changing; this one
+    /// exists so the frontend can apply the same wholesale-replace it
+    /// already does for its own periodic reconciliation (`jarClient.ts`'s
+    /// `hydrate()`) immediately, instead of waiting up to
+    /// `RECONCILE_INTERVAL_MS` to notice on its own.
+    Reset {
+        snapshot: SnapshotView,
     },
 }

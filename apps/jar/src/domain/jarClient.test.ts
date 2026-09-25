@@ -245,6 +245,32 @@ describe('applyEvent — Added', () => {
   });
 });
 
+describe('applyEvent — Reset', () => {
+  it('replaces critters/settings/simSeconds/isNight wholesale, same as hydrate', () => {
+    const stale = makeCritter({ id: 1, name: 'Stale' });
+    useJarStore.setState({
+      critters: { 1: stale },
+      settings: DEFAULT_SETTINGS,
+      simSeconds: 999,
+      isNight: true,
+      hydrated: true,
+    });
+
+    const fresh = makeCritter({ id: 1, name: 'Fresh' });
+    const changed = { ...DEFAULT_SETTINGS, simulation_speed: 30 };
+    useJarStore.getState().applyEvent({
+      type: 'Reset',
+      snapshot: { critters: [fresh], settings: changed, sim_seconds: 0, is_night: false },
+    });
+
+    const state = useJarStore.getState();
+    expect(state.critters).toEqual({ 1: fresh });
+    expect(state.settings).toEqual(changed);
+    expect(state.simSeconds).toBe(0);
+    expect(state.isNight).toBe(false);
+  });
+});
+
 describe('ensureJarClientStarted — first-run theme (SPEC.md §4)', () => {
   // Each case needs its own fresh module instance — `ensureJarClientStarted`
   // memoizes `startPromise` after the first call, so reusing the

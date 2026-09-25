@@ -71,3 +71,11 @@ export function getSnapshot(): Promise<unknown> {
 export function loadSnapshot(bytes: Uint8Array): Promise<void> {
   return invoke(`${COMMAND_PREFIX}load_snapshot`, { bytes: Array.from(bytes) });
 }
+
+export function resetSettings(): Promise<void> {
+  return invoke(`${COMMAND_PREFIX}reset_settings`);
+}
+
+export function resetJar(): Promise<unknown> {
+  return invoke(`${COMMAND_PREFIX}reset_jar`);
+}

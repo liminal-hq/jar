@@ -1,11 +1,11 @@
 // W4 · Setup (SCREENS.md). Shows every option at once: mode, frame, dialog
 // theme + variant, tank toggles, simulation speed, jar clock, add a
-// critter.
+// critter, restore default settings, reset jar.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
@@ -50,6 +50,11 @@ const LIGHT_COLOURS: LightColour[] = [
  * each side separately" precedent `theme.ts`'s dialog-theme swatches
  * already set. `Party` gets a gradient instead of one hex, hinting at its
  * own colour-cycling rather than implying a fixed hue. */
+/** How long the "Reset jar" button stays armed after one click before it
+ * silently disarms — long enough to read the warning and click again, short
+ * enough that walking away doesn't leave it primed indefinitely. */
+const RESET_JAR_ARM_TIMEOUT_MS = 4000;
+
 const LIGHT_COLOUR_SWATCHES: Record<LightColour, string> = {
   Daylight: '#eaf6ff',
   Warm: '#ffd8a3',
@@ -69,6 +74,50 @@ export function SetupWindow() {
   }, []);
 
   const jarDay = (simSeconds / 120).toFixed(2);
+
+  // "Reset jar" is a permanent, irreversible wipe of every critter — this
+  // window has no confirm-dialog precedent to reuse (nothing else here
+  // gates on one), so a two-click "armed" state stands in for one: the
+  // first click only names what's about to be lost, the second actually
+  // does it. Auto-disarms after `RESET_JAR_ARM_TIMEOUT_MS` so walking away
+  // mid-decision can't leave it primed for an accidental second click much
+  // later.
+  const [resetJarArmed, setResetJarArmed] = useState(false);
+  // Read once when arming, not subscribed reactively — `critters` gets a
+  // new object reference on every `TickUpdate` (which keeps arriving even
+  // while this window is open, per CLAUDE.md's "the sim tick keeps running
+  // regardless of window visibility"), so a reactive subscription here
+  // would re-render this whole window every tick just to keep a count that
+  // only ever matters while the button is armed.
+  const [resetJarCritterCount, setResetJarCritterCount] = useState(0);
+  const resetJarTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetJarTimerRef.current !== null) window.clearTimeout(resetJarTimerRef.current);
+    };
+  }, []);
+
+  function armResetJar() {
+    // reset_jar wipes living and passed critters alike (SCREENS.md) — count
+    // every record, not just the living ones, so this warning doesn't
+    // undercount what's actually about to be lost.
+    setResetJarCritterCount(Object.keys(useJarStore.getState().critters).length);
+    setResetJarArmed(true);
+    resetJarTimerRef.current = window.setTimeout(() => {
+      setResetJarArmed(false);
+    }, RESET_JAR_ARM_TIMEOUT_MS);
+  }
+
+  function handleResetJarClick() {
+    if (!resetJarArmed) {
+      armResetJar();
+      return;
+    }
+    if (resetJarTimerRef.current !== null) window.clearTimeout(resetJarTimerRef.current);
+    setResetJarArmed(false);
+    void jar.resetJar();
+  }
 
   return (
     <DialogShell windowTitle="Setup" title="Setup">
@@ -244,6 +293,24 @@ export function SetupWindow() {
         <p>Jar clock: day {jarDay}</p>
 
         <button onClick={() => void jar.addCritter(settings.mode)}>+ Add a critter</button>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            marginTop: 8,
+            paddingTop: 12,
+            borderTop: '1px solid var(--jar-ink)',
+          }}
+        >
+          <button onClick={() => void jar.resetSettings()}>Restore default settings</button>
+          <button onClick={handleResetJarClick}>
+            {resetJarArmed
+              ? `Really reset? All ${resetJarCritterCount} critters will be lost`
+              : 'Reset jar'}
+          </button>
+        </div>
       </div>
     </DialogShell>
   );

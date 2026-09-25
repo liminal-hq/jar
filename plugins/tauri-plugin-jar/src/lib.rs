@@ -92,7 +92,7 @@ fn snapshot_path<R: Runtime>(app: &AppHandle<R>) -> std::result::Result<std::pat
     Ok(dir.join(SNAPSHOT_FILE_NAME))
 }
 
-fn flush<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+pub(crate) fn flush<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     let state = app.state::<JarPlugin>();
     let inner = state.inner.lock().expect("jar plugin mutex poisoned");
     if let Some(jar) = &inner.jar {
@@ -178,6 +178,8 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             commands::set_bubble_intensity,
             commands::get_snapshot,
             commands::load_snapshot,
+            commands::reset_settings,
+            commands::reset_jar,
         ])
         .setup(|app, _api| {
             app.manage(JarPlugin::new());
@@ -221,8 +223,11 @@ pub(crate) fn load_or_new<R: Runtime>(
 /// `sim_seconds` as an absolute age (critter `age_sec` is its own
 /// independent per-tick counter, `tick.rs`), so this can't perturb
 /// aging/lifespan. Resuming an existing jar (the `Ok(bytes)` branch above)
-/// never re-seeds — only this one-time, no-snapshot-yet path does.
-fn new_jar_seeded_from_now(settings: JarSettings) -> JarState {
+/// never re-seeds — only this one-time, no-snapshot-yet path does. Also
+/// reused by `commands::reset_jar`: a reset jar is the same "genuinely
+/// fresh, seeded from now" case as this one, so it shares this logic
+/// rather than re-deriving the day-fraction math by hand.
+pub(crate) fn new_jar_seeded_from_now(settings: JarSettings) -> JarState {
     let mut state = JarState::new(settings);
     let day_fraction = chrono::Local::now().num_seconds_from_midnight() as f64 / 86400.0;
     state.clock.sim_seconds = day_fraction * jar_core::clock::SECONDS_PER_JAR_DAY;

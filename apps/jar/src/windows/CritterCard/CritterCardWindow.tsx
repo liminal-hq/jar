@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
 import { StatBar } from '../../components/StatBar';
-import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
+import { ensureJarClientStarted, jar, onCritterEvent, useJarStore } from '../../domain/jarClient';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
 import { onCritterSelected } from '../../domain/selection';
 import { SECONDS_PER_JAR_DAY } from '../../domain/simConstants';
@@ -36,8 +36,16 @@ export function CritterCardWindow() {
   useEffect(() => {
     void ensureJarClientStarted();
     const unlistenPromise = onCritterSelected(setSelectedId);
+    // A jar reset assigns fresh ids starting from 0 again — without this,
+    // a still-open card bound to (say) id 0 would silently start showing
+    // whatever unrelated critter later reclaims that id, instead of
+    // falling back to "No critter selected yet."
+    const unlistenReset = onCritterEvent((event) => {
+      if (event.kind === 'reset') setSelectedId(null);
+    });
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
+      unlistenReset();
     };
   }, []);
 

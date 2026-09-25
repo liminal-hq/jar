@@ -21,6 +21,8 @@ const COMMANDS: &[&str] = &[
     "set_bubble_intensity",
     "get_snapshot",
     "load_snapshot",
+    "reset_settings",
+    "reset_jar",
 ];
 
 fn main() {

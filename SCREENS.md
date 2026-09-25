@@ -27,7 +27,9 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
   - Tank toggles: Light (plus a colour chip picker while it's on — Daylight, Warm, Moonlight, Reef, Jungle, Sunset, Party), a Castle light intensity slider (0-200%, always shown — the castle's own ground fixture stays on regardless of the Light toggle above), Bubbles/Mist (plus a Bubble intensity slider, 0-200%, while Bubbles is on in Fish mode), Critter sounds
   - Simulation speed: slider 1–60× with a **Real time** chip (snaps to 1×). Hint line explains the current jar-day length.
   - Jar clock line, `+ Add a critter`
-  - (Build-only additions: always-on-top, show/hide, quit, reset jar)
+  - **Restore default settings** — resets every option above (mode, frame, theme + variant, light + colour + castle intensity, bubbles/mist + intensity, sound, simulation speed) plus always-on-top, back to its documented default in one step; applies immediately, no confirmation
+  - **Reset jar** — a full wipe: every critter (living and passed) and the sim clock, plus the same settings reset as above, back to a genuinely fresh jar seeded from the current time. Destructive and permanent, so it needs two clicks: the first names how many critters will be lost, the second (within a few seconds) confirms it
+  - (Build-only additions: always-on-top, show/hide, quit)
 
 ## W2 · Critter card
 

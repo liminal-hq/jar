@@ -54,7 +54,7 @@ pub enum LightColour {
     Party,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct JarSettings {
     pub mode: Species, // Fish = aquarium, Gecko = terrarium (SPEC.md §3 W4)
