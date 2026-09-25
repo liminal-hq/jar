@@ -6,9 +6,11 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import type { MenuModel } from '../components/ContextMenu/types';
+import type { MenuItem, MenuModel } from '../components/ContextMenu/types';
 import type { DayNightOverride } from './devSettings';
+import { defaultSpeciesFor, speciesOfHabitat } from './habitat';
 import type { JarSettings } from './protocol/generated/JarSettings';
+import type { Species } from './protocol/generated/Species';
 
 export interface TankMenuActions {
   toggleLight: () => void;
@@ -16,7 +18,7 @@ export interface TankMenuActions {
   toggleSound: () => void;
   switchMode: () => void;
   captureScreenshot: () => void;
-  addCritter: () => void;
+  addCritter: (species: Species) => void;
   openFamilyTree: () => void;
   openFishMonitor: () => void;
   openFishEye: () => void;
@@ -36,6 +38,27 @@ export function buildTankMenuModel(
   actions: TankMenuActions,
 ): MenuModel {
   const otherMode = settings.habitat === 'Aquarium' ? 'gecko' : 'fish';
+
+  // A flyout only where a habitat actually holds more than one species
+  // (the aquarium — Fish + Snail); the terrarium's single-species Gecko
+  // stays a flat action, matching how it behaved before the snail existed.
+  const habitatSpecies = speciesOfHabitat(settings.habitat);
+  const addCritterItem: MenuItem =
+    habitatSpecies.length > 1
+      ? {
+          id: 'add-critter',
+          label: 'Add a critter',
+          children: habitatSpecies.map((species) => ({
+            id: `add-critter-${species.toLowerCase()}`,
+            label: species,
+            action: () => actions.addCritter(species),
+          })),
+        }
+      : {
+          id: 'add-critter',
+          label: 'Add a critter',
+          action: () => actions.addCritter(defaultSpeciesFor(settings.habitat)),
+        };
 
   return {
     sections: [
@@ -97,7 +120,7 @@ export function buildTankMenuModel(
         // windows that show you them — not app configuration or tooling,
         // which live in the App section below.
         items: [
-          { id: 'add-critter', label: 'Add a critter', action: actions.addCritter },
+          addCritterItem,
           { id: 'family-tree', label: 'Tree', action: actions.openFamilyTree },
           { id: 'fish-monitor', label: 'Fish monitor', action: actions.openFishMonitor },
           { id: 'fish-eye', label: 'Fish eye', action: actions.openFishEye },

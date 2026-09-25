@@ -162,17 +162,46 @@ describe('buildTankMenuModel', () => {
     expect(actions.exit).not.toHaveBeenCalled();
   });
 
-  it('wires Add a critter to addCritter and nothing else', () => {
+  it('Add a critter is a Fish/Snail flyout in the aquarium (more than one species)', () => {
     const actions = makeActions();
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
+    const model = buildTankMenuModel({ ...DEFAULT_SETTINGS, habitat: 'Aquarium' }, 'auto', actions);
     const addCritterItem = itemById(model, 'add-critter');
 
     expect(addCritterItem.label).toBe('Add a critter');
+    expect(addCritterItem.action).toBeUndefined();
+    expect(addCritterItem.children?.map((c) => (c as MenuItem).id)).toEqual([
+      'add-critter-fish',
+      'add-critter-snail',
+    ]);
+
+    childById(addCritterItem, 'add-critter-snail').action?.();
+    expect(actions.addCritter).toHaveBeenCalledTimes(1);
+    expect(actions.addCritter).toHaveBeenCalledWith('Snail');
+
+    childById(addCritterItem, 'add-critter-fish').action?.();
+    expect(actions.addCritter).toHaveBeenCalledTimes(2);
+    expect(actions.addCritter).toHaveBeenCalledWith('Fish');
+    expect(actions.openFamilyTree).not.toHaveBeenCalled();
+    expect(actions.captureScreenshot).not.toHaveBeenCalled();
+  });
+
+  it('Add a critter is a flat Gecko action in the terrarium (one species)', () => {
+    const actions = makeActions();
+    const model = buildTankMenuModel(
+      { ...DEFAULT_SETTINGS, habitat: 'Terrarium' },
+      'auto',
+      actions,
+    );
+    const addCritterItem = itemById(model, 'add-critter');
+
+    expect(addCritterItem.label).toBe('Add a critter');
+    expect(addCritterItem.children).toBeUndefined();
     expect(addCritterItem.checked).toBeUndefined();
 
     addCritterItem.action?.();
 
-    expect(actions.addCritter).toHaveBeenCalledOnce();
+    expect(actions.addCritter).toHaveBeenCalledTimes(1);
+    expect(actions.addCritter).toHaveBeenCalledWith('Gecko');
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
     expect(actions.captureScreenshot).not.toHaveBeenCalled();
   });

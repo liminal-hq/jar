@@ -13,7 +13,6 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 
 import { setDayNightOverride, useDayNightOverride } from '../domain/devSettings';
-import { defaultSpeciesFor } from '../domain/habitat';
 import { jar, useJarStore } from '../domain/jarClient';
 import type { Species } from '../domain/protocol/generated/Species';
 import { buildTankMenuModel } from '../domain/tankMenuModel';
@@ -67,7 +66,7 @@ export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankC
     switchMode: () =>
       void jar.setHabitat(settings.habitat === 'Aquarium' ? 'Terrarium' : 'Aquarium'),
     captureScreenshot: () => void takeScreenshot(),
-    addCritter: () => void addCritter(defaultSpeciesFor(settings.habitat)),
+    addCritter: (species) => void addCritter(species),
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
     openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),

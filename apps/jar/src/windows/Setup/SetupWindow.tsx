@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
 import { setDayNightOverride } from '../../domain/devSettings';
-import { defaultSpeciesFor } from '../../domain/habitat';
+import { speciesOfHabitat } from '../../domain/habitat';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { DialogTheme } from '../../domain/protocol/generated/DialogTheme';
 import type { Habitat } from '../../domain/protocol/generated/Habitat';
@@ -294,9 +294,13 @@ export function SetupWindow() {
         </label>
         <p>Jar clock: day {jarDay}</p>
 
-        <button onClick={() => void jar.addCritter(defaultSpeciesFor(settings.habitat))}>
-          + Add a critter
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {speciesOfHabitat(settings.habitat).map((species) => (
+            <button key={species} onClick={() => void jar.addCritter(species)}>
+              + Add a {species.toLowerCase()}
+            </button>
+          ))}
+        </div>
 
         <div
           style={{
