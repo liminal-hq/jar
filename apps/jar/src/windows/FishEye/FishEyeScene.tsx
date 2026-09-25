@@ -18,8 +18,11 @@ import { useMemo, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import * as YUKA from 'yuka';
 
+import { getFishEyeLensStrength } from '../../domain/devSettings';
 import { useJarStore } from '../../domain/jarClient';
 import type { FishPoseEntry, FishPoseSnapshot } from '../../domain/fishPose';
+import { computeFishEyeLensParams } from '../../render/effects/fishEyeLens';
+import { FishEyeLensEffect, useFishEyeLensParams } from '../../render/effects/FishEyeLensEffect';
 import { AquariumEnvironment } from '../../render/environment/AquariumEnvironment';
 import { FishModel } from '../../render/models/FishModel';
 import {
@@ -90,8 +93,19 @@ function CameraRig({ posesRef, cameraFishId }: CameraRigProps) {
   const scratchPos = useMemo(() => new THREE.Vector3(), []);
   const scratchQuat = useMemo(() => new THREE.Quaternion(), []);
   const scratchOffset = useMemo(() => new THREE.Vector3(), []);
+  const { fov } = useFishEyeLensParams();
 
   useFrame(({ camera }) => {
+    // Kept in sync here, alongside the position/orientation update below,
+    // rather than in a separate `useEffect` — reactive to live Dev Settings
+    // tuning (`domain/devSettings.ts`) at no extra per-frame cost once
+    // `fov` stops changing, since the `!==` check skips
+    // `updateProjectionMatrix()` on ordinary frames.
+    const pCamera = camera as THREE.PerspectiveCamera;
+    if (pCamera.fov !== fov) {
+      pCamera.fov = fov;
+      pCamera.updateProjectionMatrix();
+    }
     if (cameraFishId === null) return;
     const { prev, curr, receivedAtMs } = posesRef.current;
     if (!curr) return;
@@ -168,7 +182,10 @@ export function FishEyeScene({ posesRef, cameraFishId, tankmateIds }: FishEyeSce
   return (
     <Canvas
       frameloop={frameloop}
-      camera={{ fov: 62, position: [0, 0, 0] }}
+      // `CameraRig` below is the authoritative, ongoing source of `fov` —
+      // this seed only avoids a first-paint flash at R3F's unrelated
+      // default FOV before that component's first frame runs.
+      camera={{ fov: computeFishEyeLensParams(getFishEyeLensStrength()).fov, position: [0, 0, 0] }}
       gl={{ alpha: true, antialias: true, premultipliedAlpha: false }}
       onCreated={({ gl, scene }) => {
         gl.setClearColor(0x000000, 0);
@@ -189,6 +206,7 @@ export function FishEyeScene({ posesRef, cameraFishId, tankmateIds }: FishEyeSce
           <Tankmate key={id} id={id} posesRef={posesRef} />
         ))}
       <CameraRig posesRef={posesRef} cameraFishId={cameraFishId} />
+      <FishEyeLensEffect />
     </Canvas>
   );
 }
