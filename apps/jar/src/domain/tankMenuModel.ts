@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import type { MenuModel } from '../components/ContextMenu/types';
+import type { DayNightOverride } from './devSettings';
 import type { JarSettings } from './protocol/generated/JarSettings';
 
 export interface TankMenuActions {
@@ -20,12 +21,19 @@ export interface TankMenuActions {
   openFishMonitor: () => void;
   openFishEye: () => void;
   toggleAlwaysOnTop: () => void;
+  setDayNightAuto: () => void;
+  setDayNightDay: () => void;
+  setDayNightNight: () => void;
   openSetup: () => void;
   openDevSettings: () => void;
   exit: () => void;
 }
 
-export function buildTankMenuModel(settings: JarSettings, actions: TankMenuActions): MenuModel {
+export function buildTankMenuModel(
+  settings: JarSettings,
+  dayNightOverride: DayNightOverride,
+  actions: TankMenuActions,
+): MenuModel {
   const otherMode = settings.mode === 'Fish' ? 'gecko' : 'fish';
 
   return {
@@ -44,6 +52,30 @@ export function buildTankMenuModel(settings: JarSettings, actions: TankMenuActio
             label: 'Critter sounds',
             checked: settings.sound_on,
             action: actions.toggleSound,
+          },
+          {
+            id: 'day-night',
+            label: 'Day/night',
+            children: [
+              {
+                id: 'day-night-auto',
+                label: 'Auto',
+                checked: dayNightOverride === 'auto',
+                action: actions.setDayNightAuto,
+              },
+              {
+                id: 'day-night-day',
+                label: 'Always day',
+                checked: dayNightOverride === 'day',
+                action: actions.setDayNightDay,
+              },
+              {
+                id: 'day-night-night',
+                label: 'Always night',
+                checked: dayNightOverride === 'night',
+                action: actions.setDayNightNight,
+              },
+            ],
           },
         ],
       },

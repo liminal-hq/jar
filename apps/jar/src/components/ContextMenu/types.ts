@@ -18,6 +18,12 @@ export interface MenuItem {
    * a real boolean to show, so this hasn't come up in practice. */
   checked?: boolean;
   action?: () => void;
+  /** A flyout submenu opened by hovering/clicking/ArrowRight on this row —
+   * mutually exclusive with `action` in practice (a row with children opens
+   * the flyout instead of firing an action; see `MenuItem.tsx`'s
+   * `handleClick`). Flat, one level deep — a child item can't itself have
+   * children, since nothing in this codebase needs more than one level. */
+  children?: (MenuItem | MenuSeparator)[];
 }
 
 export interface MenuSeparator {

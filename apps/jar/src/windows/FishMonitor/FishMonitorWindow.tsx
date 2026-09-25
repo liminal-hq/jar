@@ -9,9 +9,13 @@
 // Not part of SPEC.md/SCREENS.md — supplementary tooling rather than a core
 // product screen, but not gated behind a dev build either: it's
 // self-contained (opening it is what turns telemetry publishing on, and
-// closing it resets the day/night override, and releases the pilot back to
-// `'auto'`/`null` unless the fish-eye window is still watching, both via the
-// mount effect below) and just as useful for a curious owner as for tuning.
+// closing it releases the pilot back to `null` unless the fish-eye window
+// is still watching, via the mount effect below) and just as useful for a
+// curious owner as for tuning. Its own day/night radio group is a second
+// surface onto the same persistent setting the tank's own "Day/night"
+// submenu controls (`tankMenuModel.ts`) — closing this window no longer
+// resets it, so either surface's choice sticks regardless of what else
+// gets opened or closed afterward.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -159,13 +163,8 @@ export function FishMonitorWindow() {
     // updates even between snapshots (e.g. once the tank window closes and
     // publishing stops entirely).
     const tick = setInterval(() => forceRerender((n) => n + 1), 500);
-    // The day/night override is a real, product-affecting setting
-    // (`Fish.tsx`/`SteeringSystem.tsx` both consume it), not just a debug
-    // overlay — resetting it is what keeps this window self-contained:
-    // closing it always leaves the jar's own real day/night clock in
-    // control again, never stuck pinned to whatever was last selected.
-    // Piloting a fish is the same kind of running override — releasing it
-    // here means a fish never keeps ignoring its own AI just because the
+    // Piloting a fish is a running override this window can arm — releasing
+    // it here means a fish never keeps ignoring its own AI just because the
     // window that armed it happened to close. *Unless* the fish-eye window
     // is still open watching that same fish: it drives the pilot from its
     // own forwarded keyboard too (`usePilotKeyForwarding`) and has its own
@@ -173,9 +172,15 @@ export function FishMonitorWindow() {
     // fish itself dies — releasing unconditionally here would otherwise yank
     // the watched fish back to AI control mid-drive just because the
     // *monitor* window (not fish-eye) happened to be the one that closed.
+    //
+    // The day/night override deliberately does *not* reset here anymore —
+    // it's a real, persistent choice now that the tank's own right-click
+    // menu ("Day/night" submenu, `tankMenuModel.ts`) can set it too, not
+    // just this window's radio group. Resetting on close would clobber a
+    // choice made from that other surface the moment this window happened
+    // to be opened and closed for something unrelated.
     const resetOnClose = () => {
       setFishMonitorEnabled(false);
-      setDayNightOverride('auto');
       if (!isFishEyeEnabled()) {
         setPilotedFishId(null);
       }

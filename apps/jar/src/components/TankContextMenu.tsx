@@ -12,6 +12,7 @@ import { Image } from '@tauri-apps/api/image';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 
+import { setDayNightOverride, useDayNightOverride } from '../domain/devSettings';
 import { jar, useJarStore } from '../domain/jarClient';
 import type { JarSettings } from '../domain/protocol/generated/JarSettings';
 import { buildTankMenuModel } from '../domain/tankMenuModel';
@@ -56,8 +57,9 @@ interface TankContextMenuProps {
 
 export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankContextMenuProps) {
   const settings = useJarStore((s) => s.settings);
+  const dayNightOverride = useDayNightOverride();
 
-  const model = buildTankMenuModel(settings, {
+  const model = buildTankMenuModel(settings, dayNightOverride, {
     toggleLight: () => void jar.setToggle('light', !settings.light_on),
     toggleAmbient: () => void jar.setToggle('ambientParticles', !settings.ambient_particles_on),
     toggleSound: () => void jar.setToggle('sound', !settings.sound_on),
@@ -68,6 +70,9 @@ export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankC
     openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),
     toggleAlwaysOnTop: () => void jar.setToggle('alwaysOnTop', !settings.always_on_top),
+    setDayNightAuto: () => setDayNightOverride('auto'),
+    setDayNightDay: () => setDayNightOverride('day'),
+    setDayNightNight: () => setDayNightOverride('night'),
     openSetup: () => void openSatelliteWindow('setup'),
     openDevSettings: () => void openSatelliteWindow('dev-settings'),
     // The shutdown autosave flush (rust-core.md §5.3) fires from the
