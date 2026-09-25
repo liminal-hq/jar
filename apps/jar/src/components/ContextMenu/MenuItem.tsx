@@ -12,9 +12,10 @@ import type { MenuItem as MenuItemType } from './types';
 interface MenuItemProps {
   item: MenuItemType;
   onItemClick: (id: string, action?: () => void) => void;
+  registerItemRef: (id: string, el: HTMLButtonElement | null) => void;
 }
 
-export function MenuItem({ item, onItemClick }: MenuItemProps) {
+export function MenuItem({ item, onItemClick, registerItemRef }: MenuItemProps) {
   function handleClick(e: MouseEvent) {
     if (item.disabled) return;
     e.preventDefault();
@@ -27,6 +28,7 @@ export function MenuItem({ item, onItemClick }: MenuItemProps) {
 
   return (
     <button
+      ref={(el) => registerItemRef(item.id, el)}
       className={`${styles.menuItem} ${item.disabled ? styles.disabled : ''}`}
       onClick={handleClick}
       disabled={item.disabled}

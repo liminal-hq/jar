@@ -35,7 +35,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { platform, version } from '@tauri-apps/plugin-os';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ContextMenu } from './ContextMenu/ContextMenu';
 import type { MenuModel, MenuPosition } from './ContextMenu/types';
@@ -67,6 +67,14 @@ export function TitleBar({ title }: TitleBarProps) {
   const [isResizable, setIsResizable] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition>({ x: 0, y: 0 });
+  const [menuOpenedViaKeyboard, setMenuOpenedViaKeyboard] = useState(false);
+  // See `TankWindow.tsx`'s identical ref for the full rationale: a real
+  // right-click always fires `mousedown(button 2)` immediately before its
+  // `contextmenu` event; a keyboard-triggered one (Shift+F10/the Menu key)
+  // never fires a mousedown at all. More reliable than `contextmenu`'s own
+  // `button` property, which doesn't reliably read 0 for a keyboard-
+  // triggered open on every engine/platform Tauri targets.
+  const lastMouseDownWasRightClickRef = useRef(false);
 
   const appWindow = getCurrentWindow();
 
@@ -144,6 +152,13 @@ export function TitleBar({ title }: TitleBarProps) {
     } catch (err) {
       console.error(err);
     }
+    // See `lastMouseDownWasRightClickRef`'s own comment above — decides
+    // whether to pre-highlight the first item (`ContextMenu.tsx`'s
+    // `autoFocusFirstItem`). Consumed (reset) immediately so a later
+    // keyboard-triggered open isn't misattributed to whatever mousedown
+    // happened last.
+    setMenuOpenedViaKeyboard(!lastMouseDownWasRightClickRef.current);
+    lastMouseDownWasRightClickRef.current = false;
     setMenuPosition({ x: e.clientX, y: e.clientY });
     setMenuOpen(true);
   };
@@ -279,6 +294,9 @@ export function TitleBar({ title }: TitleBarProps) {
       <div
         className={`${styles.titleBar} ${styles[PLATFORM_CLASS[platformType]]}`}
         data-tauri-drag-region
+        onMouseDown={(e) => {
+          lastMouseDownWasRightClickRef.current = e.button === 2;
+        }}
         onContextMenu={(e) => void handleContextMenu(e)}
       >
         {platformType === 'mac' && (
@@ -322,6 +340,7 @@ export function TitleBar({ title }: TitleBarProps) {
           position={menuPosition}
           onClose={() => setMenuOpen(false)}
           onItemClick={handleMenuAction}
+          autoFocusFirstItem={menuOpenedViaKeyboard}
         />
       )}
     </>

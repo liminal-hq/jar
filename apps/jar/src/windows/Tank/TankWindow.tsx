@@ -37,6 +37,16 @@ const MENU_IDLE_BACKSTOP_MS = 8000;
 
 export function TankWindow() {
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [menuOpenedViaKeyboard, setMenuOpenedViaKeyboard] = useState(false);
+  // Set on every mousedown, read (and consumed) by `handleTankContextMenu`
+  // below — a real right-click always fires `mousedown(button 2)`
+  // immediately before its `contextmenu` event, but a keyboard-triggered
+  // one (Shift+F10/the Menu key) never fires a mousedown at all. More
+  // reliable than reading `contextmenu`'s own `button` property, which
+  // empirically does *not* reliably read 0 for a keyboard-triggered open on
+  // every engine/platform combination Tauri targets (confirmed live on
+  // WebKitGTK/GNOME: it read 2, same as a real right-click, there).
+  const lastMouseDownWasRightClickRef = useRef(false);
   const mouseOverlayEnabled = useMouseOverlayEnabled();
   const settings = useJarStore((s) => s.settings);
   const critters = useJarStore((s) => s.critters);
@@ -113,6 +123,13 @@ export function TankWindow() {
   // so there's no click/drag ambiguity to resolve here.
   const handleTankContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault();
+    // See `lastMouseDownWasRightClickRef`'s own comment above — decides
+    // whether to pre-highlight the first item (`ContextMenu.tsx`'s
+    // `autoFocusFirstItem`). Consumed (reset) immediately so a later
+    // keyboard-triggered open isn't misattributed to whatever mousedown
+    // happened last.
+    setMenuOpenedViaKeyboard(!lastMouseDownWasRightClickRef.current);
+    lastMouseDownWasRightClickRef.current = false;
     setMenuPosition({ x: e.clientX, y: e.clientY });
   };
 
@@ -161,6 +178,7 @@ export function TankWindow() {
   const [dragging, setDragging] = useState(false);
 
   const handleTankMouseDown = (e: ReactMouseEvent) => {
+    lastMouseDownWasRightClickRef.current = e.button === 2;
     if (e.buttons !== 1) return;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     const handleMove = (moveEvent: MouseEvent) => {
@@ -232,7 +250,11 @@ export function TankWindow() {
       </div>
 
       {menuPosition && (
-        <TankContextMenu position={menuPosition} onClose={() => setMenuPosition(null)} />
+        <TankContextMenu
+          position={menuPosition}
+          onClose={() => setMenuPosition(null)}
+          autoFocusFirstItem={menuOpenedViaKeyboard}
+        />
       )}
     </div>
   );

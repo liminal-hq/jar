@@ -37,3 +37,7 @@ export interface MenuPosition {
   x: number;
   y: number;
 }
+
+export function isSeparator(item: MenuItem | MenuSeparator): item is MenuSeparator {
+  return 'type' in item && item.type === 'separator';
+}

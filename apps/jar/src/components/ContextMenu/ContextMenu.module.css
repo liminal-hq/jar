@@ -27,6 +27,11 @@
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
   user-select: none;
+  /* On a real right-click, ContextMenu.tsx focuses this container itself
+   * (rather than an item) so arrow keys work without pre-highlighting
+   * anything — that focus is meant to be invisible, but a plain `tabIndex`
+   * makes the browser's own default focus ring apply here otherwise. */
+  outline: none;
 }
 
 .menuSection {
@@ -70,12 +75,14 @@
   outline: none;
 }
 
-.menuItem:hover:not(.disabled) {
+.menuItem:hover:not(.disabled),
+.menuItem:focus-visible {
   background: var(--jar-accent, #3a8dde);
   color: var(--jar-bg, #fbfaf6);
 }
 
-.menuItem:hover:not(.disabled) .menuItemIcon {
+.menuItem:hover:not(.disabled) .menuItemIcon,
+.menuItem:focus-visible .menuItemIcon {
   color: inherit;
 }
 
