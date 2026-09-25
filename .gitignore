@@ -16,6 +16,13 @@ apps/jar/src-tauri/target/
 .idea/
 *.swp
 
+# Claude Code agent worktrees (`.claude/worktrees/`) — nested git worktrees
+# whose paths escape this file's own anchored patterns above (e.g.
+# `apps/jar/src-tauri/gen/` only matches at the repo root), so a stray one
+# left checked out here shows up as noise in `prettier --check .`/`git
+# status` otherwise. Nothing under `.claude/` is meant to be tracked.
+.claude/
+
 # App data (local dev jar snapshots)
 *.jar-snapshot
 

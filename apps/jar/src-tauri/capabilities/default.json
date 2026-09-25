@@ -38,6 +38,7 @@
     "window-state:default",
     "os:default",
     "mcp-bridge:default",
-    "clipboard-manager:allow-write-image"
+    "clipboard-manager:allow-write-image",
+    "log:default"
   ]
 }

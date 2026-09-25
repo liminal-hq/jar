@@ -21,12 +21,57 @@
 /// geometry the same as everything else — nothing left to exclude here.
 const EPHEMERAL_WINDOW_LABELS: &[&str] = &[];
 
+/// The level floor applied to every log line — native Rust and forwarded
+/// webview `console.*` calls alike (see the `tauri_plugin_log::Builder`
+/// below). Verbose in a debug build, `Info`-and-up in a release one, same
+/// split other Liminal HQ apps use.
+fn log_level() -> log::LevelFilter {
+    if cfg!(debug_assertions) {
+        log::LevelFilter::Trace
+    } else {
+        log::LevelFilter::Info
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // `tauri-plugin-log`'s own `plugin:log|log` command is what
+        // `domain/logger.ts`'s `initLogger()` forwards the webview's
+        // `console.log`/`warn`/`error`/etc. calls into, tagged with a
+        // `webview[:file:line:col]` target — since that command re-emits
+        // through this same process-global `log` logger, forwarded webview
+        // messages end up in exactly the same stdout stream and rotating
+        // log file (`DEFAULT_LOG_TARGETS`: `Stdout` + `LogDir`) as native
+        // `log::info!()`/etc. calls from Rust, with the same formatting and
+        // the same level floor. No custom Rust command or event/Channel
+        // needed for the receiving half — that's the plugin's own built-in
+        // mechanism.
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(log_level())
+                // The debug-only MCP automation bridge's websocket internals
+                // are extremely chatty at `Trace` (every handshake read/write
+                // poll) — confirmed live: left unfiltered, they drown out
+                // everything else in the debug-build log within the first
+                // few seconds. Quieted the same way other Liminal HQ apps
+                // quiet their own known-chatty dependencies.
+                .level_for("tungstenite", log::LevelFilter::Warn)
+                .level_for("tokio_tungstenite", log::LevelFilter::Warn)
+                .format(|out, message, record| {
+                    out.finish(format_args!(
+                        "[{}][{}][{}] {}",
+                        chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f %:z"),
+                        record.level(),
+                        record.target(),
+                        message
+                    ))
+                })
+                .build(),
+        )
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_denylist(EPHEMERAL_WINDOW_LABELS)
