@@ -8,7 +8,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 import { App } from './App';
+import { initLogger } from './domain/logger';
 import './styles/global.css';
+
+initLogger();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
