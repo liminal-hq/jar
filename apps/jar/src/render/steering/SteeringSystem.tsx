@@ -27,10 +27,14 @@ import { isNightPresentation } from '../../domain/dayNight';
 import {
   useDayNightOverride,
   useFishEyeEnabled,
-  useFishMonitorEnabled,
   useFishPositionOverlayEnabled,
+  useTankMonitorEnabled,
 } from '../../domain/devSettings';
-import { emitFishDebug, type FishDebugEntry } from '../../domain/fishDebug';
+import {
+  DEBUG_PUBLISH_INTERVAL_SEC,
+  emitCritterDebug,
+  type CritterDebugEntry,
+} from '../../domain/critterDebug';
 import { emitFishPoses, type FishPoseEntry } from '../../domain/fishPose';
 import { useJarStore } from '../../domain/jarClient';
 import { entityManager } from './entityManager';
@@ -84,11 +88,11 @@ export interface RegisteredFish {
    * through a low-speed wobble. Starts `false`: a freshly-spawned fish
    * holds its seeded heading until it's genuinely underway. */
   isHeadingActive: boolean;
-  /** Feeds the fish monitor window (`windows/FishMonitor/FishMonitorWindow.tsx`)
+  /** Feeds the Tank monitor window (`windows/TankMonitor/TankMonitorWindow.tsx`)
    * — absent for a `FishModel` with no steering mode of its own. */
   getDebugAnim?: () => FishDebugAnim | null;
   /** `Critter.hue`, 0-360 — never changes after spawn, so a plain field
-   * rather than a getter. Feeds the fish monitor window's map. */
+   * rather than a getter. Feeds the Tank monitor window's map. */
   hue: number;
   /** `fishCollider.ts`'s `colliderHalfExtentsFor(critter).z` — this fish's
    * current *length* (forward/nose-to-tail) half-extent, numerically
@@ -196,11 +200,6 @@ const HEADING_SLERP_RATE = 6;
  * momentum to bleed off unassisted. */
 const NON_ACTIVE_VELOCITY_DECAY_RATE = 4;
 
-/** How often the fish monitor snapshot publishes — a live table doesn't
- * need 60Hz, and publishing every frame would spam the Tauri event bridge
- * for no visible benefit. */
-const DEBUG_PUBLISH_INTERVAL_SEC = 0.2;
-
 /** How often the fish-eye window's pose snapshot publishes — smooth enough
  * to drive a camera (interpolated on the receiving end, `FishEyeScene.tsx`'s
  * own `POSE_PUBLISH_INTERVAL_MS`, derived from this rather than a second
@@ -220,7 +219,7 @@ interface SteeringSystemProps {
 
 export function SteeringSystem({ children }: SteeringSystemProps) {
   const registryRef = useRef<Registry>(new Map());
-  const monitorEnabled = useFishMonitorEnabled();
+  const monitorEnabled = useTankMonitorEnabled();
   const fishEyeEnabled = useFishEyeEnabled();
   const posePublishElapsedRef = useRef(0);
   const simSeconds = useJarStore((s) => s.simSeconds);
@@ -401,7 +400,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
       publishElapsedRef.current += delta;
       if (publishElapsedRef.current >= DEBUG_PUBLISH_INTERVAL_SEC) {
         publishElapsedRef.current = 0;
-        const entries: FishDebugEntry[] = [];
+        const entries: CritterDebugEntry[] = [];
         for (const [id, fish] of registry) {
           const anim = fish.getDebugAnim?.() ?? null;
           scratchYawEuler.setFromQuaternion(fish.currentHeading, 'YXZ');
@@ -425,7 +424,7 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
             hue: fish.hue,
           });
         }
-        void emitFishDebug({ entries, simSeconds, isNight: effectiveIsNight });
+        void emitCritterDebug({ entries, simSeconds, isNight: effectiveIsNight });
       }
     }
 

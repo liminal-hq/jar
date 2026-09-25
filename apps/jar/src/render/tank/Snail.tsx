@@ -8,7 +8,9 @@
 // Rapier `RigidBody` — the same "no gravity fight" discipline as `Fish.tsx`'s
 // dynamic one, just without physics ever moving it. Presents `SnailModel`,
 // driving its `tuckProgress`/`tuckMode` from `snailBehaviour.ts`'s state
-// machine.
+// machine. Also publishes its own telemetry into `domain/critterDebug.ts`
+// (the Tank monitor window's bridge), gated by the same dev toggle as the
+// fish's own publisher in `SteeringSystem.tsx`.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -23,8 +25,13 @@ import {
 import { useRef, useState } from 'react';
 import * as THREE from 'three';
 
-import { useDayNightOverride } from '../../domain/devSettings';
-import { isAsleep } from '../../domain/dayNight';
+import {
+  DEBUG_PUBLISH_INTERVAL_SEC,
+  emitCritterDebug,
+  type CritterDebugEntry,
+} from '../../domain/critterDebug';
+import { isAsleep, isNightPresentation } from '../../domain/dayNight';
+import { useDayNightOverride, useTankMonitorEnabled } from '../../domain/devSettings';
 import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
@@ -97,6 +104,12 @@ interface DetachAnchor {
   targetQuaternion: THREE.Quaternion;
 }
 
+// Only the debug-telemetry publisher below needs a raw Euler decomposition
+// — mirrors `SteeringSystem.tsx`'s own scratch object and yaw/pitch
+// extraction, so the Tank monitor's map projections read the same way for
+// a snail row as a fish one.
+const scratchYawEuler = new THREE.Euler();
+
 /** `frame.forward`→local `+Z`, `frame.up`→local `+Y` — the same axis
  * convention `fishCollider.ts` and `Fish.tsx` use, so this component's inner
  * model group needs the identical `-90°` yaw correction `Fish.tsx` applies
@@ -163,7 +176,10 @@ export function Snail({ critter }: SnailProps) {
   const [tuckMode, setTuckMode] = useState<'sleep' | 'startle'>('sleep');
 
   const simNight = useJarStore((s) => s.isNight);
+  const simSeconds = useJarStore((s) => s.simSeconds);
   const dayNightOverride = useDayNightOverride();
+  const monitorEnabled = useTankMonitorEnabled();
+  const publishElapsedRef = useRef(0);
 
   useFrame((_, delta) => {
     const body = rigidBodyRef.current;
@@ -261,6 +277,37 @@ export function Snail({ critter }: SnailProps) {
     ) {
       setTuckProgress(behaviourRef.current.tuckProgress);
       setTuckMode(behaviourRef.current.tuckMode);
+    }
+
+    // Publishes into the same bridge the fish's `SteeringSystem.tsx` does
+    // (`domain/critterDebug.ts`), gated by the same dev toggle and rate —
+    // but as this snail's own single-entry snapshot rather than a batch,
+    // since (per the settled architecture) there's no shared snail registry
+    // to collect one from. The Tank monitor window merges entries from
+    // every publisher by id rather than replacing its table wholesale.
+    if (monitorEnabled) {
+      publishElapsedRef.current += delta;
+      if (publishElapsedRef.current >= DEBUG_PUBLISH_INTERVAL_SEC) {
+        publishElapsedRef.current = 0;
+        scratchYawEuler.setFromQuaternion(quaternionRef.current, 'YXZ');
+        const entry: CritterDebugEntry = {
+          id: critter.id,
+          mode: behaviourRef.current.mode,
+          pos: [positionRef.current.x, positionRef.current.y, positionRef.current.z],
+          speed: isMoving(mode) ? CRAWL_SPEED : 0,
+          yawDeg: (scratchYawEuler.y * 180) / Math.PI,
+          // Matches `heading.ts`'s convention (euler built as
+          // `(-pitch, yaw, 0, 'YXZ')`), so a snail row's map tick points
+          // the same way a fish row's does for the same forward vector.
+          pitchDeg: (-scratchYawEuler.x * 180) / Math.PI,
+          hue: critter.hue,
+        };
+        void emitCritterDebug({
+          entries: [entry],
+          simSeconds,
+          isNight: isNightPresentation(dayNightOverride, simNight),
+        });
+      }
     }
   });
 

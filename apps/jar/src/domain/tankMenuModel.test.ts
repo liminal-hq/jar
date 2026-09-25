@@ -16,7 +16,7 @@ function makeActions(): TankMenuActions {
     captureScreenshot: vi.fn(),
     addCritter: vi.fn(),
     openFamilyTree: vi.fn(),
-    openFishMonitor: vi.fn(),
+    openTankMonitor: vi.fn(),
     openFishEye: vi.fn(),
     toggleAlwaysOnTop: vi.fn(),
     setDayNightAuto: vi.fn(),
@@ -56,7 +56,7 @@ describe('buildTankMenuModel', () => {
     expect(items(critters!).map((i) => i.id)).toEqual([
       'add-critter',
       'family-tree',
-      'fish-monitor',
+      'tank-monitor',
       'fish-eye',
     ]);
     expect(items(app!).map((i) => i.id)).toEqual([
@@ -125,7 +125,7 @@ describe('buildTankMenuModel', () => {
 
     expect(actions.openFishEye).toHaveBeenCalledOnce();
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
-    expect(actions.openFishMonitor).not.toHaveBeenCalled();
+    expect(actions.openTankMonitor).not.toHaveBeenCalled();
     expect(actions.openSetup).not.toHaveBeenCalled();
     expect(actions.openDevSettings).not.toHaveBeenCalled();
     expect(actions.exit).not.toHaveBeenCalled();

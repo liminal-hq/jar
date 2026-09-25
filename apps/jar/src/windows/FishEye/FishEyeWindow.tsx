@@ -1,11 +1,11 @@
 // First-person "fish eye" view (opened via a "Watch" link next to a fish's
-// own row in the Fish monitor window, `windows/FishMonitor/FishMonitorWindow.tsx`)
+// own row in the Tank monitor window, `windows/TankMonitor/TankMonitorWindow.tsx`)
 // — a second, independent 3D scene (`FishEyeScene.tsx`) with the camera
 // glued to whichever fish is currently piloted, driven by a dedicated
-// ~30Hz pose broadcast (`domain/fishPose.ts`) rather than the fish
+// ~30Hz pose broadcast (`domain/fishPose.ts`) rather than the Tank
 // monitor's own 5Hz telemetry, which is too coarse to drive a camera
 // smoothly. Not part of SPEC.md/SCREENS.md — supplementary tooling, same
-// stance as Fish monitor: opening it is what turns pose publishing on, and
+// stance as Tank monitor: opening it is what turns pose publishing on, and
 // closing it turns it back off.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 
 import { DialogShell } from '../../components/DialogShell';
 import {
-  isFishMonitorEnabled,
+  isTankMonitorEnabled,
   setFishEyeEnabled,
   setPilotedFishId,
   usePilotedFishId,
@@ -83,20 +83,20 @@ export function FishEyeWindow() {
       unlisten = fn;
     });
 
-    // Mirrors `FishMonitorWindow.tsx`'s own check in the other direction:
+    // Mirrors `TankMonitorWindow.tsx`'s own check in the other direction:
     // closing fish-eye alone shouldn't yank a fish back to AI control while
     // the monitor window is still open and actively driving it — only
     // release the pilot here when the monitor isn't around to own that
     // responsibility itself. Without this, a fish opened only from here
-    // (Fish monitor already closed) would stay "piloted" forever once this
+    // (Tank monitor already closed) would stay "piloted" forever once this
     // window closes too, with neither window left to ever release it.
     const resetOnClose = () => {
       setFishEyeEnabled(false);
-      if (!isFishMonitorEnabled()) {
+      if (!isTankMonitorEnabled()) {
         setPilotedFishId(null);
       }
     };
-    // Same rationale as `FishMonitorWindow.tsx`'s own `onCloseRequested`
+    // Same rationale as `TankMonitorWindow.tsx`'s own `onCloseRequested`
     // hook — the title bar's close button destroys this webview directly,
     // bypassing the unmount cleanup below, so `onCloseRequested` is the one
     // reliable hook regardless of how the window closes.
@@ -111,14 +111,14 @@ export function FishEyeWindow() {
   }, []);
 
   // Lets this window's own keyboard drive the piloted fish too, same as
-  // the Fish monitor window.
+  // the Tank monitor window.
   usePilotKeyForwarding(pilotedFishId !== null);
 
   // Releases a camera target the instant its fish is no longer alive —
-  // passed or despawned, most likely. `FishMonitorWindow.tsx` runs its own
+  // passed or despawned, most likely. `TankMonitorWindow.tsx` runs its own
   // version of this for `pilotedFishId`, but only while it's actually
   // mounted, and closing it no longer force-releases the pilot while this
-  // window is still watching (see `FishMonitorWindow.tsx`'s own
+  // window is still watching (see `TankMonitorWindow.tsx`'s own
   // `resetOnClose`) — so a fish that dies with only this window open would
   // otherwise freeze the camera on its last known pose forever, with no way
   // back to the picker. Covers `manualPick` too, which has no other
@@ -156,7 +156,7 @@ export function FishEyeWindow() {
         <FishEyeScene posesRef={posesRef} cameraFishId={cameraFishId} tankmateIds={tankmateIds} />
         {cameraFishId === null && (
           <div style={overlayStyle}>
-            Pilot a fish from the Fish monitor window, or pick one below, to watch through its eyes.
+            Pilot a fish from the Tank monitor window, or pick one below, to watch through its eyes.
           </div>
         )}
       </div>
@@ -164,7 +164,7 @@ export function FishEyeWindow() {
         {pilotedFishId !== null ? (
           <span style={{ opacity: 0.7 }}>
             Watching {critters[pilotedFishId]?.name ?? '—'} (#{pilotedFishId}) — piloted from the
-            Fish monitor window.
+            Tank monitor window.
           </span>
         ) : (
           <label>

@@ -98,8 +98,8 @@ interface FishModelProps {
    * `maxSpeedFor(critter.energy)` when absent, so the critter-card preview
    * (which has no burst state) is unaffected. */
   getSpeedCeiling?: () => number;
-  /** Called once per frame with this fish's animation state, for the fish
-   * monitor window (`domain/fishDebug.ts`) and — via `phase` —
+  /** Called once per frame with this fish's animation state, for the Tank
+   * monitor window (`domain/critterDebug.ts`) and — via `phase` —
    * `Fish.tsx`'s `getThrustEnvelope` (`thrustEnvelope.ts`), which gates the
    * physics impulse to the same tail beat this animates. A callback rather
    * than an imperative handle since `Fish.tsx` just wants to stash the
@@ -290,7 +290,7 @@ export function FishModel({
   // comment for the blend, and `isRestingRef` below for why it's forced
   // to 0 at rest rather than just left to decay on its own schedule.
   const bendRef = useRef(0);
-  // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
+  // Peak-hold for `onDebugFrame`'s reported turn rate — the Tank monitor
   // window only samples a few times a second, so a genuine one/two-frame
   // spike (e.g. right at a night settle/wake mode flip) would otherwise be
   // invisible between polls. Decays fast enough to read as "just happened"

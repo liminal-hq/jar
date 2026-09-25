@@ -7,11 +7,11 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 - No OS chrome. Currently no separate frame bezel either — the glass tank enclosure itself (see `docs/architecture/3d-engine.md` §8.1) is the window's whole visual boundary, edge to edge, translucent through to the desktop behind it. The six frame treatments (`SPEC.md` §4) are built and Setup-selectable but not applied to the tank window while this is revisited.
 - Contents: backdrop (aquarium or terrarium), critters, bubbles/mist, night tint, status chip (bottom-left: one clause per living species, e.g. `4 fish · 2 snails`, a species at zero omitted rather than shown as `0`), event toasts (top-centre, 4 s).
 - Right-click the tank → a context menu opens at the cursor, over the tank (no window resize, no second window). Clicking elsewhere, Escape, or losing focus closes it; a plain left-click on the tank background does nothing (dragging the window and clicking a critter still work as their own gestures).
-  - **Tank**: Light · Bubbles (aquarium) / Mist (terrarium) · Critter sounds — checkboxes, reflecting the live setting. **Day/night ▸** — a submenu: Auto · Always day · Always night · Always active, exclusive. Defaults to Always active — every critter awake at once regardless of species or time, the honest out-of-the-box choice once a nocturnal species (the snail) exists. Auto opts back into the jar's real day/night cycle, under which each species keeps its own schedule (fish/gecko awake by day, snail by night). Also settable from the Fish monitor window's own radio group (see "Dev / Fish monitor" below) — either surface's choice persists regardless of what else is opened or closed.
+  - **Tank**: Light · Bubbles (aquarium) / Mist (terrarium) · Critter sounds — checkboxes, reflecting the live setting. **Day/night ▸** — a submenu: Auto · Always day · Always night · Always active, exclusive. Defaults to Always active — every critter awake at once regardless of species or time, the honest out-of-the-box choice once a nocturnal species (the snail) exists. Auto opts back into the jar's real day/night cycle, under which each species keeps its own schedule (fish/gecko awake by day, snail by night). Also settable from the Tank monitor window's own radio group (see "Dev / Tank monitor" below) — either surface's choice persists regardless of what else is opened or closed.
   - **Mode**: Gecko/Fish (mode switch).
   - **Screenshot**: copies the tank canvas to the clipboard as a PNG.
-  - **Critters**: Add a critter (a Fish ▸ Snail flyout in the aquarium — Terrarium's single-species Gecko stays a flat action) · Tree · Fish monitor · Fish eye — creating a critter, and the windows that show you the critters/sim itself.
-  - **App**: Always on top · Setup · Dev · Exit (saves the jar, quits the app — essential on GNOME where there is no tray) — configuration and tooling for the app, not the critters. Dev and Fish monitor are always available, not gated behind a dev build — see "Dev / Fish monitor" below.
+  - **Critters**: Add a critter (a Fish ▸ Snail flyout in the aquarium — Terrarium's single-species Gecko stays a flat action) · Tree · Tank monitor · Fish eye — creating a critter, and the windows that show you the critters/sim itself.
+  - **App**: Always on top · Setup · Dev · Exit (saves the jar, quits the app — essential on GNOME where there is no tray) — configuration and tooling for the app, not the critters. Dev and Tank monitor are always available, not gated behind a dev build — see "Dev / Tank monitor" below.
   - **Always on top** has no effect on Linux+Wayland: the toggle and its setting work correctly, but `gdk_window_set_keep_above()` (what `setAlwaysOnTop` calls into on Linux) is a deliberate no-op under Wayland — the protocol reserves window-stacking decisions for the compositor, and GNOME's Mutter offers no opt-in extension for it. Works as expected on Windows, macOS, and Linux+X11.
   - Menu styling follows the **dialog theme**, via the same `--jar-*` tokens W2/W3/W4 use.
 
@@ -46,12 +46,12 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
 - Click node → focuses W2.
 - Title shows `N ever` (all critters that have lived in this mode).
 
-## Dev / Fish monitor
+## Dev / Tank monitor
 
 Two supplementary tooling windows, reachable from the W1 tank's right-click menu — not part of the original product spec, but always available (not gated behind a dev build) since both are self-contained and genuinely useful for a curious owner, not just for tuning.
 
 - **Dev** — checkboxes for two `localStorage`-backed debug overlays (mouse event capture, live fish position capture), each showing its own live panel inline while enabled. Purely local state, no effect on the jar itself.
-- **Fish monitor** — a live table plus top-down/front maps of every fish's steering/animation state (mode, resting, speed, turn rate). Its own Day/night radio group is a second surface onto the same persistent override the tank's own right-click menu controls (see W1 above) — not reset when this window closes.
+- **Tank monitor** — a live table plus top-down/front maps of every critter's steering/animation state (mode, resting, speed, turn rate — the last two blank for a snail row, which has no equivalent steering state). Its own Day/night radio group is a second surface onto the same persistent override the tank's own right-click menu controls (see W1 above) — not reset when this window closes.
 
 ## Mobile companion (Android)
 

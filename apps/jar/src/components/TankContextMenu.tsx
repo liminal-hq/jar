@@ -68,7 +68,7 @@ export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankC
     captureScreenshot: () => void takeScreenshot(),
     addCritter: (species) => void addCritter(species),
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
-    openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
+    openTankMonitor: () => void openSatelliteWindow('tank-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),
     toggleAlwaysOnTop: () => void jar.setToggle('alwaysOnTop', !settings.always_on_top),
     setDayNightAuto: () => setDayNightOverride('auto'),

@@ -15,7 +15,7 @@
 /// window in the documented screen inventory (`SCREENS.md`'s W1-W4) —
 /// `critter-card`, `family-tree` and `setup` are on-demand
 /// (`domain/windows.ts`'s `SPECS`) but still user-facing, tracked windows.
-/// `dev-settings`/`fish-monitor` are supplementary tooling rather than core
+/// `dev-settings`/`tank-monitor` are supplementary tooling rather than core
 /// product screens, but they're real, always-available windows now too
 /// (`Drawer.tsx`), not a debug-only build feature, so they persist their
 /// geometry the same as everything else — nothing left to exclude here.

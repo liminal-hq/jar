@@ -1,7 +1,7 @@
 // Shared, tank-realm-only state for the manual fish pilot — a plain module
 // singleton, not React state or a Tauri-synced value, since only two things
 // in this realm ever touch it: `PilotCaptureBridge.tsx` (writes, from both
-// local key events and ones forwarded from the Fish monitor window over
+// local key events and ones forwarded from the Tank monitor window over
 // `domain/pilotInput.ts`) and `SteeringSystem.tsx`/`ManualPilotBehaviour`
 // (read, once per fish per frame). Keeping it a plain object rather than
 // routing through `localStorage`/Tauri events for every keystroke is what
@@ -15,7 +15,7 @@
  * turn it in place, `KeyR`/`KeyF` stay world-space up/down (a yaw-only,
  * dorsal-up fish has no meaningful "local up" distinct from world up).
  * `PILOT_KEY_CODES` (below) still lists exactly these six codes, so
- * `FishMonitorWindow.tsx`'s forwarding filter needs no changes. */
+ * `TankMonitorWindow.tsx`'s forwarding filter needs no changes. */
 const THRUST_KEYS = ['KeyW', 'KeyS', 'KeyR', 'KeyF'] as const;
 const TURN_KEYS = ['KeyA', 'KeyD'] as const;
 

@@ -20,7 +20,7 @@ export interface TankMenuActions {
   captureScreenshot: () => void;
   addCritter: (species: Species) => void;
   openFamilyTree: () => void;
-  openFishMonitor: () => void;
+  openTankMonitor: () => void;
   openFishEye: () => void;
   toggleAlwaysOnTop: () => void;
   setDayNightAuto: () => void;
@@ -122,7 +122,7 @@ export function buildTankMenuModel(
         items: [
           addCritterItem,
           { id: 'family-tree', label: 'Tree', action: actions.openFamilyTree },
-          { id: 'fish-monitor', label: 'Fish monitor', action: actions.openFishMonitor },
+          { id: 'tank-monitor', label: 'Tank monitor', action: actions.openTankMonitor },
           { id: 'fish-eye', label: 'Fish eye', action: actions.openFishEye },
         ],
       },

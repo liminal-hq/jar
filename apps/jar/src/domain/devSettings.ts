@@ -65,19 +65,20 @@ export const isMouseOverlayEnabled = mouseOverlay.isEnabled;
 export const setMouseOverlayEnabled = mouseOverlay.setEnabled;
 export const useMouseOverlayEnabled = mouseOverlay.useEnabled;
 
-/** Live table of every fish's steering/animation state in the tank window,
- * shown in the Dev settings window (`FishMonitorPanel.tsx`) — built for
- * tuning wander/rest/pause behaviour by eye against real numbers instead of
- * guessing from screen recordings. Gates the tank window's publisher too
- * (`SteeringSystem.tsx`), so there's no telemetry emit cost when nobody's
- * watching the panel. */
-const fishMonitor = createDevToggle('jar:dev:fishMonitor');
-export const isFishMonitorEnabled = fishMonitor.isEnabled;
-export const setFishMonitorEnabled = fishMonitor.setEnabled;
-export const useFishMonitorEnabled = fishMonitor.useEnabled;
+/** Live table of every critter's steering/animation state in the tank
+ * window, shown in the Tank monitor window
+ * (`windows/TankMonitor/TankMonitorWindow.tsx`) — built for tuning
+ * wander/rest/pause behaviour by eye against real numbers instead of
+ * guessing from screen recordings. Gates the tank window's publishers too
+ * (`SteeringSystem.tsx` for fish, `Snail.tsx` for each snail), so there's no
+ * telemetry emit cost when nobody's watching the window. */
+const tankMonitor = createDevToggle('jar:dev:tankMonitor');
+export const isTankMonitorEnabled = tankMonitor.isEnabled;
+export const setTankMonitorEnabled = tankMonitor.setEnabled;
+export const useTankMonitorEnabled = tankMonitor.useEnabled;
 
 /** Gates the tank window's ~30Hz pose publisher (`domain/fishPose.ts`,
- * `SteeringSystem.tsx`) — a much higher rate than `fishMonitor`'s 5Hz
+ * `SteeringSystem.tsx`) — a much higher rate than `tankMonitor`'s 5Hz
  * telemetry, since it drives the fish-eye window's camera rather than a
  * table, so it's worth its own toggle to keep that cost at zero while that
  * window isn't open. */
@@ -96,8 +97,8 @@ const DAY_NIGHT_OVERRIDE_KEY = 'jar:dev:dayNightOverride';
  * pin the real jar clock's day or night state, `'active'` keeps every
  * critter awake regardless of species or clock, `'auto'` follows the normal
  * jar clock. Reachable from the tank's own right-click menu (the
- * "Day/night" submenu, `tankMenuModel.ts`) as well as the Fish monitor
- * window's own radio group — no longer just a Fish-monitor-scoped tuning
+ * "Day/night" submenu, `tankMenuModel.ts`) as well as the Tank monitor
+ * window's own radio group — no longer just a Tank-monitor-scoped tuning
  * aid, so the default below is `'active'`, not `'auto'`: an always-lively
  * tank is the out-of-the-box experience, and once a nocturnal species
  * (the snail) exists, `'active'` is the only override under which every
@@ -129,13 +130,13 @@ export function useDayNightOverride(): DayNightOverride {
 const PILOTED_FISH_ID_KEY = 'jar:dev:pilotedFishId';
 
 /** Which fish (by `Critter.id`), if any, is currently under manual keyboard
- * control — armed from a row in the Fish monitor window
- * (`windows/FishMonitor/FishMonitorWindow.tsx`), consumed by the tank
+ * control — armed from a row in the Tank monitor window
+ * (`windows/TankMonitor/TankMonitorWindow.tsx`), consumed by the tank
  * window's `ManualPilotBehaviour` (`render/steering/manualPilotBehaviour.ts`)
  * and `PilotCaptureBridge.tsx`. Same live-sync pattern as
  * `getDayNightOverride`, a nullable number instead of a 3-way string. Both
- * the Fish monitor and Fish eye windows (`windows/FishEye/FishEyeWindow.tsx`)
- * can release this — Fish monitor's own `resetOnClose` guarantees it never
+ * the Tank monitor and Fish eye windows (`windows/FishEye/FishEyeWindow.tsx`)
+ * can release this — Tank monitor's own `resetOnClose` guarantees it never
  * survives that window closing *unless* Fish eye is still open watching
  * (Fish eye's own liveness check then becomes the one guaranteeing it can't
  * outlive the fish itself) — so a fish left "piloted" with neither window

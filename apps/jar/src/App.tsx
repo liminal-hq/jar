@@ -13,8 +13,8 @@ import { CritterCardWindow } from './windows/CritterCard/CritterCardWindow';
 import { DevSettingsWindow } from './windows/DevSettings/DevSettingsWindow';
 import { FamilyTreeWindow } from './windows/FamilyTree/FamilyTreeWindow';
 import { FishEyeWindow } from './windows/FishEye/FishEyeWindow';
-import { FishMonitorWindow } from './windows/FishMonitor/FishMonitorWindow';
 import { SetupWindow } from './windows/Setup/SetupWindow';
+import { TankMonitorWindow } from './windows/TankMonitor/TankMonitorWindow';
 import { TankWindow } from './windows/Tank/TankWindow';
 
 export function App() {
@@ -33,8 +33,8 @@ export function App() {
       return <SetupWindow />;
     case 'dev-settings':
       return <DevSettingsWindow />;
-    case 'fish-monitor':
-      return <FishMonitorWindow />;
+    case 'tank-monitor':
+      return <TankMonitorWindow />;
     case 'fish-eye':
       return <FishEyeWindow />;
     case 'tank':

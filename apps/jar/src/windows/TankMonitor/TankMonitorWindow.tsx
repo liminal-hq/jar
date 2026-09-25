@@ -1,11 +1,22 @@
-// Fish tuning rig (opened via the tank's right-click menu, always-available
-// "Fish monitor" item, `TankContextMenu.tsx`) — a live table plus top-down
-// and front maps of every fish's steering/animation state, for tuning
+// Tank tuning rig (opened via the tank's right-click menu, always-available
+// "Tank monitor" item, `TankContextMenu.tsx`) — a live table plus top-down
+// and front maps of every critter's steering/animation state, for tuning
 // wander/rest/pause behaviour against real numbers instead of guessing from
 // screen recordings, and the home for the manual fish pilot's own "take
-// over this one" control — you're already looking at each fish's live row
-// here, so arming pilot mode belongs next to it rather than in a different
-// window.
+// over this one" control (fish-only — a snail has no equivalent manual
+// mode) — you're already looking at each fish's live row here, so arming
+// pilot mode belongs next to it rather than in a different window.
+//
+// Fish publish one throttled batch per tick (`SteeringSystem.tsx`, which
+// owns the whole steering registry); each snail publishes its own single-
+// entry snapshot independently (`Snail.tsx`, which deliberately has no
+// equivalent shared registry — see `docs/architecture/3d-engine.md` §4.4).
+// Both land on the same `critterDebug.ts` bridge, so this window merges
+// whatever entries arrive into one map keyed by critter id and evicts an id
+// that stops refreshing, rather than replacing its whole table on every
+// single publish (which would otherwise flicker between "all fish" and
+// "one snail" depending on whoever published last).
+//
 // Not part of SPEC.md/SCREENS.md — supplementary tooling rather than a core
 // product screen, but not gated behind a dev build either: it's
 // self-contained (opening it is what turns telemetry publishing on, and
@@ -27,12 +38,16 @@ import { DialogShell } from '../../components/DialogShell';
 import {
   isFishEyeEnabled,
   setDayNightOverride,
-  setFishMonitorEnabled,
   setPilotedFishId,
+  setTankMonitorEnabled,
   useDayNightOverride,
   usePilotedFishId,
 } from '../../domain/devSettings';
-import { onFishDebug, type FishDebugEntry, type FishDebugSnapshot } from '../../domain/fishDebug';
+import {
+  onCritterDebug,
+  type CritterDebugEntry,
+  DEBUG_PUBLISH_INTERVAL_SEC,
+} from '../../domain/critterDebug';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import { usePilotKeyForwarding } from '../../domain/usePilotKeyForwarding';
 import { openSatelliteWindow } from '../../domain/windows';
@@ -43,20 +58,34 @@ import { TANK_INNER_BOUNDS } from '../../render/physics/coordinates';
 const MAP_SIZE = 160;
 const MAP_MARGIN = 8;
 
+/** A row that hasn't refreshed within this many publish intervals is
+ * assumed to belong to a critter that despawned (or whose publisher
+ * stopped) rather than one just between two throttled emits. */
+const ENTRY_STALE_MS = DEBUG_PUBLISH_INTERVAL_SEC * 1000 * 5;
+
 const MODE_COLOUR: Record<string, string> = {
+  // Fish (`FishMotionMode`).
   active: '#3fb950',
   paused: '#d29922',
   settling: '#58a6ff',
   settled: '#8b949e',
   chasing: '#f85149',
+  // Snail (`SnailMotionMode`).
+  crawling: '#3fb950',
+  pausing: '#d29922',
+  sealed: '#8b949e',
+  waking: '#58a6ff',
+  startled: '#f85149',
+  detached: '#bc8cff',
 };
 
-/** Maps a fish's position on some horizontal/vertical world-axis pair onto
- * an SVG viewBox — `hBound`/`vBound` are half-extents (`TANK_INNER_BOUNDS`),
- * so this is a straight linear remap centred on the map's own centre.
- * Higher world values always map to a smaller SVG Y (i.e. "up" on the map,
- * whether that axis is world +Z or world +Y) — this just needs to be a
- * consistent, readable layout, not a physically exact projection. */
+/** Maps a critter's position on some horizontal/vertical world-axis pair
+ * onto an SVG viewBox — `hBound`/`vBound` are half-extents
+ * (`TANK_INNER_BOUNDS`), so this is a straight linear remap centred on the
+ * map's own centre. Higher world values always map to a smaller SVG Y
+ * (i.e. "up" on the map, whether that axis is world +Z or world +Y) — this
+ * just needs to be a consistent, readable layout, not a physically exact
+ * projection. */
 function toMapCoords(h: number, v: number, hBound: number, vBound: number): [number, number] {
   const usable = MAP_SIZE - MAP_MARGIN * 2;
   const mapH = MAP_MARGIN + usable / 2 + (h / hBound) * (usable / 2);
@@ -64,13 +93,13 @@ function toMapCoords(h: number, v: number, hBound: number, vBound: number): [num
   return [mapH, mapV];
 }
 
-interface FishMapProps {
+interface CritterMapProps {
   title: string;
-  entries: FishDebugEntry[];
+  entries: CritterDebugEntry[];
   /** Extracts this map's horizontal/vertical world coordinates from a
-   * fish's `pos`, and its own heading-tick direction (also
+   * critter's `pos`, and its own heading-tick direction (also
    * horizontal/vertical on this same plane) from its yaw/pitch. */
-  project: (f: FishDebugEntry) => { h: number; v: number; tickH: number; tickV: number };
+  project: (f: CritterDebugEntry) => { h: number; v: number; tickH: number; tickV: number };
   hBound: number;
   vBound: number;
   /** Draws a dashed highlight ring around the piloted fish's dot, if any —
@@ -78,7 +107,7 @@ interface FishMapProps {
   pilotedFishId?: number | null;
 }
 
-function FishMap({ title, entries, project, hBound, vBound, pilotedFishId }: FishMapProps) {
+function CritterMap({ title, entries, project, hBound, vBound, pilotedFishId }: CritterMapProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ opacity: 0.6, fontSize: 11 }}>{title}</div>
@@ -139,8 +168,14 @@ function FishMap({ title, entries, project, hBound, vBound, pilotedFishId }: Fis
   );
 }
 
-export function FishMonitorWindow() {
-  const [snapshot, setSnapshot] = useState<FishDebugSnapshot | null>(null);
+export function TankMonitorWindow() {
+  const entriesRef = useRef<Map<number, { entry: CritterDebugEntry; receivedAt: number }>>(
+    new Map(),
+  );
+  const [snapshotMeta, setSnapshotMeta] = useState<{
+    simSeconds: number;
+    isNight: boolean;
+  } | null>(null);
   const dayNightOverride = useDayNightOverride();
   const pilotedFishId = usePilotedFishId();
   const critters = useJarStore((s) => s.critters);
@@ -149,20 +184,34 @@ export function FishMonitorWindow() {
 
   useEffect(() => {
     void ensureJarClientStarted();
-    // Tells the tank window's `SteeringSystem` to start (and, on unmount,
-    // stop) publishing — no telemetry cost while this window isn't open.
-    setFishMonitorEnabled(true);
+    // Tells the tank window's publishers (`SteeringSystem.tsx` for fish,
+    // `Snail.tsx` for each snail) to start (and, on unmount, stop)
+    // publishing — no telemetry cost while this window isn't open.
+    setTankMonitorEnabled(true);
     let unlisten: (() => void) | undefined;
-    void onFishDebug((s) => {
-      setSnapshot(s);
-      receivedAtRef.current = performance.now();
+    void onCritterDebug((s) => {
+      const now = performance.now();
+      for (const entry of s.entries) {
+        entriesRef.current.set(entry.id, { entry, receivedAt: now });
+      }
+      setSnapshotMeta({ simSeconds: s.simSeconds, isNight: s.isNight });
+      receivedAtRef.current = now;
     }).then((fn) => {
       unlisten = fn;
     });
     // A lightweight re-render tick so the "Nms ago" staleness readout below
     // updates even between snapshots (e.g. once the tank window closes and
-    // publishing stops entirely).
-    const tick = setInterval(() => forceRerender((n) => n + 1), 500);
+    // publishing stops entirely) — and, since fish and snails publish
+    // independently rather than as one combined snapshot, this is also
+    // where a row whose critter despawned (or whose publisher stopped) gets
+    // pruned from the merged map.
+    const tick = setInterval(() => {
+      const now = performance.now();
+      for (const [id, { receivedAt }] of entriesRef.current) {
+        if (now - receivedAt > ENTRY_STALE_MS) entriesRef.current.delete(id);
+      }
+      forceRerender((n) => n + 1);
+    }, 500);
     // Piloting a fish is a running override this window can arm — releasing
     // it here means a fish never keeps ignoring its own AI just because the
     // window that armed it happened to close. *Unless* the fish-eye window
@@ -180,7 +229,7 @@ export function FishMonitorWindow() {
     // choice made from that other surface the moment this window happened
     // to be opened and closed for something unrelated.
     const resetOnClose = () => {
-      setFishMonitorEnabled(false);
+      setTankMonitorEnabled(false);
       if (!isFishEyeEnabled()) {
         setPilotedFishId(null);
       }
@@ -207,18 +256,21 @@ export function FishMonitorWindow() {
     };
   }, []);
 
+  const entries = Array.from(entriesRef.current.values(), (v) => v.entry);
+
   // Releases the pilot the moment its fish is no longer in a fresh
   // snapshot — passed or despawned mid-drive, most likely — rather than
   // leaving `pilotedFishId` pointed at a fish that no longer exists.
-  // Guarded on `snapshot` actually being present so a momentarily-stopped
-  // publisher (e.g. the tank window itself closing) can't be mistaken for
-  // "the fish is gone" and release a pilot that's still perfectly valid.
+  // Guarded on `snapshotMeta` actually being present (at least one publish
+  // received) so a fish piloted from Fish-eye before this window opened
+  // isn't released on mount, when `entries` is still empty simply because
+  // no snapshot has arrived yet — not because the fish is actually gone.
   useEffect(() => {
-    if (pilotedFishId === null || !snapshot) return;
-    if (!snapshot.entries.some((f) => f.id === pilotedFishId)) {
+    if (pilotedFishId === null || !snapshotMeta) return;
+    if (!entries.some((f) => f.id === pilotedFishId)) {
       setPilotedFishId(null);
     }
-  }, [snapshot, pilotedFishId]);
+  }, [entries, pilotedFishId, snapshotMeta]);
 
   // While a fish is piloted, this window's own keyboard drives it too —
   // shared with the fish-eye window (`domain/usePilotKeyForwarding.ts`),
@@ -226,10 +278,10 @@ export function FishMonitorWindow() {
   // window holds, not the entire cross-window pressed-key set.
   usePilotKeyForwarding(pilotedFishId !== null);
 
-  const staleMs = snapshot ? performance.now() - receivedAtRef.current : null;
+  const staleMs = snapshotMeta ? performance.now() - receivedAtRef.current : null;
 
   return (
-    <DialogShell windowTitle="Fish monitor" title="Fish monitor">
+    <DialogShell windowTitle="Tank monitor" title="Tank monitor">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, font: '12px monospace' }}>
         <div
           style={{
@@ -259,21 +311,21 @@ export function FishMonitorWindow() {
           ))}
         </div>
 
-        {!snapshot && <div>Waiting for the tank window to publish…</div>}
+        {!snapshotMeta && <div>Waiting for the tank window to publish…</div>}
 
-        {snapshot && (
+        {snapshotMeta && (
           <>
             <div style={{ color: staleMs !== null && staleMs > 2000 ? '#d29922' : undefined }}>
-              {snapshot.entries.length} fish · sim {Math.round(snapshot.simSeconds)}s ·{' '}
-              {snapshot.isNight ? 'night' : 'day'}
+              {entries.length} critters · sim {Math.round(snapshotMeta.simSeconds)}s ·{' '}
+              {snapshotMeta.isNight ? 'night' : 'day'}
               {staleMs !== null && staleMs > 2000 ? ` · stale (${Math.round(staleMs)}ms)` : ''}
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <FishMap
+                <CritterMap
                   title="Top-down (X/Z)"
-                  entries={snapshot.entries}
+                  entries={entries}
                   hBound={TANK_INNER_BOUNDS.x}
                   vBound={TANK_INNER_BOUNDS.z}
                   pilotedFishId={pilotedFishId}
@@ -287,9 +339,9 @@ export function FishMonitorWindow() {
                     };
                   }}
                 />
-                <FishMap
+                <CritterMap
                   title="Front (X/Y)"
-                  entries={snapshot.entries}
+                  entries={entries}
                   hBound={TANK_INNER_BOUNDS.x}
                   vBound={TANK_INNER_BOUNDS.y}
                   pilotedFishId={pilotedFishId}
@@ -315,13 +367,20 @@ export function FishMonitorWindow() {
                       <th>mode</th>
                       <th>rest</th>
                       <th>speed</th>
-                      <th title="Peak turn rate over the last ~1s, not instantaneous">turn (pk)</th>
+                      <th title="Peak turn rate over the last ~1s, not instantaneous — fish-only, blank for a snail">
+                        turn (pk)
+                      </th>
                       <th />
                     </tr>
                   </thead>
                   <tbody>
-                    {snapshot.entries.map((f) => {
+                    {entries.map((f) => {
                       const isPiloted = f.id === pilotedFishId;
+                      // Piloting is fish-only — a snail has no manual
+                      // control mode, so its row gets no Pilot/Watch
+                      // buttons. Defaults to showing them (matching prior
+                      // behaviour) if the critter isn't in the store yet.
+                      const isSnail = critters[f.id]?.species === 'Snail';
                       return (
                         <tr
                           key={f.id}
@@ -342,26 +401,30 @@ export function FishMonitorWindow() {
                           </td>
                           <td>{critters[f.id]?.name ?? '—'}</td>
                           <td style={{ color: MODE_COLOUR[f.mode] }}>{f.mode}</td>
-                          <td>{f.isResting ? '●' : ''}</td>
+                          <td>{f.isResting === undefined ? '' : f.isResting ? '●' : ''}</td>
                           <td>{f.speed.toFixed(2)}</td>
-                          <td>{f.turnRate.toFixed(1)}</td>
+                          <td>{f.turnRate === undefined ? 'n/a' : f.turnRate.toFixed(1)}</td>
                           <td style={{ display: 'flex', gap: 4 }}>
-                            <button
-                              style={{ font: 'inherit' }}
-                              onClick={() => setPilotedFishId(isPiloted ? null : f.id)}
-                            >
-                              {isPiloted ? 'Release' : 'Pilot'}
-                            </button>
-                            <button
-                              style={{ font: 'inherit' }}
-                              title="Pilot this fish and open the fish-eye window watching it"
-                              onClick={() => {
-                                setPilotedFishId(f.id);
-                                void openSatelliteWindow('fish-eye');
-                              }}
-                            >
-                              Watch
-                            </button>
+                            {!isSnail && (
+                              <>
+                                <button
+                                  style={{ font: 'inherit' }}
+                                  onClick={() => setPilotedFishId(isPiloted ? null : f.id)}
+                                >
+                                  {isPiloted ? 'Release' : 'Pilot'}
+                                </button>
+                                <button
+                                  style={{ font: 'inherit' }}
+                                  title="Pilot this fish and open the fish-eye window watching it"
+                                  onClick={() => {
+                                    setPilotedFishId(f.id);
+                                    void openSatelliteWindow('fish-eye');
+                                  }}
+                                >
+                                  Watch
+                                </button>
+                              </>
+                            )}
                           </td>
                         </tr>
                       );

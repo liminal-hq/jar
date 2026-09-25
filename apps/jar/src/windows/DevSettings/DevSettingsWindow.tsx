@@ -137,8 +137,8 @@ export function DevSettingsWindow() {
     // window's own local state — leaving either on after close would keep
     // that running indefinitely, including across app restarts
     // (`localStorage`-backed). Resetting here is what keeps this window
-    // self-contained, the same reason the Fish monitor window resets its
-    // own day/night override on close (`FishMonitorWindow.tsx`).
+    // self-contained, the same reason the Tank monitor window resets its
+    // own day/night override on close (`TankMonitorWindow.tsx`).
     const resetOnClose = () => {
       setMouseOverlayEnabled(false);
       setFishPositionOverlayEnabled(false);

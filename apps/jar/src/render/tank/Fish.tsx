@@ -172,7 +172,7 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // Authoritative — pushed by the sim core on every `TickUpdate`
   // (`jarClient.ts`'s `isNight` store field) rather than re-derived here.
   const simNight = useJarStore((s) => s.isNight);
-  // Dev-only override (`windows/FishMonitor/FishMonitorWindow.tsx`) to pin
+  // Dev-only override (`windows/TankMonitor/TankMonitorWindow.tsx`) to pin
   // day, night, or "always active" on demand rather than wait out a real
   // day/night cycle — `'auto'` (the real jar clock) in production builds,
   // where the toggle can't be set.

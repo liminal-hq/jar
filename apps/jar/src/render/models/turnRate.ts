@@ -16,8 +16,8 @@ import * as THREE from 'three';
  * still nominally "active") — and the moment right after it leaves rest,
  * ramping back up through the same low-speed band — fed that noise straight
  * into `FishModel.tsx`'s turn-boosted tail amplitude: the tail visibly
- * thrashing right around a pause or a night settle/wake, which the fish
- * monitor window (`windows/FishMonitor/FishMonitorWindow.tsx`) and screen
+ * thrashing right around a pause or a night settle/wake, which the Tank
+ * monitor window (`windows/TankMonitor/TankMonitorWindow.tsx`) and screen
  * recordings both caught as fish "stuttering." */
 export const MIN_TURN_RATE_SPEED = 0.12;
 

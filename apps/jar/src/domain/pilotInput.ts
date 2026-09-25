@@ -1,11 +1,11 @@
-// Cross-window key-event bridge for the manual fish pilot — the Fish
-// monitor window (`windows/FishMonitor/FishMonitorWindow.tsx`) is where the
+// Cross-window key-event bridge for the manual fish pilot — the Tank
+// monitor window (`windows/TankMonitor/TankMonitorWindow.tsx`) is where the
 // pilot control lives, but the tank window is where the Yuka vehicles
 // actually run, so key transitions captured in the monitor get forwarded
 // here for `PilotCaptureBridge.tsx` to fold into the shared pilot input
 // state (`render/steering/pilotInputState.ts`). Discrete key transitions
 // only — a few events per second while actively driving, nothing like the
-// 5Hz/30Hz telemetry channels (`fishDebug.ts`) — so this is cheap on the
+// 5Hz/30Hz telemetry channels (`critterDebug.ts`) — so this is cheap on the
 // Tauri event bridge even though it crosses windows.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris

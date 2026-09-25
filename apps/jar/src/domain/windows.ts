@@ -19,7 +19,7 @@ interface SatelliteWindowSpec {
 }
 
 const SPECS: Record<
-  'critter-card' | 'family-tree' | 'setup' | 'dev-settings' | 'fish-monitor' | 'fish-eye',
+  'critter-card' | 'family-tree' | 'setup' | 'dev-settings' | 'tank-monitor' | 'fish-eye',
   SatelliteWindowSpec
 > = {
   // Tall enough for the 3D preview panel (a square that scales with width,
@@ -39,12 +39,12 @@ const SPECS: Record<
   'dev-settings': { label: 'dev-settings', title: 'Dev settings', width: 340, height: 480 },
   // Same always-available tooling as `dev-settings` — wide enough for the
   // live table (id/name/mode/rest/speed/turn-peak/pilot+watch buttons) plus
-  // the top-down and front tank maps side by side (`FishMonitorWindow.tsx`),
+  // the top-down and front tank maps side by side (`TankMonitorWindow.tsx`),
   // without the name or actions column clipping or wrapping. Tall enough
   // for the full pilot status bar below the table (piloting line, key
   // legend, "keys work in this window or the tank" hint) without scrolling
   // once a fish is actually piloted.
-  'fish-monitor': { label: 'fish-monitor', title: 'Fish monitor', width: 760, height: 580 },
+  'tank-monitor': { label: 'tank-monitor', title: 'Tank monitor', width: 760, height: 580 },
   // First-person "fish eye" view from a piloted fish's own perspective —
   // its own small 3D scene (`FishEyeScene.tsx`), so a modest window is
   // enough; wide enough that a 4:3-ish view doesn't feel cramped, tall
