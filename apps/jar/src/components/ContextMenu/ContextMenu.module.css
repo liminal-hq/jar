@@ -17,6 +17,12 @@
    * no-op (no scrollbar) whenever the menu already fits. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
+  /* Without this, a classic (non-overlay) scrollbar appearing once the menu
+   * actually clips eats into the content box (`.contextMenu` has no fixed
+   * `width`, only min/max, so it isn't reserved for ahead of time) and can
+   * make a label that fit before now hit `.menuItemLabel`'s ellipsis a
+   * little earlier than it otherwise would. */
+  scrollbar-gutter: stable;
   z-index: 10000;
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
