@@ -237,6 +237,12 @@ const MOUTH_CYCLE_FREQUENCY = 0.9;
 const MOUTH_OPEN_AMPLITUDE = 0.4; // ≈23°, inside a hand-picked ~20–25° sweet spot
 const BODY_BOB_AMPLITUDE = 0.02;
 
+/** Dorsal/tail/pectoral fins all share this same look — factored out so a
+ * future tweak can't land on two of the three literals and miss the third. */
+function createFinMaterial(colour: THREE.ColorRepresentation): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: colour, roughness: 0.6, side: THREE.DoubleSide });
+}
+
 export function FishModel({
   critter,
   vehicle,
@@ -371,46 +377,29 @@ export function FishModel({
     });
     return material;
   }, []);
+  // Shared by body/dorsal/tail below — only the tail adds its own
+  // `spaceOffsetX` on top.
+  const swimParamsBase = useMemo(
+    () => ({ onsetX: SWIM_WAVE_ONSET_X, tipCommonX: tailTipCommonX, seamU, tipGain }),
+    [tailTipCommonX, seamU, tipGain],
+  );
   const bodySwimUniforms = useMemo(
-    () =>
-      attachSwimWaveVertexShader(bodyMaterial, {
-        onsetX: SWIM_WAVE_ONSET_X,
-        tipCommonX: tailTipCommonX,
-        seamU,
-        tipGain,
-      }),
-    [bodyMaterial, tailTipCommonX, seamU, tipGain],
+    () => attachSwimWaveVertexShader(bodyMaterial, swimParamsBase),
+    [bodyMaterial, swimParamsBase],
   );
-  const dorsalMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({ color: finColour, roughness: 0.6, side: THREE.DoubleSide }),
-    [finColour],
-  );
+  const dorsalMaterial = useMemo(() => createFinMaterial(finColour), [finColour]);
   const dorsalSwimUniforms = useMemo(
-    () =>
-      attachSwimWaveVertexShader(dorsalMaterial, {
-        onsetX: SWIM_WAVE_ONSET_X,
-        tipCommonX: tailTipCommonX,
-        seamU,
-        tipGain,
-      }),
-    [dorsalMaterial, tailTipCommonX, seamU, tipGain],
+    () => attachSwimWaveVertexShader(dorsalMaterial, swimParamsBase),
+    [dorsalMaterial, swimParamsBase],
   );
-  const tailMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({ color: finColour, roughness: 0.6, side: THREE.DoubleSide }),
-    [finColour],
-  );
+  const tailMaterial = useMemo(() => createFinMaterial(finColour), [finColour]);
   const tailSwimUniforms = useMemo(
     () =>
       attachSwimWaveVertexShader(tailMaterial, {
-        onsetX: SWIM_WAVE_ONSET_X,
-        tipCommonX: tailTipCommonX,
-        seamU,
-        tipGain,
+        ...swimParamsBase,
         spaceOffsetX: TAIL_PIVOT.x,
       }),
-    [tailMaterial, tailTipCommonX, seamU, tipGain],
+    [tailMaterial, swimParamsBase],
   );
 
   // Each spot's own (u, env) at its fixed rest x — spots don't move
@@ -426,11 +415,7 @@ export function FishModel({
     [tailTipCommonX],
   );
 
-  const pectoralMaterial = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({ color: finColour, roughness: 0.6, side: THREE.DoubleSide }),
-    [finColour],
-  );
+  const pectoralMaterial = useMemo(() => createFinMaterial(finColour), [finColour]);
   const pectoralPivot = useMemo(() => {
     const pivot = wrapInPivot(
       SHARED_GEOMETRY.pectoral,

@@ -79,6 +79,20 @@ function glslFloat(n: number): string {
   return /[.e]/i.test(s) ? s : `${s}.0`;
 }
 
+/** Inserts `injected` right after `marker` in `source` — throws instead of
+ * silently no-op'ing if `marker` isn't found, since a plain `.replace()`
+ * would otherwise leave a fish rendering at its rigid rest pose with no
+ * error if a future three.js version renames/reorders one of the
+ * `meshphysical` shader chunk includes this hooks into. */
+function injectAfter(source: string, marker: string, injected: string): string {
+  if (!source.includes(marker)) {
+    throw new Error(
+      `swim wave shader: expected shader chunk "${marker}" not found — three.js version mismatch?`,
+    );
+  }
+  return source.replace(marker, `${marker}\n${injected}`);
+}
+
 /**
  * Attaches the swim-wave vertex displacement to a `MeshStandardMaterial`
  * via `onBeforeCompile`, and returns the frame uniforms to drive it with
@@ -185,10 +199,15 @@ uniform float uSwimBend;
 
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${constants}`)
-      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>\n${normalInjection}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${positionInjection}`);
+    shader.vertexShader = injectAfter(
+      injectAfter(
+        injectAfter(shader.vertexShader, '#include <common>', constants),
+        '#include <beginnormal_vertex>',
+        normalInjection,
+      ),
+      '#include <begin_vertex>',
+      positionInjection,
+    );
   };
   // Different fish-parts bake different literal constants into otherwise
   // textually-identical `onBeforeCompile` closures — three's own default
