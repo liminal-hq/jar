@@ -6,10 +6,16 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     environment: 'jsdom',
+    // Vitest's own default excludes (node_modules, .git, dist, etc.) don't
+    // know about `.claude/worktrees/` — a nested git worktree checked out
+    // there for agent work has its own `node_modules` symlinks that don't
+    // resolve from this root, so its test files fail to import rather than
+    // being skipped. Extend, don't replace, the defaults.
+    exclude: [...configDefaults.exclude, '**/.claude/**'],
   },
 });
