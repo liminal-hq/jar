@@ -37,6 +37,7 @@ const MENU_IDLE_BACKSTOP_MS = 8000;
 
 export function TankWindow() {
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [menuOpenedViaKeyboard, setMenuOpenedViaKeyboard] = useState(false);
   const mouseOverlayEnabled = useMouseOverlayEnabled();
   const settings = useJarStore((s) => s.settings);
   const critters = useJarStore((s) => s.critters);
@@ -113,6 +114,11 @@ export function TankWindow() {
   // so there's no click/drag ambiguity to resolve here.
   const handleTankContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault();
+    // A real right-click reports button 2; a keyboard-triggered `contextmenu`
+    // (Shift+F10 / the Menu key) reports button 0 on every engine Tauri
+    // targets (Chromium, WebKit) — used to decide whether to pre-highlight
+    // the first item (see `ContextMenu.tsx`'s `autoFocusFirstItem`).
+    setMenuOpenedViaKeyboard(e.button !== 2);
     setMenuPosition({ x: e.clientX, y: e.clientY });
   };
 
@@ -232,7 +238,11 @@ export function TankWindow() {
       </div>
 
       {menuPosition && (
-        <TankContextMenu position={menuPosition} onClose={() => setMenuPosition(null)} />
+        <TankContextMenu
+          position={menuPosition}
+          onClose={() => setMenuPosition(null)}
+          autoFocusFirstItem={menuOpenedViaKeyboard}
+        />
       )}
     </div>
   );

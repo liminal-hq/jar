@@ -67,6 +67,7 @@ export function TitleBar({ title }: TitleBarProps) {
   const [isResizable, setIsResizable] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition>({ x: 0, y: 0 });
+  const [menuOpenedViaKeyboard, setMenuOpenedViaKeyboard] = useState(false);
 
   const appWindow = getCurrentWindow();
 
@@ -144,6 +145,11 @@ export function TitleBar({ title }: TitleBarProps) {
     } catch (err) {
       console.error(err);
     }
+    // A real right-click reports button 2; a keyboard-triggered `contextmenu`
+    // (Shift+F10 / the Menu key) reports button 0 on every engine Tauri
+    // targets (Chromium, WebKit) — used to decide whether to pre-highlight
+    // the first item (see `ContextMenu.tsx`'s `autoFocusFirstItem`).
+    setMenuOpenedViaKeyboard(e.button !== 2);
     setMenuPosition({ x: e.clientX, y: e.clientY });
     setMenuOpen(true);
   };
@@ -322,6 +328,7 @@ export function TitleBar({ title }: TitleBarProps) {
           position={menuPosition}
           onClose={() => setMenuOpen(false)}
           onItemClick={handleMenuAction}
+          autoFocusFirstItem={menuOpenedViaKeyboard}
         />
       )}
     </>

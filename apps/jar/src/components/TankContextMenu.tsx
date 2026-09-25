@@ -51,9 +51,10 @@ async function addCritter(species: JarSettings['mode']): Promise<void> {
 interface TankContextMenuProps {
   position: MenuPosition;
   onClose: () => void;
+  autoFocusFirstItem: boolean;
 }
 
-export function TankContextMenu({ position, onClose }: TankContextMenuProps) {
+export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankContextMenuProps) {
   const settings = useJarStore((s) => s.settings);
 
   const model = buildTankMenuModel(settings, {
@@ -82,6 +83,7 @@ export function TankContextMenu({ position, onClose }: TankContextMenuProps) {
       position={position}
       onClose={onClose}
       onItemClick={(_id, action) => action?.()}
+      autoFocusFirstItem={autoFocusFirstItem}
     />
   );
 }

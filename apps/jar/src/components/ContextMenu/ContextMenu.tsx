@@ -4,28 +4,30 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 import styles from './ContextMenu.module.css';
 import { MenuSection } from './MenuSection';
-import type { MenuModel, MenuPosition, MenuItem as MenuItemType, MenuSeparator } from './types';
+import { isSeparator, type MenuModel, type MenuPosition } from './types';
 
 interface ContextMenuProps {
   model: MenuModel;
   position: MenuPosition;
   onClose: () => void;
   onItemClick: (itemId: string, action?: () => void) => void;
-}
-
-function isSeparator(item: MenuItemType | MenuSeparator): item is MenuSeparator {
-  return 'type' in item && item.type === 'separator';
+  /** Whether to pre-focus (and visually highlight) the first item as soon
+   * as the menu opens. Only true for a keyboard-triggered open (Shift+F10/
+   * Menu key) — matches native OS context menus (e.g. Windows Explorer),
+   * which pre-select the first item for a keyboard-triggered open but show
+   * no selection at all for a real right-click. */
+  autoFocusFirstItem: boolean;
 }
 
 /** Ids of every enabled, non-separator item, in the same order they render
- * — the order arrow keys move through. Recomputed each render (cheap, and
- * needs to reflect e.g. a checkbox's own re-render), but only actually used
- * by `handleKeyDown`, so a stale value between renders is never observable. */
+ * — the order arrow keys move through. Both call sites construct a fresh
+ * `model` object on every render, so this is cheap on purpose rather than
+ * memoized — memoizing on `[model]` would never actually hit. */
 function navigableIds(model: MenuModel): string[] {
   const ids: string[] = [];
   for (const section of model.sections) {
@@ -37,10 +39,16 @@ function navigableIds(model: MenuModel): string[] {
   return ids;
 }
 
-export function ContextMenu({ model, position, onClose, onItemClick }: ContextMenuProps) {
+export function ContextMenu({
+  model,
+  position,
+  onClose,
+  onItemClick,
+  autoFocusFirstItem,
+}: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const ids = useMemo(() => navigableIds(model), [model]);
+  const ids = navigableIds(model);
 
   // Position the menu and clamp it to the viewport.
   useEffect(() => {
@@ -84,19 +92,41 @@ export function ContextMenu({ model, position, onClose, onItemClick }: ContextMe
     return () => window.removeEventListener('blur', onClose);
   }, [onClose]);
 
-  // Focus the first item as soon as the menu opens, so arrow keys work
-  // immediately without first needing a mouse hover. Deliberately mount-only
-  // (empty deps) — re-running this on every model change would steal focus
-  // back to the first item whenever e.g. a checkbox re-renders mid-navigation.
+  // For a keyboard-triggered open, pre-focus (and visually highlight) the
+  // first item so arrow keys work immediately. For a real right-click,
+  // focus the menu's own container instead — invisible (nothing about the
+  // container has a focus style), but still enough to catch the first
+  // arrow-key press, since `handleKeyDown` below already treats "nothing
+  // in the list is focused yet" as index -1 and moves to the first/last
+  // item accordingly. Deliberately mount-only (empty deps) — re-running
+  // this on every model change would steal focus back whenever e.g. a
+  // checkbox re-renders mid-navigation.
   useEffect(() => {
-    const firstId = navigableIds(model)[0];
-    if (firstId) itemRefs.current.get(firstId)?.focus();
+    if (autoFocusFirstItem) {
+      const firstId = navigableIds(model)[0];
+      const el = firstId ? itemRefs.current.get(firstId) : undefined;
+      if (el) {
+        el.focus();
+        return;
+      }
+    }
+    menuRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function registerItemRef(id: string, el: HTMLButtonElement | null) {
     if (el) itemRefs.current.set(id, el);
     else itemRefs.current.delete(id);
+  }
+
+  function focusItem(id: string) {
+    const el = itemRefs.current.get(id);
+    el?.focus();
+    // Keeps the newly-focused item visible once the overflow-scrolling menu
+    // (ContextMenu.module.css's max-height/overflow-y) is actually
+    // scrolled — relying on each engine's default focus-follows-scroll
+    // alone is one less cross-engine assumption to make.
+    el?.scrollIntoView({ block: 'nearest' });
   }
 
   function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
@@ -120,7 +150,7 @@ export function ContextMenu({ model, position, onClose, onItemClick }: ContextMe
         currentIndex === -1 ? ids.length - 1 : (currentIndex - 1 + ids.length) % ids.length;
 
     const nextId = ids[nextIndex];
-    if (nextId) itemRefs.current.get(nextId)?.focus();
+    if (nextId) focusItem(nextId);
   }
 
   function handleItemClick(itemId: string, action?: () => void) {
@@ -129,7 +159,15 @@ export function ContextMenu({ model, position, onClose, onItemClick }: ContextMe
   }
 
   return createPortal(
-    <div ref={menuRef} className={styles.contextMenu} role="menu" onKeyDown={handleKeyDown}>
+    <div
+      ref={menuRef}
+      className={styles.contextMenu}
+      role="menu"
+      // Not in the natural tab order (-1), but still a valid target for the
+      // imperative `.focus()` call above, on a real right-click open.
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+    >
       {model.sections.map((section, idx) => (
         <MenuSection
           key={idx}
