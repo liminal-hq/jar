@@ -33,7 +33,7 @@ Net effect: W1's tank interior becomes a `@react-three/fiber` `<Canvas>` sitting
 <Canvas
   gl={{
     alpha: true,
-    antialias: false,
+    antialias: true,
     premultipliedAlpha: false,
     powerPreference: 'low-power', // this is a background desktop toy, not a game
     preserveDrawingBuffer: false,
@@ -46,7 +46,7 @@ Net effect: W1's tank interior becomes a `@react-three/fiber` `<Canvas>` sitting
 />
 ```
 
-`antialias`/`preserveDrawingBuffer` are both off (issue #94's webview-tuning pass — see that issue for the measurement this traded off against a native renderer): `antialias: true` was continuous MSAA cost sitting right next to a `powerPreference: 'low-power'` hint asking the opposite; checked live, the plain-shape/flat-material tank reads acceptably without it, and a cheaper post-process AA pass (the `postprocessing`/`@react-three/postprocessing` dependency already in this app for `CrtEffect.tsx` does offer SMAA/FXAA) wasn't judged worth the added complexity for how mild the aliasing is. `preserveDrawingBuffer` isn't part of the transparency setup above and doesn't need to be permanently on either — it existed only so `canvas.toBlob()`, called from the Screenshot menu well after a frame's already been presented, still read the last-rendered frame instead of a cleared one; `canvasCapture.ts`'s `captureTankPng` instead reads the canvas via the synchronous `toDataURL()` on the render loop's own very next `requestAnimationFrame` tick, before the browser has any chance to clear it — same underlying technique, without needing the buffer retained on every single frame.
+`preserveDrawingBuffer` is off (issue #94's webview-tuning pass): it isn't part of the transparency setup above and doesn't need to be permanently on — it existed only so `canvas.toBlob()`, called from the Screenshot menu well after a frame's already been presented, still read the last-rendered frame instead of a cleared one; `canvasCapture.ts`'s `captureTankPng` instead reads the canvas via the synchronous `toDataURL()` on the render loop's own very next `requestAnimationFrame` tick, before the browser has any chance to clear it — same underlying technique, without needing the buffer retained on every single frame. `antialias` stays `true`: it's real, continuous GPU cost sitting next to a `powerPreference: 'low-power'` hint asking the opposite, but disabling MSAA trades an always-visible quality regression for an unconfirmed CPU win — the "checked live" claim an earlier pass made for this couldn't actually be verified. A cheaper post-process AA pass (the `postprocessing`/`@react-three/postprocessing` dependency already in this app for `CrtEffect.tsx` does offer SMAA/FXAA) is worth trying before disabling AA outright, if the other fixes here aren't enough on their own.
 
 `THREE.ColorManagement.enabled = false` before the `Canvas` mounts, and avoid R3F's `legacy` prop unless a specific color-management symptom (washed-out or oversaturated hues) forces it — try without first, since newer R3F/three versions have largely fixed the transparency-vs-color-space conflict that made `legacy={true}` necessary in older stacks. Verify visually on both target platforms before assuming either setting is right.
 

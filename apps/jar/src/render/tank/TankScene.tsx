@@ -50,19 +50,20 @@ export function TankScene() {
       shadows
       gl={{
         alpha: true,
-        // No MSAA (issue #94): `antialias: true` is continuous, real GPU
-        // cost, and was already fighting `powerPreference: 'low-power'`
-        // right below it — a contradictory pairing (request the cheapest
-        // GPU tier, then ask it to do full-scene multisampling every
-        // frame). This canvas is transparent over themed HTML/CSS chrome
-        // at a small, fixed desktop-widget size, and reads acceptably
-        // without it on both target platforms — checked live before
-        // landing on this over a cheaper post-process AA pass (the
-        // `postprocessing`/`@react-three/postprocessing` dependency this
-        // app already carries, for `CrtEffect.tsx`, does offer SMAA/FXAA,
-        // but the plain-shape/flat-material aliasing here reads as mild
-        // enough not to earn that added complexity).
-        antialias: false,
+        // Kept on (issue #94): `antialias: true` is real, continuous GPU
+        // cost, and was flagged as a candidate to drop alongside
+        // `powerPreference: 'low-power'` — but disabling MSAA outright
+        // trades a real, always-visible quality regression (jagged edges
+        // on every frame, not just under load) for an unconfirmed CPU win,
+        // and the "checked live" claim an earlier pass made for this
+        // couldn't actually be verified (no working render output in that
+        // environment). Not worth that trade sight-unseen. If the
+        // fixes above aren't enough on their own, a cheaper post-process
+        // AA pass (the `postprocessing`/`@react-three/postprocessing`
+        // dependency this app already carries, for `CrtEffect.tsx`, does
+        // offer SMAA/FXAA) is the next thing to try before disabling AA
+        // outright.
+        antialias: true,
         premultipliedAlpha: false,
         powerPreference: 'low-power',
         // Off (issue #94): permanently retaining the drawing buffer for an
