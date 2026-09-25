@@ -698,21 +698,14 @@ export function FishModel({
 
   return (
     <group ref={rootRef} scale={scale}>
-      {/* No `castShadow` on any fish part any more (body/dorsal/gill/tail
-          here, plus `fishGeometry.ts`'s `wrapInPivot` for the pectorals/
-          mouth): `TankScene.tsx` freezes the tank's shadow map after its
-          first frame (issue #94) since the only things that used to move
-          within it — fish and swaying plant blades — no longer cast at
-          all. `receiveShadow` stays on the body so a fish swimming past the
-          castle/plants still visibly picks up their (now-static) shadow. */}
-      <mesh geometry={bodyGeometry} material={bodyMaterial} receiveShadow />
+      <mesh geometry={bodyGeometry} material={bodyMaterial} castShadow receiveShadow />
 
-      <mesh geometry={dorsalGeometry} material={dorsalMaterial} />
+      <mesh geometry={dorsalGeometry} material={dorsalMaterial} castShadow />
 
-      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]}>
+      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
-      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]}>
+      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
@@ -729,6 +722,7 @@ export function FishModel({
         geometry={tailGeometry}
         material={tailMaterial}
         position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]}
+        castShadow
       />
 
       <mesh position={[EYE.x, EYE.y, BODY_DEPTH / 2 + 3]}>
