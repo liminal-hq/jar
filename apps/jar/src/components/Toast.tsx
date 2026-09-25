@@ -1,7 +1,7 @@
 // Event toasts (W1 · Tank, SCREENS.md: "top-centre, 4 s"). Fed from two
 // sources: `domain/jarClient.ts`'s `onCritterEvent` — a `Born`/`Passed`/
-// `Added` firing is exactly the "moment in time" that hook exists for, as
-// opposed to `useJarStore`'s continuously-current state — and
+// `Added`/`Reset` firing is exactly the "moment in time" that hook exists
+// for, as opposed to `useJarStore`'s continuously-current state — and
 // `domain/toastBus.ts`'s `onToastPush`, a generic trigger for anything
 // else that wants a toast (e.g. `TankContextMenu.tsx`'s Screenshot action).
 //
@@ -52,6 +52,9 @@ export function ToastLayer() {
         }
         case 'added':
           text = `${event.critter.name} settled into the jar.`;
+          break;
+        case 'reset':
+          text = 'The jar was reset.';
           break;
       }
 

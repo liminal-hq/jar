@@ -82,6 +82,8 @@ Saved every tick to app data: full population (both species, including the passe
 
 Window position/size/always-on-top persistence is handled by the official `tauri-plugin-window-state` plugin, not the simulation core — see `docs/architecture/rust-core.md` §5.4. Everything else in this list is a simulation-core snapshot, autosaved periodically per that document's §5.3.
 
+Setup offers two ways back to a clean slate: **Restore default settings** resets every item in this list except the population and sim clock, applied immediately with no confirmation; **Reset jar** additionally wipes the full population (living and passed) and the sim clock, seeded fresh as if the jar were just created — permanent, so it requires a second confirming click. Both flush to disk immediately rather than waiting for the next periodic autosave.
+
 ## 7. Out of scope (for now)
 
 Feeding, tank dirt/maintenance, multiple tanks, social/sharing, iOS.

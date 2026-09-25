@@ -180,7 +180,8 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
 export type CritterEvent =
   | { kind: 'born'; child: Critter; parentA: CritterId; parentB: CritterId }
   | { kind: 'passed'; id: CritterId }
-  | { kind: 'added'; critter: Critter };
+  | { kind: 'added'; critter: Critter }
+  | { kind: 'reset' };
 
 const critterEventListeners = new Set<(event: CritterEvent) => void>();
 
@@ -198,6 +199,8 @@ function handleEvent(event: SimEvent): void {
     for (const cb of critterEventListeners) cb({ kind: 'passed', id: event.id });
   } else if (event.type === 'Added') {
     for (const cb of critterEventListeners) cb({ kind: 'added', critter: event.critter });
+  } else if (event.type === 'Reset') {
+    for (const cb of critterEventListeners) cb({ kind: 'reset' });
   }
   useJarStore.getState().applyEvent(event);
 }

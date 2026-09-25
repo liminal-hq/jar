@@ -68,7 +68,6 @@ const LIGHT_COLOUR_SWATCHES: Record<LightColour, string> = {
 export function SetupWindow() {
   const settings = useJarStore((s) => s.settings);
   const simSeconds = useJarStore((s) => s.simSeconds);
-  const critters = useJarStore((s) => s.critters);
 
   useEffect(() => {
     void ensureJarClientStarted();
@@ -84,6 +83,13 @@ export function SetupWindow() {
   // mid-decision can't leave it primed for an accidental second click much
   // later.
   const [resetJarArmed, setResetJarArmed] = useState(false);
+  // Read once when arming, not subscribed reactively — `critters` gets a
+  // new object reference on every `TickUpdate` (which keeps arriving even
+  // while this window is open, per CLAUDE.md's "the sim tick keeps running
+  // regardless of window visibility"), so a reactive subscription here
+  // would re-render this whole window every tick just to keep a count that
+  // only ever matters while the button is armed.
+  const [resetJarCritterCount, setResetJarCritterCount] = useState(0);
   const resetJarTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -93,6 +99,10 @@ export function SetupWindow() {
   }, []);
 
   function armResetJar() {
+    // reset_jar wipes living and passed critters alike (SCREENS.md) — count
+    // every record, not just the living ones, so this warning doesn't
+    // undercount what's actually about to be lost.
+    setResetJarCritterCount(Object.keys(useJarStore.getState().critters).length);
     setResetJarArmed(true);
     resetJarTimerRef.current = window.setTimeout(() => {
       setResetJarArmed(false);
@@ -108,8 +118,6 @@ export function SetupWindow() {
     setResetJarArmed(false);
     void jar.resetJar();
   }
-
-  const livingCritterCount = Object.values(critters).filter((c) => c.alive).length;
 
   return (
     <DialogShell windowTitle="Setup" title="Setup">
@@ -299,7 +307,7 @@ export function SetupWindow() {
           <button onClick={() => void jar.resetSettings()}>Restore default settings</button>
           <button onClick={handleResetJarClick}>
             {resetJarArmed
-              ? `Really reset? All ${livingCritterCount} critters will be lost`
+              ? `Really reset? All ${resetJarCritterCount} critters will be lost`
               : 'Reset jar'}
           </button>
         </div>
