@@ -159,11 +159,7 @@ export function createDorsalGeometry(): THREE.BufferGeometry {
  * pivot `Group` positioned at that same hinge — deliberately does *not*
  * translate the geometry itself, so the same shared geometry can be
  * wrapped more than once (the mirrored pectoral pair) without
- * double-translating. Only ever used for the pectoral fins/mouth
- * (`FishModel.tsx`), both of which flutter/open every frame — no
- * `castShadow` (issue #94: `TankScene.tsx` freezes the tank's shadow map
- * after its first frame, so a moving caster's shadow would freeze
- * mid-motion instead of tracking it). */
+ * double-translating. */
 export function wrapInPivot(
   geometry: THREE.BufferGeometry,
   material: THREE.Material,
@@ -171,6 +167,7 @@ export function wrapInPivot(
   hingeY: number,
 ): THREE.Group {
   const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
   const pivot = new THREE.Group();
   pivot.position.set(hingeX, hingeY, 0);
   pivot.add(mesh);

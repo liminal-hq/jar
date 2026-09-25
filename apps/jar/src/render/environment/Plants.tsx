@@ -159,15 +159,11 @@ function Blade({
   });
 
   return (
-    // No `castShadow`: this blade sways every frame (the `useFrame` above),
-    // and `TankScene.tsx` now freezes the tank's shadow map after its first
-    // frame (issue #94) — a swaying caster's shadow would otherwise freeze
-    // mid-sway instead of tracking it. `receiveShadow` stays on: the blade
-    // still visibly picks up the (now-static) castle/decor shadow.
     <mesh
       geometry={geometry}
       rotation={[0, 0, THREE.MathUtils.degToRad(rotationDeg)]}
       scale={scale * DECOR_SVG_SCALE}
+      castShadow
       receiveShadow
       raycast={() => null}
     >

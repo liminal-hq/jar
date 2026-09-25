@@ -47,6 +47,15 @@ export function TankScene() {
     <Canvas
       frameloop={frameloop}
       camera={{ fov: 38, position: [0, 2, 9] }}
+      // Shadows recompute every frame (three.js's default `shadowMap.autoUpdate`)
+      // rather than the one-shot-then-freeze optimization PR #95 tried here
+      // (issue #94): with fish and swaying plants back to casting shadows —
+      // see `FishModel.tsx`/`fishGeometry.ts`/`Plants.tsx` — a frozen shadow
+      // map can't track a moving caster. Reintroducing this continuous
+      // per-frame cost is a deliberate, accepted trade for correctness, not
+      // an oversight; a future perf pass revisiting it needs a real fix for
+      // moving casters (e.g. re-freezing only while the tank is provably
+      // static), not just flipping this back off.
       shadows
       gl={{
         alpha: true,
@@ -80,20 +89,6 @@ export function TankScene() {
         scene.environment = null;
         clampClockDelta(clock, MAX_FRAME_DELTA_SEC);
         setTankCanvasElement(gl.domElement);
-        // The tank's shadow map never needs to update after this first
-        // render (issue #94): the only shadow-casting light is the
-        // `directionalLight` below, and — now that fish
-        // (`FishModel.tsx`/`fishGeometry.ts`'s `wrapInPivot`) and swaying
-        // plant blades (`Plants.tsx`) no longer cast shadows — nothing
-        // shadow-relevant left in the scene ever moves: the castle, the
-        // rest of the decor, and the sand floor are all static geometry at
-        // static transforms. Continuously re-rendering a 1024×1024 shadow
-        // depth pass for a scene that never changes was pure waste.
-        // `needsUpdate` triggers exactly one more shadow pass on the very
-        // next render call (by which point this frame's whole scene graph
-        // has already mounted), then `autoUpdate: false` stops it there.
-        gl.shadowMap.autoUpdate = false;
-        gl.shadowMap.needsUpdate = true;
       }}
     >
       <ambientLight intensity={0.6} />
