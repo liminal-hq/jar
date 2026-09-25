@@ -4,12 +4,12 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 import styles from './ContextMenu.module.css';
 import { MenuSection } from './MenuSection';
-import type { MenuModel, MenuPosition } from './types';
+import type { MenuModel, MenuPosition, MenuItem as MenuItemType, MenuSeparator } from './types';
 
 interface ContextMenuProps {
   model: MenuModel;
@@ -18,8 +18,29 @@ interface ContextMenuProps {
   onItemClick: (itemId: string, action?: () => void) => void;
 }
 
+function isSeparator(item: MenuItemType | MenuSeparator): item is MenuSeparator {
+  return 'type' in item && item.type === 'separator';
+}
+
+/** Ids of every enabled, non-separator item, in the same order they render
+ * — the order arrow keys move through. Recomputed each render (cheap, and
+ * needs to reflect e.g. a checkbox's own re-render), but only actually used
+ * by `handleKeyDown`, so a stale value between renders is never observable. */
+function navigableIds(model: MenuModel): string[] {
+  const ids: string[] = [];
+  for (const section of model.sections) {
+    for (const item of section.items) {
+      if (isSeparator(item)) continue;
+      if (!item.disabled) ids.push(item.id);
+    }
+  }
+  return ids;
+}
+
 export function ContextMenu({ model, position, onClose, onItemClick }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const ids = useMemo(() => navigableIds(model), [model]);
 
   // Position the menu and clamp it to the viewport.
   useEffect(() => {
@@ -63,15 +84,59 @@ export function ContextMenu({ model, position, onClose, onItemClick }: ContextMe
     return () => window.removeEventListener('blur', onClose);
   }, [onClose]);
 
+  // Focus the first item as soon as the menu opens, so arrow keys work
+  // immediately without first needing a mouse hover. Deliberately mount-only
+  // (empty deps) — re-running this on every model change would steal focus
+  // back to the first item whenever e.g. a checkbox re-renders mid-navigation.
+  useEffect(() => {
+    const firstId = navigableIds(model)[0];
+    if (firstId) itemRefs.current.get(firstId)?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function registerItemRef(id: string, el: HTMLButtonElement | null) {
+    if (el) itemRefs.current.set(id, el);
+    else itemRefs.current.delete(id);
+  }
+
+  function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+
+    const active = document.activeElement;
+    const currentIndex = ids.findIndex((id) => itemRefs.current.get(id) === active);
+    let nextIndex: number;
+    if (e.key === 'Home') nextIndex = 0;
+    else if (e.key === 'End') nextIndex = ids.length - 1;
+    else if (e.key === 'ArrowDown')
+      nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % ids.length;
+    else
+      nextIndex =
+        currentIndex === -1 ? ids.length - 1 : (currentIndex - 1 + ids.length) % ids.length;
+
+    const nextId = ids[nextIndex];
+    if (nextId) itemRefs.current.get(nextId)?.focus();
+  }
+
   function handleItemClick(itemId: string, action?: () => void) {
     onItemClick(itemId, action);
     onClose();
   }
 
   return createPortal(
-    <div ref={menuRef} className={styles.contextMenu} role="menu">
+    <div ref={menuRef} className={styles.contextMenu} role="menu" onKeyDown={handleKeyDown}>
       {model.sections.map((section, idx) => (
-        <MenuSection key={idx} section={section} onItemClick={handleItemClick} />
+        <MenuSection
+          key={idx}
+          section={section}
+          onItemClick={handleItemClick}
+          registerItemRef={registerItemRef}
+        />
       ))}
     </div>,
     document.body,

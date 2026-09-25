@@ -70,12 +70,14 @@
   outline: none;
 }
 
-.menuItem:hover:not(.disabled) {
+.menuItem:hover:not(.disabled),
+.menuItem:focus-visible {
   background: var(--jar-accent, #3a8dde);
   color: var(--jar-bg, #fbfaf6);
 }
 
-.menuItem:hover:not(.disabled) .menuItemIcon {
+.menuItem:hover:not(.disabled) .menuItemIcon,
+.menuItem:focus-visible .menuItemIcon {
   color: inherit;
 }
 

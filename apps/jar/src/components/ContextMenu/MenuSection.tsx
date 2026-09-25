@@ -10,9 +10,10 @@ import type { MenuItem as MenuItemType, MenuSection as MenuSectionType } from '.
 interface MenuSectionProps {
   section: MenuSectionType;
   onItemClick: (itemId: string, action?: () => void) => void;
+  registerItemRef: (id: string, el: HTMLButtonElement | null) => void;
 }
 
-export function MenuSection({ section, onItemClick }: MenuSectionProps) {
+export function MenuSection({ section, onItemClick, registerItemRef }: MenuSectionProps) {
   return (
     <div className={styles.menuSection}>
       {section.title && <div className={styles.menuSectionTitle}>{section.title}</div>}
@@ -22,7 +23,14 @@ export function MenuSection({ section, onItemClick }: MenuSectionProps) {
         }
 
         const menuItem = item as MenuItemType;
-        return <MenuItem key={menuItem.id} item={menuItem} onItemClick={onItemClick} />;
+        return (
+          <MenuItem
+            key={menuItem.id}
+            item={menuItem}
+            onItemClick={onItemClick}
+            registerItemRef={registerItemRef}
+          />
+        );
       })}
     </div>
   );
