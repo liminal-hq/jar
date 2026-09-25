@@ -126,6 +126,11 @@ pub struct BornEvent {
     pub parent_b: CritterId,
 }
 
+// Deliberately no floor or reseed mechanism below: a species that craters
+// to zero living critters, or to only one sex, stays that way forever —
+// accepted as an honest outcome of a small stochastic population, not a bug
+// to paper over with a new "restock" mechanic. `breed_chance` above is
+// tuned to make this rare, not to make it impossible.
 fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) {
     for species in [Species::Fish, Species::Gecko] {
         let cap = crate::state::population_cap(species);
@@ -172,9 +177,16 @@ fn try_breed(state: &mut JarState, rng: &mut JarRng, outcome: &mut TickOutcome) 
 }
 
 /// Chance per tick that a species breeds, proportional to the number of
-/// eligible opposite-sex adult pairs (SPEC.md §5), capped at 0.2.
+/// eligible opposite-sex adult pairs (SPEC.md §5), capped at 0.2. Neither
+/// the 0.004 coefficient nor the 0.2 ceiling is pinned by the spec, which
+/// only requires the proportionality — 0.004 is chosen so a single eligible
+/// pair's expected wait for a first birth is roughly halved (~4 real
+/// minutes at 1x speed) versus this constant's original, slower value: the
+/// smallest realistic population after a cap-driven die-off crash is just
+/// one pair, and that case's recovery speed was the one that actually
+/// mattered.
 fn breed_chance(pair_count: usize) -> f32 {
-    (0.002 * pair_count as f32).min(0.2)
+    (0.004 * pair_count as f32).min(0.2)
 }
 
 fn sex_of(state: &JarState, id: CritterId) -> Option<Sex> {
@@ -317,9 +329,9 @@ mod tests {
     #[test]
     fn breed_chance_scales_with_pair_count_and_caps_at_0_2() {
         assert_eq!(breed_chance(0), 0.0);
-        assert!((breed_chance(1) - 0.002).abs() < 1e-6);
-        assert!((breed_chance(50) - 0.1).abs() < 1e-6);
-        assert!((breed_chance(100) - 0.2).abs() < 1e-6);
+        assert!((breed_chance(1) - 0.004).abs() < 1e-6);
+        assert!((breed_chance(25) - 0.1).abs() < 1e-6);
+        assert!((breed_chance(50) - 0.2).abs() < 1e-6);
         assert_eq!(breed_chance(1000), 0.2); // well above the cap
     }
 
@@ -351,6 +363,68 @@ mod tests {
             assert!(outcome.born.is_empty());
             assert!(state.living_count(Species::Fish) <= 10);
         }
+    }
+
+    #[test]
+    fn breeding_resumes_after_population_drops_below_cap() {
+        // Regression test for a real reported symptom ("breeding never
+        // resumes after a cap-driven die-off") that turned out not to be a
+        // bug — `living_count` and the cap check are both recomputed live
+        // every tick, so nothing here should actually be latched. This
+        // exercises that end to end rather than just trusting the reading.
+        let mut critters = Vec::new();
+        for i in 0..5 {
+            critters.push(make_critter(
+                i,
+                Species::Fish,
+                Sex::Male,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+            critters.push(make_critter(
+                i + 5,
+                Species::Fish,
+                Sex::Female,
+                Personality::Bold,
+                ADULT_AGE,
+                100.0,
+            ));
+        }
+        // One critter dies after exactly one tick (`age_sec += 1.0` per
+        // tick, dies once `age_sec >= life`), dropping the population below
+        // the cap of 10 while several eligible pairs remain either way.
+        critters[0].life = ADULT_AGE + 1.0;
+        let mut state = state_with(critters, DAY_SIM_SECONDS, true);
+        let mut rng = JarRng::new();
+
+        // Aging/death and breeding both run within the same `tick()` call,
+        // in that order, so the death already clears the cap in time for
+        // breeding to fire on this very first tick too — asserting a fixed
+        // `living_count` of 9 here would be flaky (a same-tick birth brings
+        // it back to 10). Only assert the death itself, which a same-tick
+        // birth can't affect, and treat an immediate birth as success
+        // rather than a race to guard against.
+        let first = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
+        assert!(
+            !state.critters[0].alive,
+            "the short-lived critter should have died on the first tick"
+        );
+        if !first.born.is_empty() {
+            return;
+        }
+
+        // At the new breed_chance coefficient, 9 survivors leave well over
+        // a dozen eligible pairs, so the expected wait is a couple dozen
+        // ticks at most — 5,000 makes a spurious failure astronomically
+        // unlikely rather than actually bounding real behaviour.
+        for _ in 0..5_000 {
+            let outcome = tick(&mut state, &mut rng, IGNORED_LOCAL_HOUR);
+            if !outcome.born.is_empty() {
+                return;
+            }
+        }
+        panic!("expected a birth within 5,000 ticks after the population dropped below cap");
     }
 
     #[test]
