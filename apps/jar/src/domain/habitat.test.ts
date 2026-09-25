@@ -16,8 +16,8 @@ describe('defaultSpeciesFor', () => {
 });
 
 describe('speciesOfHabitat', () => {
-  it('lists Fish for the aquarium', () => {
-    expect(speciesOfHabitat('Aquarium')).toEqual(['Fish']);
+  it('lists Fish and Snail for the aquarium', () => {
+    expect(speciesOfHabitat('Aquarium')).toEqual(['Fish', 'Snail']);
   });
 
   it('lists Gecko for the terrarium', () => {

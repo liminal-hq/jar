@@ -17,6 +17,8 @@ pub enum Error {
     UnknownCritter,
     #[error("this species is already at its population cap")]
     PopulationCapReached,
+    #[error("this species doesn't live in the jar's current habitat")]
+    SpeciesNotInHabitat,
     #[error(transparent)]
     Snapshot(#[from] jar_core::snapshot::SnapshotError),
     #[error(transparent)]

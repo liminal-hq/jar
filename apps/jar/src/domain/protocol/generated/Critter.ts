@@ -3,8 +3,20 @@ import type { CritterId } from "./CritterId";
 import type { FavouriteSpot } from "./FavouriteSpot";
 import type { FinType } from "./FinType";
 import type { LifeStage } from "./LifeStage";
+import type { Pattern } from "./Pattern";
 import type { Personality } from "./Personality";
 import type { Sex } from "./Sex";
+import type { ShellType } from "./ShellType";
 import type { Species } from "./Species";
 
-export type Critter = { id: CritterId, species: Species, name: string, hue: number, fin: FinType | null, spots: boolean, sex: Sex, personality: Personality, mood: number, energy: number, age_sec: number, life_stage: LifeStage, life: number, gen: number, parents: [CritterId, CritterId] | null, alive: boolean, born: number, died: number | null, favourite_spot: FavouriteSpot, };
+export type Critter = { id: CritterId, species: Species, name: string, hue: number, fin: FinType | null, spots: boolean, 
+/**
+ * Shell shape — snail only, `None` on fish/gecko (mirrors `fin`).
+ */
+shell: ShellType | null, 
+/**
+ * Body/shell pattern — snail only for now (`None` on fish/gecko, which
+ * keep using `spots` above until issue #98's follow-up widens this to
+ * every species).
+ */
+pattern: Pattern | null, sex: Sex, personality: Personality, mood: number, energy: number, age_sec: number, life_stage: LifeStage, life: number, gen: number, parents: [CritterId, CritterId] | null, alive: boolean, born: number, died: number | null, favourite_spot: FavouriteSpot, };

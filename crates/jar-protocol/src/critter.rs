@@ -20,6 +20,61 @@ pub struct CritterId(pub u32);
 pub enum Species {
     Fish,
     Gecko,
+    Snail,
+}
+
+impl Species {
+    /// Every species that currently exists — the one place that has to
+    /// change when a new species is added, so anything that needs to act on
+    /// "every species" (`jar-core::tick::try_breed`'s per-species breeding
+    /// pass, most notably) can iterate this instead of a hand-written array
+    /// that a new variant wouldn't force an update to. See `all_species_are_
+    /// covered_by_all` below: the exhaustive `match` there is what actually
+    /// enforces this list stays complete — a new variant makes that `match`
+    /// fail to compile until `ALL` is updated.
+    pub const ALL: [Species; 3] = [Species::Fish, Species::Gecko, Species::Snail];
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Exhaustive on purpose: adding a fourth `Species` variant makes this
+    /// `match` fail to compile until it (and `Species::ALL` above) are
+    /// updated, which is what makes `ALL` trustworthy for anything that
+    /// needs to act on every species that exists.
+    #[test]
+    fn all_species_are_covered_by_all() {
+        for species in Species::ALL {
+            match species {
+                Species::Fish | Species::Gecko | Species::Snail => {}
+            }
+        }
+    }
+}
+
+/// Shell shape gene — snail only, `None` on fish/gecko (mirrors `fin`'s
+/// fish-only convention). The snail equivalent of `fin`'s three tail
+/// shapes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum ShellType {
+    Coil,
+    Ramshorn,
+    Turret,
+}
+
+/// Body/shell pattern gene. Species-neutral by design (not `ShellPattern`)
+/// so it can widen to fish and gecko later without a rename migration
+/// (issue #98's follow-up "clean up the spots gene" work) — for now, only
+/// snails ever roll a `Some` here; fish/gecko keep their existing `spots:
+/// bool` until that follow-up lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum Pattern {
+    Solid,
+    Banded,
+    Spotted,
 }
 
 /// Tail shape gene — fish only. `None` on a `Gecko` (SPEC.md §5's `fin` gene
@@ -88,13 +143,19 @@ pub struct Critter {
     pub hue: u16, // 0-360
     pub fin: Option<FinType>,
     pub spots: bool,
+    /// Shell shape — snail only, `None` on fish/gecko (mirrors `fin`).
+    pub shell: Option<ShellType>,
+    /// Body/shell pattern — snail only for now (`None` on fish/gecko, which
+    /// keep using `spots` above until issue #98's follow-up widens this to
+    /// every species).
+    pub pattern: Option<Pattern>,
     pub sex: Sex,
     pub personality: Personality,
     pub mood: f32,   // 0-100
     pub energy: f32, // 0-100
     pub age_sec: f32,
     pub life_stage: LifeStage,
-    pub life: f32, // rolled lifespan, 26-36 jar-days, expressed in sim-seconds
+    pub life: f32, // rolled lifespan (species-dependent range, jar_core::genetics::roll_lifespan), expressed in sim-seconds
     pub gen: u32,
     pub parents: Option<[CritterId; 2]>,
     pub alive: bool,

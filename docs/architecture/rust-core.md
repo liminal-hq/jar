@@ -12,7 +12,7 @@ The architecture below is adapted from **City Sim 1000** (`github.com/ScottMorri
 
 Two things decided earlier in this project's brainstorming, restated here because they're load-bearing for what follows:
 
-- **No zero-copy WASM buffer optimization.** That technique (bulk position/rotation reads via `Float32Array` views into WASM linear memory) is real and proven, but its payoff scales with entity count — it was measured at 1000+ bodies. `SPEC.md` §5 hard-caps Jar's population at 10 fish + 4 gecko, ever. At ≤14 concurrent rigid bodies there's no overhead worth eliminating, and it doesn't apply to this doc's scope anyway — that trick was about the physics/render feed, which this doc doesn't touch. Noted here only so it isn't silently forgotten.
+- **No zero-copy WASM buffer optimization.** That technique (bulk position/rotation reads via `Float32Array` views into WASM linear memory) is real and proven, but its payoff scales with entity count — it was measured at 1000+ bodies. `SPEC.md` §5 hard-caps Jar's population at 10 fish + 4 gecko + 5 snail, ever, each its own separate pool. At ≤19 concurrent rigid bodies there's no overhead worth eliminating, and it doesn't apply to this doc's scope anyway — that trick was about the physics/render feed, which this doc doesn't touch. Noted here only so it isn't silently forgotten.
 - **Plain `rand`, not a deterministic seeded RNG.** City Sim hand-rolled a SplitMix64+xoshiro128** generator specifically to keep golden test vectors in sync across a TS→Rust migration and to support undo/redo. Jar has neither requirement. See §4.5 for the one real consequence of this choice.
 
 ---
@@ -73,18 +73,20 @@ The single source of truth for every type that crosses the Rust↔JS boundary, `
 ```rust
 pub struct Critter {
     pub id: CritterId,
-    pub species: Species,           // Fish | Gecko
+    pub species: Species,           // Fish | Gecko | Snail
     pub name: String,
     pub hue: u16,                   // 0–360
-    pub fin: Option<FinType>,       // Fan | Forked | Veil — fish only, None for Gecko
+    pub fin: Option<FinType>,       // Fan | Forked | Veil — fish only, None otherwise
     pub spots: bool,
+    pub shell: Option<ShellType>,   // Coil | Ramshorn | Turret — snail only, None otherwise
+    pub pattern: Option<Pattern>,   // Solid | Banded | Spotted — snail only, None otherwise (fish keeps its separate `spots: bool` for now)
     pub sex: Sex,                   // Male | Female — rolled 50/50, not inherited (SPEC.md §5)
     pub personality: Personality,   // Shy | Greedy | Curious | Sleepy | Bold | Dramatic
     pub mood: f32,                  // 0–100
     pub energy: f32,                // 0–100
     pub age_sec: f32,
-    pub life_stage: LifeStage,      // Fry | Juvenile | Adult | Elder — derived from age_sec, kept fresh every tick
-    pub life: f32,                  // rolled lifespan, 26–36 jar-days
+    pub life_stage: LifeStage,      // Fry | Juvenile | Adult | Elder — derived from (species, age_sec), kept fresh every tick
+    pub life: f32,                  // rolled lifespan — 26–36 jar-days for fish/gecko, 52–72 for snail
     pub gen: u32,
     pub parents: Option<[CritterId; 2]>,
     pub alive: bool,
@@ -94,7 +96,9 @@ pub struct Critter {
 }
 ```
 
-**`life_stage`:** a sim fact like `mood`/`energy`/`alive`, not a frontend-derived presentation value — `jar-core::tick::life_stage(age_sec)` is the one place the SPEC.md §5 age thresholds are implemented, and the aging pass in `tick()` refreshes `critter.life_stage` in the same step it increments `age_sec`, so the two are never out of sync. The frontend reads it directly off `Critter`/`CritterStats` rather than re-deriving it from a raw `age_sec`, same reasoning as `SimEvent::TickUpdate`'s `is_night` above.
+**`life_stage`:** a sim fact like `mood`/`energy`/`alive`, not a frontend-derived presentation value — `jar-core::tick::life_stage(species, age_sec)` is the one place the SPEC.md §5 age thresholds are implemented, and the aging pass in `tick()` refreshes `critter.life_stage` in the same step it increments `age_sec`, so the two are never out of sync. Only the Elder threshold is species-aware (44 jar-days for snail vs. 22 for fish/gecko, doubled alongside the snail's roughly-doubled lifespan so it doesn't spend most of its life Elder and breeding-ineligible) — Fry/Juvenile/Adult onsets are shared across every species. The frontend reads `life_stage` directly off `Critter`/`CritterStats` rather than re-deriving it from a raw `age_sec`, same reasoning as `SimEvent::TickUpdate`'s `is_night` above.
+
+**Nocturnality:** `jar-core::tick::is_awake(species, is_night)` is the one place day/night inverts per species — `Snail => is_night`, every other species `=> !is_night`. It gates both the mood/energy refill-vs-drain pass and (per-species) the breeding eligibility check inside `try_breed`, which iterates `Species::ALL` rather than a hardcoded species list so a species is never silently skipped.
 
 **Naming note:** `trait` is a reserved word in Rust (trait definitions). The personality gene is named `personality` here rather than `trait` — small, easy to get bitten by if translating `SPEC.md`'s vocabulary literally, worth flagging explicitly so the implementing agent doesn't have to discover it via a compile error.
 
@@ -104,7 +108,7 @@ pub struct Critter {
 
 Everything in `SPEC.md` §6's persistence list _except_ window geometry (see §6.3 below): habitat, frame, dialog theme + variant per theme, light + light colour + castle light intensity, bubbles/mist + bubble intensity, sound, simulation speed, always-on-top.
 
-`light_colour` (`LightColour`: `Daylight`/`Warm`/`Moonlight`/`Reef`/`Jungle`/`Sunset`/`Party`) and the two `u8` intensity fields (`light_intensity`, `bubble_intensity`, both 0-200, default 100) are presentation-only — unlike `light_on` itself, none of the three feed `tick.rs`'s mood formula (§4.4). The snapshot format is currently at v5: v3 added `light_colour`, v4 added `light_intensity`, v5 added `bubble_intensity` — see `jar-core::snapshot`'s own version-history comment for the full migration chain and what each bump's `migrate_vN` defaults for saves from before that field existed.
+`light_colour` (`LightColour`: `Daylight`/`Warm`/`Moonlight`/`Reef`/`Jungle`/`Sunset`/`Party`) and the two `u8` intensity fields (`light_intensity`, `bubble_intensity`, both 0-200, default 100) are presentation-only — unlike `light_on` itself, none of the three feed `tick.rs`'s mood formula (§4.4). The snapshot format is currently at v8: v3 added `light_colour`, v4 added `light_intensity`, v5 added `bubble_intensity`, v7 split `mode: Species` into `habitat: Habitat`, v8 added `Critter.shell`/`Critter.pattern` — see `jar-core::snapshot`'s own version-history comment for the full migration chain and what each bump's `migrate_vN` defaults for saves from before that field existed.
 
 ### 3.3 Events
 
@@ -141,7 +145,7 @@ Pure Rust, no I/O, no `tauri`/`wasm-bindgen` — testable in complete isolation,
 
 ### 4.2 `genetics.rs`
 
-The `make()`-equivalent: hue averaging ±18° / fresh roll for originals, fin inheritance (fish only), spot inheritance (70% chance if either parent has them), personality inheritance (70% chance from one parent, fresh roll from the full pool otherwise — `SPEC.md` §5's amended genetics rule), sex roll (50/50, independent of parentage — `SPEC.md` §5's amended genetics rule), favourite-spot roll, naming. Exactly the rules already specified; this module is where they're implemented once, correctly, rather than re-derived.
+The `make()`-equivalent: hue averaging ±18° / fresh roll for originals, fin inheritance (fish only), spot inheritance (70% chance if either parent has them, fish/gecko only), shell/pattern inheritance (each from one parent, snail only — the same one-parent-coin-flip mechanic as `fin`), personality inheritance (70% chance from one parent, fresh roll from the full pool otherwise — `SPEC.md` §5's amended genetics rule), sex roll (50/50, independent of parentage — `SPEC.md` §5's amended genetics rule), lifespan roll (species-aware: 26–36 jar-days for fish/gecko, 52–72 for snail), favourite-spot roll, naming (species-aware name pool). Exactly the rules already specified; this module is where they're implemented once, correctly, rather than re-derived.
 
 ### 4.3 `clock.rs`
 

@@ -35,6 +35,8 @@ function makeCritter(fin: FinType, sex: Sex, lifeStage: LifeStage): Critter {
     hue: 200,
     fin,
     spots: false,
+    shell: null,
+    pattern: null,
     sex,
     personality: 'Curious',
     mood: 1,

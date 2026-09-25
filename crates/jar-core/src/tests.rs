@@ -18,7 +18,7 @@ fn a_fresh_original_starts_as_a_fry() {
     let mut rng = JarRng::new();
     let id = state.next_critter_id();
     let critter = crate::genetics::roll_original(id, Species::Fish, 1, 0.0, &mut rng, &[]);
-    assert_eq!(life_stage(critter.age_sec), LifeStage::Fry);
+    assert_eq!(life_stage(Species::Fish, critter.age_sec), LifeStage::Fry);
     state.critters.push(critter);
     assert_eq!(state.living_count(Species::Fish), 1);
 }

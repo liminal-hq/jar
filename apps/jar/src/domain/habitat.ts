@@ -27,7 +27,7 @@ export function defaultSpeciesFor(habitat: Habitat): Species {
 export function speciesOfHabitat(habitat: Habitat): Species[] {
   switch (habitat) {
     case 'Aquarium':
-      return ['Fish'];
+      return ['Fish', 'Snail'];
     case 'Terrarium':
       return ['Gecko'];
   }

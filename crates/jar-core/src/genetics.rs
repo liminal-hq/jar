@@ -5,7 +5,9 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{Critter, CritterId, FavouriteSpot, FinType, Personality, Sex, Species};
+use jar_protocol::{
+    Critter, CritterId, FavouriteSpot, FinType, Pattern, Personality, Sex, ShellType, Species,
+};
 
 use crate::rng::JarRng;
 
@@ -36,6 +38,22 @@ const NAME_POOL: &[&str] = &[
     "Waffles",
 ];
 
+/// Fish and gecko share `NAME_POOL` above (today's behaviour, unchanged) —
+/// a snail gets its own pool since "Dr. Fins" or "Sir Bubbles" read oddly on
+/// a snail (issue #98's settled decision).
+const SNAIL_NAME_POOL: &[&str] = &[
+    "Gary",
+    "Turbo",
+    "Escargot",
+    "Speedy",
+    "Clyde",
+    "Shelldon",
+    "Snelson",
+    "Colonel Mustard",
+    "Slowpoke",
+    "Kevin",
+];
+
 pub struct Parent<'a> {
     pub critter: &'a Critter,
 }
@@ -53,27 +71,42 @@ pub fn roll_original(
         Species::Gecko => {
             GECKO_HUE_PALETTE[rng.range_u16(0, GECKO_HUE_PALETTE.len() as u16) as usize]
         }
-        Species::Fish => rng.range_u16(0, 360),
+        // Full wheel, same as fish — the shell is the snail's hue carrier
+        // (issue #98's settled decision), not a curated palette like the
+        // gecko's.
+        Species::Fish | Species::Snail => rng.range_u16(0, 360),
     };
     let fin = match species {
         Species::Fish => Some(roll_fin(rng)),
-        Species::Gecko => None,
+        Species::Gecko | Species::Snail => None,
+    };
+    let shell = match species {
+        Species::Snail => Some(roll_shell(rng)),
+        Species::Fish | Species::Gecko => None,
+    };
+    let pattern = match species {
+        Species::Snail => Some(roll_pattern(rng)),
+        // Fish/gecko keep rolling the boolean `spots` field below until
+        // issue #98's follow-up widens `pattern` to every species.
+        Species::Fish | Species::Gecko => None,
     };
 
     Critter {
         id,
         species,
-        name: roll_name(existing_names),
+        name: roll_name(species, existing_names),
         hue,
         fin,
         spots: rng.chance(0.4),
+        shell,
+        pattern,
         sex: roll_sex(rng),
         personality: roll_personality(rng),
         mood: 66.0,
         energy: 100.0,
         age_sec: 0.0,
-        life_stage: crate::tick::life_stage(0.0),
-        life: roll_lifespan(rng),
+        life_stage: crate::tick::life_stage(species, 0.0),
+        life: roll_lifespan(species, rng),
         gen,
         parents: None,
         alive: true,
@@ -112,19 +145,47 @@ pub fn roll_child(
                 parent_b.critter.fin
             }
         }
-        Species::Gecko => None,
+        Species::Gecko | Species::Snail => None,
     };
 
     let either_has_spots = parent_a.critter.spots || parent_b.critter.spots;
     let spots = either_has_spots && rng.chance(SPOT_INHERIT_CHANCE);
 
+    // `shell`/`pattern` each come from exactly one parent by coin flip — the
+    // same "one parent, wholesale" mechanic as `fin` above (issue #98's
+    // settled decision). Parents are always the same species (`tick.rs`'s
+    // `try_breed` only pairs same-species critters), so if `parent_a` has a
+    // shell, `parent_b` does too.
+    let shell = match species {
+        Species::Snail => {
+            if rng.chance(0.5) {
+                parent_a.critter.shell
+            } else {
+                parent_b.critter.shell
+            }
+        }
+        Species::Fish | Species::Gecko => None,
+    };
+    let pattern = match species {
+        Species::Snail => {
+            if rng.chance(0.5) {
+                parent_a.critter.pattern
+            } else {
+                parent_b.critter.pattern
+            }
+        }
+        Species::Fish | Species::Gecko => None,
+    };
+
     Critter {
         id,
         species,
-        name: roll_name(existing_names),
+        name: roll_name(species, existing_names),
         hue,
         fin,
         spots,
+        shell,
+        pattern,
         sex: roll_sex(rng), // not inherited — SPEC.md §5's amended rule
         // inherited ~70% of the time, fresh roll otherwise — family
         // resemblance without stagnation (SPEC.md §5's amended rule)
@@ -132,8 +193,8 @@ pub fn roll_child(
         mood: 66.0,
         energy: 100.0,
         age_sec: 0.0,
-        life_stage: crate::tick::life_stage(0.0),
-        life: roll_lifespan(rng),
+        life_stage: crate::tick::life_stage(species, 0.0),
+        life: roll_lifespan(species, rng),
         gen,
         parents: Some([parent_a.critter.id, parent_b.critter.id]),
         alive: true,
@@ -148,6 +209,22 @@ fn roll_fin(rng: &mut JarRng) -> FinType {
         0 => FinType::Fan,
         1 => FinType::Forked,
         _ => FinType::Veil,
+    }
+}
+
+fn roll_shell(rng: &mut JarRng) -> ShellType {
+    match rng.range_u16(0, 3) {
+        0 => ShellType::Coil,
+        1 => ShellType::Ramshorn,
+        _ => ShellType::Turret,
+    }
+}
+
+fn roll_pattern(rng: &mut JarRng) -> Pattern {
+    match rng.range_u16(0, 3) {
+        0 => Pattern::Solid,
+        1 => Pattern::Banded,
+        _ => Pattern::Spotted,
     }
 }
 
@@ -187,9 +264,15 @@ fn roll_child_personality(parent_a: &Critter, parent_b: &Critter, rng: &mut JarR
     }
 }
 
-/// 26-36 jar-days, expressed in sim-seconds (SPEC.md §5).
-fn roll_lifespan(rng: &mut JarRng) -> f32 {
-    rng.range_f32(26.0, 36.0) * crate::clock::SECONDS_PER_JAR_DAY as f32
+/// Fish/gecko: 26-36 jar-days. Snail: 52-72 jar-days (2x both ends, per
+/// issue #98's settled "~2x, ~50-70" decision — a snail should outlast a
+/// couple of fish generations). Expressed in sim-seconds (SPEC.md §5).
+fn roll_lifespan(species: Species, rng: &mut JarRng) -> f32 {
+    let days = match species {
+        Species::Fish | Species::Gecko => rng.range_f32(26.0, 36.0),
+        Species::Snail => rng.range_f32(52.0, 72.0),
+    };
+    days * crate::clock::SECONDS_PER_JAR_DAY as f32
 }
 
 fn roll_favourite_spot(rng: &mut JarRng) -> FavouriteSpot {
@@ -203,9 +286,16 @@ fn roll_favourite_spot(rng: &mut JarRng) -> FavouriteSpot {
 /// Auto-names from the silly list; repeats get `II`, `III`, ... per
 /// SPEC.md §5. Falls back to a random pick once a full pass of the pool
 /// collides on every entry (astronomically unlikely at Jar's population
-/// caps, but cheap to make total).
-fn roll_name(existing_names: &[String]) -> String {
-    for base in NAME_POOL {
+/// caps, but cheap to make total). Fish and gecko share `NAME_POOL`
+/// (unchanged behaviour); a snail draws from its own `SNAIL_NAME_POOL` —
+/// the uniqueness scan still runs jar-wide across every species' existing
+/// names, so no two critters of any species ever collide on the same name.
+fn roll_name(species: Species, existing_names: &[String]) -> String {
+    let pool = match species {
+        Species::Fish | Species::Gecko => NAME_POOL,
+        Species::Snail => SNAIL_NAME_POOL,
+    };
+    for base in pool {
         let count = existing_names
             .iter()
             .filter(|n| n.as_str() == *base || n.starts_with(&format!("{base} ")))
@@ -214,9 +304,9 @@ fn roll_name(existing_names: &[String]) -> String {
             return base.to_string();
         }
     }
-    // Every base name is taken at least once — suffix the first one with
-    // the next roman-numeral-ish ordinal.
-    let base = NAME_POOL[0];
+    // Every base name in this species' pool is taken at least once — suffix
+    // the first one with the next roman-numeral-ish ordinal.
+    let base = pool[0];
     let count = existing_names
         .iter()
         .filter(|n| n.starts_with(base))
@@ -248,12 +338,14 @@ mod tests {
             hue,
             fin,
             spots,
+            shell: None,
+            pattern: None,
             sex: Sex::Male,
             personality: Personality::Bold,
             mood: 66.0,
             energy: 100.0,
             age_sec: 1000.0,
-            life_stage: crate::tick::life_stage(1000.0),
+            life_stage: crate::tick::life_stage(species, 1000.0),
             life: 100_000.0,
             gen: 1,
             parents: None,
@@ -498,13 +590,110 @@ mod tests {
     #[test]
     fn naming_picks_the_next_unclaimed_base_name() {
         let existing = vec!["Pickle".to_string()];
-        assert_eq!(roll_name(&existing), "Sir Bubbles");
+        assert_eq!(roll_name(Species::Fish, &existing), "Sir Bubbles");
     }
 
     #[test]
     fn naming_falls_back_to_a_roman_numeral_once_the_pool_is_exhausted() {
         let existing: Vec<String> = NAME_POOL.iter().map(|s| s.to_string()).collect();
-        assert_eq!(roll_name(&existing), "Pickle II");
+        assert_eq!(roll_name(Species::Fish, &existing), "Pickle II");
+    }
+
+    #[test]
+    fn snail_names_come_from_the_snail_pool() {
+        let mut rng = JarRng::new();
+        for _ in 0..20 {
+            let original = roll_original(CritterId(1), Species::Snail, 1, 0.0, &mut rng, &[]);
+            assert!(
+                SNAIL_NAME_POOL.contains(&original.name.as_str()),
+                "snail name {:?} not from the snail pool",
+                original.name
+            );
+        }
+    }
+
+    #[test]
+    fn snail_originals_always_have_a_shell_and_pattern_and_never_a_fin() {
+        let mut rng = JarRng::new();
+        for _ in 0..50 {
+            let original = roll_original(CritterId(1), Species::Snail, 1, 0.0, &mut rng, &[]);
+            assert!(original.shell.is_some());
+            assert!(original.pattern.is_some());
+            assert_eq!(original.fin, None);
+        }
+    }
+
+    #[test]
+    fn fish_and_gecko_originals_never_have_a_shell_or_pattern() {
+        let mut rng = JarRng::new();
+        for species in [Species::Fish, Species::Gecko] {
+            for _ in 0..20 {
+                let original = roll_original(CritterId(1), species, 1, 0.0, &mut rng, &[]);
+                assert_eq!(original.shell, None);
+                assert_eq!(original.pattern, None);
+            }
+        }
+    }
+
+    #[test]
+    fn snail_lifespan_is_52_to_72_jar_days() {
+        let mut rng = JarRng::new();
+        for _ in 0..50 {
+            let original = roll_original(CritterId(1), Species::Snail, 1, 0.0, &mut rng, &[]);
+            let days = original.life / crate::clock::SECONDS_PER_JAR_DAY as f32;
+            assert!(
+                (52.0..72.0).contains(&days),
+                "snail lifespan {days} jar-days out of range"
+            );
+        }
+    }
+
+    fn snail_parent(shell: ShellType, pattern: Pattern) -> Critter {
+        Critter {
+            shell: Some(shell),
+            pattern: Some(pattern),
+            ..parent(Species::Snail, 180, None, false)
+        }
+    }
+
+    #[test]
+    fn snail_shell_and_pattern_each_come_from_exactly_one_parent() {
+        let mut rng = JarRng::new();
+        let a = snail_parent(ShellType::Coil, Pattern::Solid);
+        let b = snail_parent(ShellType::Turret, Pattern::Spotted);
+        let mut saw_a_shell = false;
+        let mut saw_b_shell = false;
+        let mut saw_a_pattern = false;
+        let mut saw_b_pattern = false;
+        for _ in 0..200 {
+            let child = roll_child(
+                CritterId(1),
+                Parent { critter: &a },
+                Parent { critter: &b },
+                2,
+                0.0,
+                &mut rng,
+                &[],
+            );
+            match child.shell {
+                Some(ShellType::Coil) => saw_a_shell = true,
+                Some(ShellType::Turret) => saw_b_shell = true,
+                other => panic!("child shell {other:?} came from neither parent"),
+            }
+            match child.pattern {
+                Some(Pattern::Solid) => saw_a_pattern = true,
+                Some(Pattern::Spotted) => saw_b_pattern = true,
+                other => panic!("child pattern {other:?} came from neither parent"),
+            }
+        }
+        assert!(
+            saw_a_shell && saw_b_shell,
+            "expected both shells to appear over 200 rolls"
+        );
+        assert!(
+            saw_a_pattern && saw_b_pattern,
+            "expected both patterns to appear over 200 rolls"
+        );
     }
 
     #[test]

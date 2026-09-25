@@ -46,6 +46,8 @@ function makeCritter(overrides: Partial<Critter> = {}): Critter {
     hue: 210,
     fin: 'Veil',
     spots: true,
+    shell: null,
+    pattern: null,
     sex: 'Male',
     personality: 'Bold',
     mood: 66,

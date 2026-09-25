@@ -85,6 +85,13 @@ pub fn set_habitat(plugin: State<'_, JarPlugin>, habitat: Habitat) -> Result<()>
 #[command]
 pub fn add_critter(plugin: State<'_, JarPlugin>, species: Species) -> Result<Critter> {
     let critter = with_jar_mut(&plugin, |jar, rng| {
+        // The frontend's own curated menu/Setup buttons never offer a
+        // species the current habitat can't hold (`domain/habitat.ts`'s
+        // `speciesOfHabitat`) — checked here too, since this command is the
+        // one path that isn't scoped by that UI.
+        if !jar_core::state::species_belongs_to_habitat(species, jar.settings.habitat) {
+            return Err(Error::SpeciesNotInHabitat);
+        }
         // `try_breed` (jar-core's tick.rs) already enforces this cap on the
         // breeding path — this is the same cap, checked here too, since an
         // original critter enters the population through this command
