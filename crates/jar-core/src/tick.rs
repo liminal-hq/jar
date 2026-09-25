@@ -192,15 +192,19 @@ const BASE_BREED_CHANCE_PER_PAIR: f32 = 0.002;
 /// problem.
 const SINGLE_PAIR_RECOVERY_CHANCE: f32 = 0.004;
 
-/// Chance per tick that a species breeds, proportional to the number of
-/// eligible opposite-sex adult pairs (SPEC.md §5), capped at 0.2. Neither
-/// the base coefficient nor the 0.2 ceiling is pinned by the spec, which
-/// only requires the proportionality.
+/// Chance per tick that a species breeds. Proportional to the number of
+/// eligible opposite-sex adult pairs (SPEC.md §5) for two or more pairs,
+/// capped at 0.2 — neither the base coefficient nor the ceiling is pinned
+/// by the spec, which only requires the proportionality. Pair count 1 is a
+/// deliberate exception, not a smaller case of the same formula: it's
+/// pinned to `SINGLE_PAIR_RECOVERY_CHANCE` regardless of what the base rate
+/// would say, so proportionality only holds from 2 pairs up.
 fn breed_chance(pair_count: usize) -> f32 {
-    if pair_count == 0 {
-        return 0.0;
+    match pair_count {
+        0 => 0.0,
+        1 => SINGLE_PAIR_RECOVERY_CHANCE,
+        n => (BASE_BREED_CHANCE_PER_PAIR * n as f32).min(0.2),
     }
-    (BASE_BREED_CHANCE_PER_PAIR * pair_count as f32).clamp(SINGLE_PAIR_RECOVERY_CHANCE, 0.2)
 }
 
 fn sex_of(state: &JarState, id: CritterId) -> Option<Sex> {
@@ -345,7 +349,10 @@ mod tests {
         assert_eq!(breed_chance(0), 0.0);
         // The single-pair recovery floor — 0.002 * 1 alone would be 0.002.
         assert!((breed_chance(1) - 0.004).abs() < 1e-6);
-        // Two pairs already clears the floor under the base rate alone.
+        // At two pairs the base rate alone already equals the floor —
+        // proportionality resumes exactly here (see breed_chance's own
+        // doc comment on why 1 is a real exception, not just this
+        // formula's smallest input).
         assert!((breed_chance(2) - 0.004).abs() < 1e-6);
         assert!((breed_chance(25) - 0.05).abs() < 1e-6);
         assert!((breed_chance(100) - 0.2).abs() < 1e-6);
