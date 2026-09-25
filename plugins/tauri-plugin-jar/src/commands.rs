@@ -208,6 +208,51 @@ pub fn set_bubble_intensity(plugin: State<'_, JarPlugin>, intensity: u8) -> Resu
     Ok(())
 }
 
+/// Restores every `JarSettings` field to `JarSettings::default()` — the
+/// Setup window's "Restore defaults" button. Factored out as a plain
+/// function (below) so it's unit-testable without a `State<JarPlugin>`.
+#[command]
+pub fn reset_settings(plugin: State<'_, JarPlugin>) -> Result<()> {
+    let settings = with_jar(&plugin, |jar| {
+        reset_to_defaults(&mut jar.settings);
+        Ok(jar.settings.clone())
+    })?;
+    push_event(&plugin, SimEvent::SettingsChanged { settings });
+    Ok(())
+}
+
+fn reset_to_defaults(settings: &mut JarSettings) {
+    *settings = JarSettings::default();
+}
+
+/// Wipes every critter and the sim clock, and restores settings to their
+/// defaults too — the Setup window's "Reset jar" button, a strict superset
+/// of `reset_settings`. Reuses `new_jar_seeded_from_now` rather than
+/// re-deriving the wall-clock seeding it needs: a reset jar should start
+/// "now," exactly like a genuinely new one does, not at jar-midnight.
+/// Pushes `SimEvent::Reset` rather than `SettingsChanged` — every open
+/// window's critter list changed too, not just its settings.
+#[command]
+pub fn reset_jar(plugin: State<'_, JarPlugin>) -> Result<jar_protocol::SnapshotView> {
+    let snapshot = with_jar(&plugin, |jar| {
+        *jar = crate::new_jar_seeded_from_now(JarSettings::default());
+        let local_hour = chrono::Local::now().hour() as u8;
+        Ok(jar_protocol::SnapshotView {
+            critters: jar.critters.clone(),
+            settings: jar.settings.clone(),
+            sim_seconds: jar.clock.sim_seconds,
+            is_night: jar.clock.is_night(local_hour),
+        })
+    })?;
+    push_event(
+        &plugin,
+        SimEvent::Reset {
+            snapshot: snapshot.clone(),
+        },
+    );
+    Ok(snapshot)
+}
+
 /// A point-in-time read of the full jar state — used when a UI window
 /// (re)opens and needs to hydrate before the next `TickUpdate` arrives,
 /// distinct from the periodic on-disk autosave. `SnapshotView` itself lives
@@ -228,12 +273,25 @@ pub fn get_snapshot(plugin: State<'_, JarPlugin>) -> Result<jar_protocol::Snapsh
 
 /// Explicitly replaces the running jar with the state encoded in `bytes` —
 /// used by a "reset jar" / import flow, not by ordinary startup (which goes
-/// through `crate::load_or_new` inside `start`).
+/// through `crate::load_or_new` inside `start`). Distinct from the
+/// `reset_jar` command above: this one loads an arbitrary saved snapshot
+/// (an import), that one always resets to a genuinely empty jar. Both push
+/// the same `SimEvent::Reset`, since both replace the whole jar at once.
 #[command]
 pub fn load_snapshot(plugin: State<'_, JarPlugin>, bytes: Vec<u8>) -> Result<()> {
     let restored = jar_core::snapshot::decode(&bytes)?;
-    let mut inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
-    inner.jar = Some(restored);
+    let local_hour = chrono::Local::now().hour() as u8;
+    let snapshot = jar_protocol::SnapshotView {
+        critters: restored.critters.clone(),
+        settings: restored.settings.clone(),
+        sim_seconds: restored.clock.sim_seconds,
+        is_night: restored.clock.is_night(local_hour),
+    };
+    {
+        let mut inner = plugin.inner.lock().expect("jar plugin mutex poisoned");
+        inner.jar = Some(restored);
+    }
+    push_event(&plugin, SimEvent::Reset { snapshot });
     Ok(())
 }
 
@@ -271,6 +329,8 @@ fn push_event(plugin: &State<'_, JarPlugin>, event: SimEvent) {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     /// Pins `Toggle`'s wire format against the exact camelCase strings
@@ -298,5 +358,29 @@ mod tests {
             serde_json::from_str::<Toggle>("\"alwaysOnTop\""),
             Ok(Toggle::AlwaysOnTop)
         ));
+    }
+
+    /// Guards against `reset_to_defaults` ever becoming a hand-rolled
+    /// per-field reset — a single struct assignment is the whole point
+    /// (`JarSettings::default()` stays the one place defaults are listed),
+    /// so this exercises every field disagreeing with its default at once.
+    #[test]
+    fn reset_to_defaults_restores_every_field() {
+        let mut settings = JarSettings {
+            mode: Species::Gecko,
+            frame: TankFrame::NeonCrt,
+            dialog_theme: DialogTheme::NeonTerminal,
+            theme_variants: BTreeMap::new(),
+            light_on: false,
+            light_colour: LightColour::Party,
+            light_intensity: 200,
+            ambient_particles_on: false,
+            bubble_intensity: 0,
+            sound_on: true,
+            simulation_speed: 60,
+            always_on_top: true,
+        };
+        reset_to_defaults(&mut settings);
+        assert_eq!(settings, JarSettings::default());
     }
 }

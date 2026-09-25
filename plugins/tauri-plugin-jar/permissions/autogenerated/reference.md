@@ -18,6 +18,8 @@ Default permissions for the jar simulation plugin. Grants every command the app 
 - `allow-set-bubble-intensity`
 - `allow-get-snapshot`
 - `allow-load-snapshot`
+- `allow-reset-settings`
+- `allow-reset-jar`
 
 ## Permission Table
 
@@ -128,6 +130,58 @@ Enables the rename_critter command without any pre-configured scope.
 <td>
 
 Denies the rename_critter command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:allow-reset-jar`
+
+</td>
+<td>
+
+Enables the reset_jar command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-reset-jar`
+
+</td>
+<td>
+
+Denies the reset_jar command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:allow-reset-settings`
+
+</td>
+<td>
+
+Enables the reset_settings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-reset-settings`
+
+</td>
+<td>
+
+Denies the reset_settings command without any pre-configured scope.
 
 </td>
 </tr>

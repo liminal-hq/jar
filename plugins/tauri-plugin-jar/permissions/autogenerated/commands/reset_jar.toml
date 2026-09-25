@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-reset-jar"
+description = "Enables the reset_jar command without any pre-configured scope."
+commands.allow = ["reset_jar"]
+
+[[permission]]
+identifier = "deny-reset-jar"
+description = "Denies the reset_jar command without any pre-configured scope."
+commands.deny = ["reset_jar"]

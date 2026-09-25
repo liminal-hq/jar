@@ -47,6 +47,7 @@ import type { DialogTheme } from './protocol/generated/DialogTheme';
 import type { JarSettings } from './protocol/generated/JarSettings';
 import type { LightColour } from './protocol/generated/LightColour';
 import type { SimEvent } from './protocol/generated/SimEvent';
+import type { SnapshotView } from './protocol/generated/SnapshotView';
 import type { Species } from './protocol/generated/Species';
 import type { TankFrame } from './protocol/generated/TankFrame';
 
@@ -90,12 +91,21 @@ interface JarStoreState {
 
 interface JarStoreActions {
   applyEvent: (event: SimEvent) => void;
-  hydrate: (snapshot: {
-    critters: Critter[];
-    settings: JarSettings;
-    sim_seconds: number;
-    is_night: boolean;
-  }) => void;
+  hydrate: (snapshot: SnapshotView) => void;
+}
+
+/** The wholesale store-replace every full-state read/push uses: initial
+ * hydration, the periodic reconciliation poll, and now `SimEvent.Reset`
+ * (pushed by `reset_jar`/`load_snapshot`) all funnel through this one
+ * function rather than three copies of the same field mapping. */
+function snapshotToStoreFields(snapshot: SnapshotView) {
+  return {
+    critters: Object.fromEntries(snapshot.critters.map((c) => [c.id, c])),
+    settings: snapshot.settings,
+    simSeconds: snapshot.sim_seconds,
+    isNight: snapshot.is_night,
+    hydrated: true,
+  };
 }
 
 export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
@@ -105,14 +115,7 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
   isNight: false,
   hydrated: false,
 
-  hydrate: (snapshot) =>
-    set({
-      critters: Object.fromEntries(snapshot.critters.map((c) => [c.id, c])),
-      settings: snapshot.settings,
-      simSeconds: snapshot.sim_seconds,
-      isNight: snapshot.is_night,
-      hydrated: true,
-    }),
+  hydrate: (snapshot) => set(snapshotToStoreFields(snapshot)),
 
   applyEvent: (event) =>
     set((state) => {
@@ -158,6 +161,14 @@ export const useJarStore = create<JarStoreState & JarStoreActions>((set) => ({
 
         case 'Added':
           return { critters: { ...state.critters, [event.critter.id]: event.critter } };
+
+        // Pushed by `reset_jar`/`load_snapshot` — the whole jar was
+        // replaced at once, not just one fact about it. Same replace this
+        // store already does for initial hydration and the periodic
+        // reconciliation poll (`snapshotToStoreFields`), just pushed
+        // immediately instead of waiting up to `RECONCILE_INTERVAL_MS`.
+        case 'Reset':
+          return snapshotToStoreFields(event.snapshot);
       }
     }),
 }));
@@ -274,23 +285,13 @@ async function doStart(settings: JarSettings): Promise<void> {
     await listen<SimEvent>(JAR_REBROADCAST_EVENT, (e) => onEvent(e.payload));
   }
 
-  const snapshot = (await pluginApi.getSnapshot()) as {
-    critters: Critter[];
-    settings: JarSettings;
-    sim_seconds: number;
-    is_night: boolean;
-  };
+  const snapshot = (await pluginApi.getSnapshot()) as SnapshotView;
   useJarStore.getState().hydrate(snapshot);
 
   setInterval(() => {
     void (async () => {
       const requestGeneration = eventGeneration;
-      const resync = (await pluginApi.getSnapshot()) as {
-        critters: Critter[];
-        settings: JarSettings;
-        sim_seconds: number;
-        is_night: boolean;
-      };
+      const resync = (await pluginApi.getSnapshot()) as SnapshotView;
       if (eventGeneration !== requestGeneration) return;
       useJarStore.getState().hydrate(resync);
     })();
@@ -314,4 +315,6 @@ export const jar = {
   setLightColour: (colour: LightColour) => pluginApi.setLightColour(colour),
   setLightIntensity: (intensity: number) => pluginApi.setLightIntensity(intensity),
   setBubbleIntensity: (intensity: number) => pluginApi.setBubbleIntensity(intensity),
+  resetSettings: () => pluginApi.resetSettings(),
+  resetJar: () => pluginApi.resetJar(),
 };

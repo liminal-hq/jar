@@ -1,11 +1,11 @@
 // W4 · Setup (SCREENS.md). Shows every option at once: mode, frame, dialog
 // theme + variant, tank toggles, simulation speed, jar clock, add a
-// critter.
+// critter, restore default settings, reset jar.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
@@ -50,6 +50,11 @@ const LIGHT_COLOURS: LightColour[] = [
  * each side separately" precedent `theme.ts`'s dialog-theme swatches
  * already set. `Party` gets a gradient instead of one hex, hinting at its
  * own colour-cycling rather than implying a fixed hue. */
+/** How long the "Reset jar" button stays armed after one click before it
+ * silently disarms — long enough to read the warning and click again, short
+ * enough that walking away doesn't leave it primed indefinitely. */
+const RESET_JAR_ARM_TIMEOUT_MS = 4000;
+
 const LIGHT_COLOUR_SWATCHES: Record<LightColour, string> = {
   Daylight: '#eaf6ff',
   Warm: '#ffd8a3',
@@ -63,12 +68,48 @@ const LIGHT_COLOUR_SWATCHES: Record<LightColour, string> = {
 export function SetupWindow() {
   const settings = useJarStore((s) => s.settings);
   const simSeconds = useJarStore((s) => s.simSeconds);
+  const critters = useJarStore((s) => s.critters);
 
   useEffect(() => {
     void ensureJarClientStarted();
   }, []);
 
   const jarDay = (simSeconds / 120).toFixed(2);
+
+  // "Reset jar" is a permanent, irreversible wipe of every critter — this
+  // window has no confirm-dialog precedent to reuse (nothing else here
+  // gates on one), so a two-click "armed" state stands in for one: the
+  // first click only names what's about to be lost, the second actually
+  // does it. Auto-disarms after `RESET_JAR_ARM_TIMEOUT_MS` so walking away
+  // mid-decision can't leave it primed for an accidental second click much
+  // later.
+  const [resetJarArmed, setResetJarArmed] = useState(false);
+  const resetJarTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetJarTimerRef.current !== null) window.clearTimeout(resetJarTimerRef.current);
+    };
+  }, []);
+
+  function armResetJar() {
+    setResetJarArmed(true);
+    resetJarTimerRef.current = window.setTimeout(() => {
+      setResetJarArmed(false);
+    }, RESET_JAR_ARM_TIMEOUT_MS);
+  }
+
+  function handleResetJarClick() {
+    if (!resetJarArmed) {
+      armResetJar();
+      return;
+    }
+    if (resetJarTimerRef.current !== null) window.clearTimeout(resetJarTimerRef.current);
+    setResetJarArmed(false);
+    void jar.resetJar();
+  }
+
+  const livingCritterCount = Object.values(critters).filter((c) => c.alive).length;
 
   return (
     <DialogShell windowTitle="Setup" title="Setup">
@@ -244,6 +285,24 @@ export function SetupWindow() {
         <p>Jar clock: day {jarDay}</p>
 
         <button onClick={() => void jar.addCritter(settings.mode)}>+ Add a critter</button>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            marginTop: 8,
+            paddingTop: 12,
+            borderTop: '1px solid var(--jar-ink)',
+          }}
+        >
+          <button onClick={() => void jar.resetSettings()}>Restore default settings</button>
+          <button onClick={handleResetJarClick}>
+            {resetJarArmed
+              ? `Really reset? All ${livingCritterCount} critters will be lost`
+              : 'Reset jar'}
+          </button>
+        </div>
       </div>
     </DialogShell>
   );

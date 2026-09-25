@@ -17,4 +17,6 @@ permissions = [
     "allow-set-bubble-intensity",
     "allow-get-snapshot",
     "allow-load-snapshot",
+    "allow-reset-settings",
+    "allow-reset-jar",
 ]
