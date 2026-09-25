@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Hinged eyestalk, authored once; hinge (84,6) buried in the head. Far-side stalk mirrored/offset programmatically like the pectoral fin. -->
+  <path id="eyestalk" fill="#b3a08c" d="M 79 8 C 78 -6, 82 -22, 90 -36 C 94 -43, 99 -49, 104 -53 C 106 -55, 108 -53, 107 -50 C 103 -44, 99 -37, 96 -29 C 92 -18, 90 -6, 90 8 Z"/>
+  <circle id="eyestalk-eye" fill="#22222a" cx="106" cy="-55" r="7"/>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Ramshorn shell: flat planispiral disc carried upright; bigger across
+       than the coil but thin (3D: ~half the coil's extrusion depth). Concentric
+       ring whorl (shell-ring-outer/-inner + shell-core) is always shown, the way
+       body-belly rides on body.svg. shell-band/shell-spot-* are the Pattern-gene
+       decal paths, gene-toggled by id at load time: Banded shows shell-band,
+       Spotted shows shell-spot-1..4, Solid shows neither. Base flattened onto
+       y=40. Sealed pose (issue #98): shell drops 30 units so its base (y=40)
+       rests on the contact line (y=70); aperture fit c(8,20) r 8x10 rot -45deg;
+       operculum extrudes at shell depth - 6. Placeholder fills. -->
+  <path id="shell" fill="#c97b4a" d="M 30 -12 C 30 -42, 6 -66, -24 -66 C -54 -66, -78 -42, -78 -12 C -78 14, -64 32, -46 39 C -32 41, -10 41, 2 38 C 20 32, 30 12, 30 -12 Z"/>
+  <path id="shell-ring-outer" fill="#a55c33" d="M 20 -12 C 20 -0.5, 15.3 11, 7.1 19.1 C -1 27.3, -12.5 32, -24 32 C -35.5 32, -47 27.3, -55.1 19.1 C -63.3 11, -68 -0.5, -68 -12 C -68 -23.5, -63.3 -35, -55.1 -43.1 C -47 -51.3, -35.5 -56, -24 -56 C -12.5 -56, -1 -51.3, 7.1 -43.1 C 15.3 -35, 20 -23.5, 20 -12 L 13 -12 C 13 -21.7, 9 -31.3, 2.2 -38.2 C -4.7 -45, -14.3 -49, -24 -49 C -33.7 -49, -43.3 -45, -50.2 -38.2 C -57 -31.3, -61 -21.7, -61 -12 C -61 -2.3, -57 7.3, -50.2 14.2 C -43.3 21, -33.7 25, -24 25 C -14.3 25, -4.7 21, 2.2 14.2 C 9 7.3, 13 -2.3, 13 -12 Z"/>
+  <path id="shell-ring-inner" fill="#a55c33" d="M 2 -12 C 2 -5.2, -0.8 1.6, -5.6 6.4 C -10.4 11.2, -17.2 14, -24 14 C -30.8 14, -37.6 11.2, -42.4 6.4 C -47.2 1.6, -50 -5.2, -50 -12 C -50 -18.8, -47.2 -25.6, -42.4 -30.4 C -37.6 -35.2, -30.8 -38, -24 -38 C -17.2 -38, -10.4 -35.2, -5.6 -30.4 C -0.8 -25.6, 2 -18.8, 2 -12 L -4 -12 C -4 -17.2, -6.2 -22.4, -9.9 -26.1 C -13.6 -29.8, -18.8 -32, -24 -32 C -29.2 -32, -34.4 -29.8, -38.1 -26.1 C -41.8 -22.4, -44 -17.2, -44 -12 C -44 -6.8, -41.8 -1.6, -38.1 2.1 C -34.4 5.8, -29.2 8, -24 8 C -18.8 8, -13.6 5.8, -9.9 2.1 C -6.2 -1.6, -4 -6.8, -4 -12 Z"/>
+  <circle id="shell-core" fill="#8a4a28" cx="-24" cy="-12" r="9"/>
+  <!-- Banded treatment: an extra concentric ring nested between shell-ring-outer
+       (r 37-44) and shell-ring-inner (r 20-26); reconstructed (not verbatim
+       issue source; see PR notes), built with the same circle-annulus technique. -->
+  <path id="shell-band" fill="#7a3f22" d="M 9.0 -12.0 C 9.0 -3.2, 5.5 5.1, -0.7 11.3 C -6.9 17.5, -15.2 21.0, -24.0 21.0 C -32.8 21.0, -41.1 17.5, -47.3 11.3 C -53.5 5.1, -57.0 -3.2, -57.0 -12.0 C -57.0 -20.8, -53.5 -29.1, -47.3 -35.3 C -41.1 -41.5, -32.8 -45.0, -24.0 -45.0 C -15.2 -45.0, -6.9 -41.5, -0.7 -35.3 C 5.5 -29.1, 9.0 -20.8, 9.0 -12.0 L 5.0 -12.0 C 5.0 -19.7, 1.9 -27.1, -3.5 -32.5 C -8.9 -37.9, -16.3 -41.0, -24.0 -41.0 C -31.7 -41.0, -39.1 -37.9, -44.5 -32.5 C -49.9 -27.1, -53.0 -19.7, -53.0 -12.0 C -53.0 -4.3, -49.9 3.1, -44.5 8.5 C -39.1 13.9, -31.7 17.0, -24.0 17.0 C -16.3 17.0, -8.9 13.9, -3.5 8.5 C 1.9 3.1, 5.0 -4.3, 5.0 -12.0 Z"/>
+  <!-- Spotted treatment: scattered dots across the disc face; reconstructed. -->
+  <circle id="shell-spot-1" fill="#5a3018" cx="5" cy="-4.2" r="5"/>
+  <circle id="shell-spot-2" fill="#5a3018" cx="-28.5" cy="13.6" r="4.5"/>
+  <circle id="shell-spot-3" fill="#5a3018" cx="-54.5" cy="-17.4" r="5"/>
+  <circle id="shell-spot-4" fill="#5a3018" cx="-19.3" cy="-38.6" r="4.5"/>
+  <!-- Sleep/seal: operculum trapdoor over the ramshorn's near-round tube mouth. -->
+  <path id="operculum" fill="#8f7a66" d="M 13.7 14.3 C 17.6 18.2, 18.2 23.9, 15.1 27.1 C 11.9 30.2, 6.2 29.6, 2.3 25.7 C -1.6 21.8, -2.2 16.1, 0.9 12.9 C 4.1 9.8, 9.8 10.4, 13.7 14.3 Z"/>
+  <path id="operculum-nucleus" fill="#6f5b47" d="M 12.8 20.2 C 14.8 22.1, 15.1 25, 13.5 26.5 C 12 28.1, 9.1 27.8, 7.2 25.8 C 5.2 23.9, 4.9 21, 6.5 19.5 C 8 17.9, 10.9 18.2, 12.8 20.2 Z"/>
+</svg>

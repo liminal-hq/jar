@@ -22,17 +22,17 @@ import pectoralSvg from './fish-svg/pectoral-fin.svg?raw';
 import tailFanSvg from './fish-svg/tail-fan.svg?raw';
 import tailForkedSvg from './fish-svg/tail-forked.svg?raw';
 import tailVeilSvg from './fish-svg/tail-veil.svg?raw';
-import { extrude, shapesFromSvg, svgLoader } from './svgExtrude';
+import { extrude, extrudeAtHinge, shapesFromSvg, svgLoader, wrapInPivot } from './svgExtrude';
+
+// `SVG_SCALE` and `wrapInPivot` are genuinely species-neutral (the shared
+// viewBox convention and hinge-wrap technique respectively) and now live in
+// `svgExtrude.ts` — re-exported here unchanged so `FishModel.tsx`/
+// `fishCollider.ts` don't need to know either moved.
+export { SVG_SCALE, wrapInPivot } from './svgExtrude';
 
 /** Body depth all other pieces' overlaps/welds are measured against — every
  * attachment overlaps the body by ~4 units. */
 export const BODY_DEPTH = 16;
-
-/** Converts the SVG artwork's authored units (`viewBox="-170 -110 340 220"`)
- * into world units — `FishModel.tsx` scales its whole root group by this
- * (times life-stage scale), and `Fish.tsx` needs the same factor to size a
- * collider that actually matches what gets rendered. */
-export const SVG_SCALE = 0.004;
 
 /** §6.7's modest fin scale-up for males, applied to the tail group only —
  * shared here (not just local to `FishModel.tsx`) because `Fish.tsx`'s
@@ -71,19 +71,6 @@ export const DORSAL_CREST_SVG_DISTANCE = 73;
 export const TAIL_PIVOT = { x: -60, y: 0 };
 export const PECTORAL_HINGE = { x: 52, y: -10 };
 export const MOUTH_HINGE = { x: 90, y: -8 };
-
-/** Geometry shared across fish instances that rotates about a hinge (tail,
- * pectoral, mouth) is pre-translated here, once, so its own local origin
- * *is* the hinge — `wrapInPivot()` below can then just position a Group at
- * the hinge and add a plain `Mesh` with no further mutation, which matters
- * because the same shared geometry gets wrapped in two independent pivots
- * for mirrored pieces (the two pectoral fins): translating inside the wrap
- * step itself would double-translate the second use. */
-function extrudeAtHinge(shapes: THREE.Shape[], depth: number, hingeX: number, hingeY: number) {
-  const geometry = extrude(shapes, depth);
-  geometry.translate(-hingeX, -hingeY, 0);
-  return geometry;
-}
 
 // `body.svg` carries three named elements (`body-back`, `body-belly`,
 // `eye`) in one file — `SVGLoader` exposes the source SVG node on
@@ -153,25 +140,6 @@ export function createTailGeometry(
  * the body, same rationale as the tail above. */
 export function createDorsalGeometry(): THREE.BufferGeometry {
   return extrude(shapesFromSvg(dorsalSvg), 6);
-}
-
-/** Wraps an already-hinge-centred geometry (see `extrudeAtHinge`) in a
- * pivot `Group` positioned at that same hinge — deliberately does *not*
- * translate the geometry itself, so the same shared geometry can be
- * wrapped more than once (the mirrored pectoral pair) without
- * double-translating. */
-export function wrapInPivot(
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  hingeX: number,
-  hingeY: number,
-): THREE.Group {
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
-  const pivot = new THREE.Group();
-  pivot.position.set(hingeX, hingeY, 0);
-  pivot.add(mesh);
-  return pivot;
 }
 
 /** Belly isn't a flat sticker on one face — it's the body mesh itself,

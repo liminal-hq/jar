@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Coil shell (garden snail). Base on y=40, overlapping the foot top (y=34) by 6.
+       Whorl is a generated tapering spiral band about (-20,-13); always shown,
+       the way body-belly rides on body.svg. shell-band/shell-spot-* are the
+       Pattern-gene decal paths, gene-toggled by id at load time: Banded shows
+       shell-band, Spotted shows shell-spot-1..6, Solid shows neither.
+       Sealed pose (issue #98): shell drops 30 units so its base (y=40) rests on
+       the contact line (y=70); aperture fit c(40,10) r 9x25 rot -7deg;
+       operculum extrudes at shell depth - 6. Placeholder fills. -->
+  <path id="shell" fill="#c97b4a" d="M 38 34 C 46 22, 48 4, 44 -14 C 38 -46, 8 -66, -24 -64 C -58 -62, -80 -38, -80 -6 C -80 24, -58 40, -28 41 C -8 42, 12 41, 26 40 C 33 40, 35 38, 38 34 Z"/>
+  <path id="shell-whorl" fill="#a55c33" d="M 9.8 29.6 C -6.5 39.1, -27.1 38.1, -41.6 28.9 C -56 19.6, -63.7 2.7, -62.2 -12.6 C -60.7 -27.9, -50.4 -40.9, -37.7 -45.9 C -25 -50.8, -10.8 -47.8, -1.9 -39.9 C 6.9 -32, 10.1 -19.8, 7.4 -10.1 C 4.7 -0.3, -3.4 6.6, -11.6 8.1 C -19.9 9.6, -27.7 5.9, -31.6 0.5 C -35.4 -4.9, -35.2 -11.7, -32.6 -15.9 C -29.9 -20, -25.3 -21.6, -22.1 -20.7 L -21 -16.9 C -22.8 -17.8, -26 -17.4, -28 -14.8 C -30 -12.2, -30.6 -7.5, -28.1 -3.5 C -25.6 0.5, -20 3.4, -13.8 2.5 C -7.7 1.6, -1.4 -3.4, 0.8 -10.8 C 3 -18.1, 0.8 -27.6, -6 -33.8 C -12.8 -40.1, -23.9 -42.6, -33.9 -38.8 C -43.9 -35, -52.3 -24.8, -53.6 -12.7 C -54.8 -0.5, -48.8 13.1, -37.3 20.6 C -25.8 28.1, -9.2 29, 4.1 21.4 Z"/>
+  <!-- Banded treatment: the whorl rotated a half-turn (180deg) about the same
+       centre (-20,-13), so it interleaves behind the whorl exactly as described;
+       reconstructed (not verbatim issue source; see PR notes). -->
+  <path id="shell-band" fill="#7a3f22" d="M -49.8 -55.6 C -33.5 -65.1, -12.9 -64.1, 1.6 -54.9 C 16.0 -45.6, 23.7 -28.7, 22.2 -13.4 C 20.7 1.9, 10.4 14.9, -2.3 19.9 C -15.0 24.8, -29.2 21.8, -38.1 13.9 C -46.9 6.0, -50.1 -6.2, -47.4 -15.9 C -44.7 -25.7, -36.6 -32.6, -28.4 -34.1 C -20.1 -35.6, -12.3 -31.9, -8.4 -26.5 C -4.6 -21.1, -4.8 -14.3, -7.4 -10.1 C -10.1 -6.0, -14.7 -4.4, -17.9 -5.3 L -19.0 -9.1 C -17.2 -8.2, -14.0 -8.6, -12.0 -11.2 C -10.0 -13.8, -9.4 -18.5, -11.9 -22.5 C -14.4 -26.5, -20.0 -29.4, -26.2 -28.5 C -32.3 -27.6, -38.6 -22.6, -40.8 -15.2 C -43.0 -7.9, -40.8 1.6, -34.0 7.8 C -27.2 14.1, -16.1 16.6, -6.1 12.8 C 3.9 9.0, 12.3 -1.2, 13.6 -13.3 C 14.8 -25.5, 8.8 -39.1, -2.7 -46.6 C -14.2 -54.1, -30.8 -55.0, -44.1 -47.4 Z"/>
+  <!-- Spotted treatment: scattered dots across the shell face; reconstructed. -->
+  <circle id="shell-spot-1" fill="#5a3018" cx="19.5" cy="1.4" r="6"/>
+  <circle id="shell-spot-2" fill="#5a3018" cx="-23" cy="20.9" r="5"/>
+  <circle id="shell-spot-3" fill="#5a3018" cx="-63.2" cy="2.7" r="6.5"/>
+  <circle id="shell-spot-4" fill="#5a3018" cx="-39.3" cy="-36" r="5"/>
+  <circle id="shell-spot-5" fill="#5a3018" cx="2" cy="-51.1" r="6"/>
+  <circle id="shell-spot-6" fill="#5a3018" cx="-1.2" cy="-19.8" r="4.5"/>
+  <!-- Sleep/seal: operculum trapdoor over the coil's tall oval aperture. -->
+  <path id="operculum" fill="#8f7a66" d="M 48.9 8.9 C 50.6 22.6, 48 34.2, 43 34.8 C 38.1 35.4, 32.7 24.8, 31.1 11.1 C 29.4 -2.6, 32 -14.2, 37 -14.8 C 41.9 -15.4, 47.3 -4.8, 48.9 8.9 Z"/>
+  <path id="operculum-nucleus" fill="#6f5b47" d="M 45.5 19.5 C 46.1 24.9, 44.7 29.6, 42.2 29.9 C 39.8 30.2, 37.2 26, 36.5 20.5 C 35.9 15.1, 37.3 10.4, 39.8 10.1 C 42.2 9.8, 44.8 14, 45.5 19.5 Z"/>
+</svg>

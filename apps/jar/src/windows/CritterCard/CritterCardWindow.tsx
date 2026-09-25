@@ -53,10 +53,14 @@ export function CritterCardWindow() {
     return <DialogShell windowTitle="Critter card">No critter selected yet.</DialogShell>;
   }
 
+  // Gecko/terrarium rendering isn't built yet (NEXT_STEPS.md) — `CritterPreview`
+  // only knows how to render fish and snails.
+  const hasPreview = critter.species === 'Fish' || critter.species === 'Snail';
+
   if (!critter.alive) {
     return (
       <DialogShell windowTitle="Critter card" title={critter.name}>
-        {critter.species === 'Fish' && <CritterPreview critter={critter} passed />}
+        {hasPreview && <CritterPreview critter={critter} passed />}
         <p style={{ fontStyle: 'italic' }}>Remembered fondly — this one has passed on.</p>
       </DialogShell>
     );
@@ -84,9 +88,7 @@ export function CritterCardWindow() {
         />
       }
     >
-      {/* Gecko/terrarium rendering isn't built yet (NEXT_STEPS.md) — this
-          panel only knows how to render `FishModel`. */}
-      {critter.species === 'Fish' && <CritterPreview critter={critter} />}
+      {hasPreview && <CritterPreview critter={critter} />}
 
       <p>
         {critter.species} · {stage} · {ageDays} days old
@@ -110,7 +112,14 @@ export function CritterCardWindow() {
         <dt>Genetics</dt>
         <dd>
           hue {critter.hue}° · {critter.sex}
-          {critter.fin ? ` · ${critter.fin}` : ''} · {critter.spots ? 'spotted' : 'plain'}
+          {critter.fin ? ` · ${critter.fin}` : ''}
+          {critter.shell ? ` · ${critter.shell}` : ''}
+          {/* `pattern` is snail-only for now (fish/gecko still roll the
+              boolean `spots` until issue #98's follow-up widens `pattern`
+              to every species) — shown in its place once it's populated. */}
+          {critter.pattern
+            ? ` · ${critter.pattern.toLowerCase()}`
+            : ` · ${critter.spots ? 'spotted' : 'plain'}`}
         </dd>
         <dt>Favourite spot</dt>
         <dd>

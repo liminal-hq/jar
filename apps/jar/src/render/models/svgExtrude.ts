@@ -15,6 +15,13 @@ export function shapesFromSvg(svg: string): THREE.Shape[] {
   return svgLoader.parse(svg).paths.flatMap((p) => p.toShapes(true));
 }
 
+/** Converts the shared SVG viewBox's authored units (`viewBox="-170 -110
+ * 340 220"`, used by both `fish-svg/` and `snail-svg/`) into world units —
+ * each species' own model component scales its root group by this (times
+ * life-stage scale), and each species' own collider module needs the same
+ * factor to size a collider that actually matches what gets rendered. */
+export const SVG_SCALE = 0.004;
+
 /** A Y-mirror (`scale(1,-1,1)`) transforms an existing normal attribute via
  * the matrix's normal matrix, same as it transforms positions — but a
  * mirror is a reflection (negative determinant), and a reflection inverts
@@ -83,4 +90,40 @@ export function extrude(shapes: THREE.Shape[], depth: number, bevel = 0.6): THRE
   geometry.scale(1, -1, 1);
   reverseWinding(geometry);
   return geometry;
+}
+
+/** Pre-translates extruded geometry so its own local origin sits exactly at
+ * (hingeX, hingeY) — a hinged part shared across species (the fish's tail/
+ * pectoral/mouth, `fishGeometry.ts`; the snail's eyestalk, `snailGeometry.ts`)
+ * uses this so `wrapInPivot` below can position a `Group` at the hinge and
+ * add a plain `Mesh` with no further mutation, even when the same shared
+ * geometry gets wrapped in two independent pivots for a mirrored pair. */
+export function extrudeAtHinge(
+  shapes: THREE.Shape[],
+  depth: number,
+  hingeX: number,
+  hingeY: number,
+): THREE.BufferGeometry {
+  const geometry = extrude(shapes, depth);
+  geometry.translate(-hingeX, -hingeY, 0);
+  return geometry;
+}
+
+/** Wraps an already-hinge-centred geometry (see `extrudeAtHinge`) in a pivot
+ * `Group` positioned at that same hinge — deliberately does *not* translate
+ * the geometry itself, so the same shared geometry can be wrapped more than
+ * once (a mirrored pair — the fish's pectoral fins, the snail's eyestalks)
+ * without double-translating. */
+export function wrapInPivot(
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+  hingeX: number,
+  hingeY: number,
+): THREE.Group {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  const pivot = new THREE.Group();
+  pivot.position.set(hingeX, hingeY, 0);
+  pivot.add(mesh);
+  return pivot;
 }
