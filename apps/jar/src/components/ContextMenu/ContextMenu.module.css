@@ -34,6 +34,16 @@
   outline: none;
 }
 
+/* A flyout submenu (Submenu.tsx) — same look as the top-level menu, just
+ * layered above it (submenus are portaled as document.body siblings, not
+ * DOM descendants of the parent menu, so a plain z-index stack order needs
+ * this to be explicit). Positioned via inline style, not from this rule —
+ * Submenu.tsx computes `left`/`top` itself. */
+.submenu {
+  composes: contextMenu;
+  z-index: 10001;
+}
+
 .menuSection {
   padding: 0;
   display: flex;
@@ -140,6 +150,14 @@
   font-size: 11px;
   opacity: 0.65;
   margin-left: 12px;
+}
+
+.menuItemChevron {
+  flex-shrink: 0;
+  font-size: 14px;
+  opacity: 0.65;
+  line-height: 1;
+  margin-left: 4px;
 }
 
 .menuSeparator {

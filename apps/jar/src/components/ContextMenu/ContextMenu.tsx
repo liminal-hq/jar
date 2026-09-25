@@ -8,8 +8,9 @@ import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'rea
 import { createPortal } from 'react-dom';
 
 import styles from './ContextMenu.module.css';
+import { moveFocus, navigableIds } from './keyboardNav';
 import { MenuSection } from './MenuSection';
-import { isSeparator, type MenuModel, type MenuPosition } from './types';
+import type { MenuModel, MenuPosition } from './types';
 
 interface ContextMenuProps {
   model: MenuModel;
@@ -22,21 +23,6 @@ interface ContextMenuProps {
    * which pre-select the first item for a keyboard-triggered open but show
    * no selection at all for a real right-click. */
   autoFocusFirstItem: boolean;
-}
-
-/** Ids of every enabled, non-separator item, in the same order they render
- * — the order arrow keys move through. Both call sites construct a fresh
- * `model` object on every render, so this is cheap on purpose rather than
- * memoized — memoizing on `[model]` would never actually hit. */
-function navigableIds(model: MenuModel): string[] {
-  const ids: string[] = [];
-  for (const section of model.sections) {
-    for (const item of section.items) {
-      if (isSeparator(item)) continue;
-      if (!item.disabled) ids.push(item.id);
-    }
-  }
-  return ids;
 }
 
 export function ContextMenu({
@@ -73,7 +59,19 @@ export function ContextMenu({
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      // A submenu (Submenu.tsx) is portaled to document.body as its own
+      // sibling, not a DOM descendant of menuRef — checking menuRef alone
+      // would treat every click inside an open submenu as "outside" and
+      // close everything via mousedown, before the click event even
+      // reaches the submenu's own button. Every menu panel (this one, and
+      // any open submenu) shares role="menu", so checking all of them
+      // covers both without Submenu needing to hand a ref up.
+      const panels = document.querySelectorAll('[role="menu"]');
+      for (const panel of panels) {
+        if (panel.contains(target)) return;
+      }
+      onClose();
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -119,38 +117,15 @@ export function ContextMenu({
     else itemRefs.current.delete(id);
   }
 
-  function focusItem(id: string) {
-    const el = itemRefs.current.get(id);
-    el?.focus();
-    // Keeps the newly-focused item visible once the overflow-scrolling menu
-    // (ContextMenu.module.css's max-height/overflow-y) is actually
-    // scrolled — relying on each engine's default focus-follows-scroll
-    // alone is one less cross-engine assumption to make.
-    el?.scrollIntoView({ block: 'nearest' });
-  }
-
   function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
     if (e.key === 'Tab') {
       e.preventDefault();
       onClose();
       return;
     }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
     e.preventDefault();
-
-    const active = document.activeElement;
-    const currentIndex = ids.findIndex((id) => itemRefs.current.get(id) === active);
-    let nextIndex: number;
-    if (e.key === 'Home') nextIndex = 0;
-    else if (e.key === 'End') nextIndex = ids.length - 1;
-    else if (e.key === 'ArrowDown')
-      nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % ids.length;
-    else
-      nextIndex =
-        currentIndex === -1 ? ids.length - 1 : (currentIndex - 1 + ids.length) % ids.length;
-
-    const nextId = ids[nextIndex];
-    if (nextId) focusItem(nextId);
+    moveFocus(e.key, ids, itemRefs.current);
   }
 
   function handleItemClick(itemId: string, action?: () => void) {

@@ -19,6 +19,9 @@ function makeActions(): TankMenuActions {
     openFishMonitor: vi.fn(),
     openFishEye: vi.fn(),
     toggleAlwaysOnTop: vi.fn(),
+    setDayNightAuto: vi.fn(),
+    setDayNightDay: vi.fn(),
+    setDayNightNight: vi.fn(),
     openSetup: vi.fn(),
     openDevSettings: vi.fn(),
     exit: vi.fn(),
@@ -35,12 +38,18 @@ function itemById(model: ReturnType<typeof buildTankMenuModel>, id: string): Men
   return found;
 }
 
+function childById(item: MenuItem, id: string): MenuItem {
+  const found = (item.children as MenuItem[] | undefined)?.find((c) => c.id === id);
+  if (!found) throw new Error(`no child item with id "${id}" under "${item.id}"`);
+  return found;
+}
+
 describe('buildTankMenuModel', () => {
   it('has five sections: Tank, Mode, Screenshot, Critters, App', () => {
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, makeActions());
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', makeActions());
     const [tank, mode, screenshot, critters, app] = model.sections;
     expect(model.sections).toHaveLength(5);
-    expect(items(tank!)).toHaveLength(3);
+    expect(items(tank!).map((i) => i.id)).toEqual(['light', 'ambient', 'sound', 'day-night']);
     expect(items(mode!)).toHaveLength(1);
     expect(items(screenshot!).map((i) => i.id)).toEqual(['screenshot']);
     expect(items(critters!).map((i) => i.id)).toEqual([
@@ -66,6 +75,7 @@ describe('buildTankMenuModel', () => {
         sound_on: true,
         always_on_top: true,
       },
+      'auto',
       makeActions(),
     );
     expect(itemById(onModel, 'light').checked).toBe(true);
@@ -75,24 +85,40 @@ describe('buildTankMenuModel', () => {
   });
 
   it('labels the ambient toggle Bubbles in Fish mode, Mist in Gecko mode', () => {
-    const fishModel = buildTankMenuModel({ ...DEFAULT_SETTINGS, mode: 'Fish' }, makeActions());
+    const fishModel = buildTankMenuModel(
+      { ...DEFAULT_SETTINGS, mode: 'Fish' },
+      'auto',
+      makeActions(),
+    );
     expect(itemById(fishModel, 'ambient').label).toBe('Bubbles');
 
-    const geckoModel = buildTankMenuModel({ ...DEFAULT_SETTINGS, mode: 'Gecko' }, makeActions());
+    const geckoModel = buildTankMenuModel(
+      { ...DEFAULT_SETTINGS, mode: 'Gecko' },
+      'auto',
+      makeActions(),
+    );
     expect(itemById(geckoModel, 'ambient').label).toBe('Mist');
   });
 
   it('names the other mode on the mode-switch row', () => {
-    const fishModel = buildTankMenuModel({ ...DEFAULT_SETTINGS, mode: 'Fish' }, makeActions());
+    const fishModel = buildTankMenuModel(
+      { ...DEFAULT_SETTINGS, mode: 'Fish' },
+      'auto',
+      makeActions(),
+    );
     expect(itemById(fishModel, 'mode').label).toBe('Switch to gecko');
 
-    const geckoModel = buildTankMenuModel({ ...DEFAULT_SETTINGS, mode: 'Gecko' }, makeActions());
+    const geckoModel = buildTankMenuModel(
+      { ...DEFAULT_SETTINGS, mode: 'Gecko' },
+      'auto',
+      makeActions(),
+    );
     expect(itemById(geckoModel, 'mode').label).toBe('Switch to fish');
   });
 
   it('calls exactly the matching action and nothing else', () => {
     const actions = makeActions();
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
 
     itemById(model, 'fish-eye').action?.();
 
@@ -106,7 +132,7 @@ describe('buildTankMenuModel', () => {
 
   it('wires the Screenshot item to captureScreenshot and nothing else', () => {
     const actions = makeActions();
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
     const screenshotItem = itemById(model, 'screenshot');
 
     expect(screenshotItem.label).toBe('Screenshot');
@@ -121,7 +147,7 @@ describe('buildTankMenuModel', () => {
 
   it('wires Always on top to toggleAlwaysOnTop and nothing else', () => {
     const actions = makeActions();
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
     const alwaysOnTopItem = itemById(model, 'always-on-top');
 
     expect(alwaysOnTopItem.label).toBe('Always on top');
@@ -137,7 +163,7 @@ describe('buildTankMenuModel', () => {
 
   it('wires Add a critter to addCritter and nothing else', () => {
     const actions = makeActions();
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
     const addCritterItem = itemById(model, 'add-critter');
 
     expect(addCritterItem.label).toBe('Add a critter');
@@ -148,5 +174,45 @@ describe('buildTankMenuModel', () => {
     expect(actions.addCritter).toHaveBeenCalledOnce();
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
     expect(actions.captureScreenshot).not.toHaveBeenCalled();
+  });
+
+  it('renders Day/night as a submenu with no checked/action of its own', () => {
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', makeActions());
+    const dayNightItem = itemById(model, 'day-night');
+
+    expect(dayNightItem.label).toBe('Day/night');
+    expect(dayNightItem.checked).toBeUndefined();
+    expect(dayNightItem.action).toBeUndefined();
+    expect(dayNightItem.children?.map((c) => (c as MenuItem).id)).toEqual([
+      'day-night-auto',
+      'day-night-day',
+      'day-night-night',
+    ]);
+  });
+
+  it("computes the Day/night submenu's checked state exclusively", () => {
+    const autoModel = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', makeActions());
+    const autoItem = itemById(autoModel, 'day-night');
+    expect(childById(autoItem, 'day-night-auto').checked).toBe(true);
+    expect(childById(autoItem, 'day-night-day').checked).toBe(false);
+    expect(childById(autoItem, 'day-night-night').checked).toBe(false);
+
+    const nightModel = buildTankMenuModel(DEFAULT_SETTINGS, 'night', makeActions());
+    const nightItem = itemById(nightModel, 'day-night');
+    expect(childById(nightItem, 'day-night-auto').checked).toBe(false);
+    expect(childById(nightItem, 'day-night-day').checked).toBe(false);
+    expect(childById(nightItem, 'day-night-night').checked).toBe(true);
+  });
+
+  it('wires each Day/night submenu item to its own action and nothing else', () => {
+    const actions = makeActions();
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
+    const dayNightItem = itemById(model, 'day-night');
+
+    childById(dayNightItem, 'day-night-night').action?.();
+
+    expect(actions.setDayNightNight).toHaveBeenCalledOnce();
+    expect(actions.setDayNightAuto).not.toHaveBeenCalled();
+    expect(actions.setDayNightDay).not.toHaveBeenCalled();
   });
 });

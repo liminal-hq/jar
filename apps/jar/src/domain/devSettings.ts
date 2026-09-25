@@ -91,15 +91,17 @@ export type DayNightOverride = 'auto' | 'day' | 'night';
 const DAY_NIGHT_OVERRIDE_KEY = 'jar:dev:dayNightOverride';
 
 /** Overrides the tank's night/settle behaviour regardless of the actual jar
- * clock (`Fish.tsx`) — `'day'`/`'night'` pin it there so a session can
- * exercise settle/wake transitions on demand (the stutter this exists to
- * chase shows up most right at those transitions, not mid-day/mid-night)
- * without waiting out a real day/night cycle; `'auto'` is the normal jar
- * clock. Same live-sync pattern as `createDevToggle`, just a 3-way string
+ * clock (`Fish.tsx`) — `'day'`/`'night'` pin it there, `'auto'` follows the
+ * normal jar clock. Reachable from the tank's own right-click menu (the
+ * "Day/night" submenu, `tankMenuModel.ts`) as well as the Fish monitor
+ * window's own radio group — no longer just a Fish-monitor-scoped tuning
+ * aid, so the default below is `'day'`, not `'auto'`: an always-lively tank
+ * is the out-of-the-box experience, and the real day/night cycle is
+ * opt-in. Same live-sync pattern as `createDevToggle`, just a 3-way string
  * instead of a boolean. */
 export function getDayNightOverride(): DayNightOverride {
   const raw = localStorage.getItem(DAY_NIGHT_OVERRIDE_KEY);
-  return raw === 'day' || raw === 'night' ? raw : 'auto';
+  return raw === 'auto' || raw === 'night' ? raw : 'day';
 }
 
 export function setDayNightOverride(value: DayNightOverride): void {

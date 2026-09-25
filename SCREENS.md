@@ -7,7 +7,7 @@ Companion to `SPEC.md` (see its §3, which points here). This is the full window
 - No OS chrome. Currently no separate frame bezel either — the glass tank enclosure itself (see `docs/architecture/3d-engine.md` §8.1) is the window's whole visual boundary, edge to edge, translucent through to the desktop behind it. The six frame treatments (`SPEC.md` §4) are built and Setup-selectable but not applied to the tank window while this is revisited.
 - Contents: backdrop (aquarium or terrarium), critters, bubbles/mist, night tint, status chip (bottom-left: `4 fish · 22:14 · asleep`), event toasts (top-centre, 4 s).
 - Right-click the tank → a context menu opens at the cursor, over the tank (no window resize, no second window). Clicking elsewhere, Escape, or losing focus closes it; a plain left-click on the tank background does nothing (dragging the window and clicking a critter still work as their own gestures).
-  - **Tank**: Light · Bubbles (aquarium) / Mist (terrarium) · Critter sounds — checkboxes, reflecting the live setting.
+  - **Tank**: Light · Bubbles (aquarium) / Mist (terrarium) · Critter sounds — checkboxes, reflecting the live setting. **Day/night ▸** — a submenu: Auto · Always day · Always night, exclusive. Defaults to Always day; Auto opts back into the jar's real day/night cycle. Also settable from the Fish monitor window's own radio group (see "Dev / Fish monitor" below) — either surface's choice persists regardless of what else is opened or closed.
   - **Mode**: Gecko/Fish (mode switch).
   - **Screenshot**: copies the tank canvas to the clipboard as a PNG.
   - **Critters**: Add a critter · Tree · Fish monitor · Fish eye — creating a critter, and the windows that show you the critters/sim itself.
@@ -49,7 +49,7 @@ The tank interior (backdrop, critters, particles, lighting) is a 3D scene per `d
 Two supplementary tooling windows, reachable from the W1 tank's right-click menu — not part of the original product spec, but always available (not gated behind a dev build) since both are self-contained and genuinely useful for a curious owner, not just for tuning.
 
 - **Dev** — checkboxes for two `localStorage`-backed debug overlays (mouse event capture, live fish position capture), each showing its own live panel inline while enabled. Purely local state, no effect on the jar itself.
-- **Fish monitor** — a live table plus top-down/front maps of every fish's steering/animation state (mode, resting, speed, turn rate). A Day/night radio group overrides the tank's real day/night clock while the window is open, resetting to Auto as soon as it closes so it never leaves the jar's own clock stuck.
+- **Fish monitor** — a live table plus top-down/front maps of every fish's steering/animation state (mode, resting, speed, turn rate). Its own Day/night radio group is a second surface onto the same persistent override the tank's own right-click menu controls (see W1 above) — not reset when this window closes.
 
 ## Mobile companion (Android)
 
