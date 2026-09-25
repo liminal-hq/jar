@@ -196,8 +196,10 @@ export function useFishPositionOverlayEnabled(): boolean {
  * here rather than hardcoded like `CrtEffect`'s constants, since the right
  * "unmistakably fisheye but not smeared" strength can only be judged by eye
  * in the running app. Unlike the toggles above, this isn't reset on this
- * window's close: it's a real tuned value, not per-session debug capture. */
-const fishEyeLensStrength = createDevNumber('jar:dev:fishEyeLensStrength', 0.75);
+ * window's close: it's a real tuned value, not per-session debug capture.
+ * `0.35` was landed on live: `0.75` (the original guess) warped the light
+ * beam/castle edge enough to make the scene genuinely hard to read. */
+const fishEyeLensStrength = createDevNumber('jar:dev:fishEyeLensStrength', 0.35);
 export const getFishEyeLensStrength = fishEyeLensStrength.getValue;
 export const setFishEyeLensStrength = fishEyeLensStrength.setValue;
 export const useFishEyeLensStrength = fishEyeLensStrength.useValue;
