@@ -102,7 +102,7 @@ pub struct Critter {
 
 ### 3.2 `JarSettings`
 
-Everything in `SPEC.md` §6's persistence list _except_ window geometry (see §6.3 below): mode, frame, dialog theme + variant per theme, light + light colour + castle light intensity, bubbles/mist + bubble intensity, sound, simulation speed, always-on-top.
+Everything in `SPEC.md` §6's persistence list _except_ window geometry (see §6.3 below): habitat, frame, dialog theme + variant per theme, light + light colour + castle light intensity, bubbles/mist + bubble intensity, sound, simulation speed, always-on-top.
 
 `light_colour` (`LightColour`: `Daylight`/`Warm`/`Moonlight`/`Reef`/`Jungle`/`Sunset`/`Party`) and the two `u8` intensity fields (`light_intensity`, `bubble_intensity`, both 0-200, default 100) are presentation-only — unlike `light_on` itself, none of the three feed `tick.rs`'s mood formula (§4.4). The snapshot format is currently at v5: v3 added `light_colour`, v4 added `light_intensity`, v5 added `bubble_intensity` — see `jar-core::snapshot`'s own version-history comment for the full migration chain and what each bump's `migrate_vN` defaults for saves from before that field existed.
 
@@ -127,7 +127,7 @@ pub enum SimEvent {
 
 ### 3.4 Commands (frontend → core)
 
-Mirroring `tauri-plugin-city-sim`'s command surface shape: `start`, `stop`, `set_speed`, `set_mode`, `add_critter`, `rename_critter`, `set_toggle` (light/bubbles/sound), `set_theme`, `set_frame`, `set_light_colour`, `set_light_intensity`, `set_bubble_intensity`, `get_snapshot`, `load_snapshot`.
+Mirroring `tauri-plugin-city-sim`'s command surface shape: `start`, `stop`, `set_speed`, `set_habitat`, `add_critter`, `rename_critter`, `set_toggle` (light/bubbles/sound), `set_theme`, `set_frame`, `set_light_colour`, `set_light_intensity`, `set_bubble_intensity`, `get_snapshot`, `load_snapshot`.
 
 ---
 

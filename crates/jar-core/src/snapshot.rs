@@ -11,7 +11,8 @@ use std::collections::BTreeMap;
 
 use jar_protocol::{
     default_theme_variants, known_theme_variant_names, Critter, CritterId, DialogTheme,
-    FavouriteSpot, FinType, JarSettings, LightColour, Personality, Sex, Species, TankFrame,
+    FavouriteSpot, FinType, Habitat, JarSettings, LightColour, Personality, Sex, Species,
+    TankFrame,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -23,7 +24,7 @@ const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
 /// every time the current snapshot body changes shape.
-const CURRENT_VERSION: u16 = 6;
+const CURRENT_VERSION: u16 = 7;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
@@ -72,6 +73,14 @@ const CURRENT_VERSION: u16 = 6;
 // `SnapshotV5` below are now the frozen pre-v6 shape; `migrate_v5`
 // defaults `bubble_intensity` to `100` for anything saved before this
 // field existed.
+//
+// v7 (2026-09-26): `JarSettings.mode: Species` became `habitat: Habitat`
+// (issue #98) — a tank's habitat and the species living in it stopped being
+// the same thing the moment a second aquarium species (the snail) was
+// planned, so `mode` could no longer name both at once. `SettingsV6`/
+// `SnapshotV6` below are now the frozen pre-v7 shape; `migrate_v6` maps
+// `Species::Fish -> Habitat::Aquarium`, `Species::Gecko -> Habitat::Terrarium`
+// (exhaustive — `Species::Snail` doesn't exist yet at this version).
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -209,8 +218,34 @@ struct SnapshotV5 {
     settings: SettingsV5,
 }
 
+/// The pre-v7 `JarSettings` shape — see the v7 comment above. Not the live
+/// `jar_protocol::JarSettings`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct SettingsV6 {
+    mode: Species,
+    frame: TankFrame,
+    dialog_theme: DialogTheme,
+    theme_variants: BTreeMap<DialogTheme, String>,
+    light_on: bool,
+    light_colour: LightColour,
+    light_intensity: u8,
+    ambient_particles_on: bool,
+    bubble_intensity: u8,
+    sound_on: bool,
+    simulation_speed: u8,
+    always_on_top: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV6 {
+    critters: Vec<Critter>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: SettingsV6,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV7 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -234,7 +269,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV6 {
+    let body = SnapshotV7 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -375,7 +410,7 @@ fn migrate_v5(v5: SnapshotV5) -> SnapshotV6 {
         critters: v5.critters,
         sim_seconds: v5.sim_seconds,
         speed: v5.speed,
-        settings: JarSettings {
+        settings: SettingsV6 {
             mode: v5.settings.mode,
             frame: v5.settings.frame,
             dialog_theme: v5.settings.dialog_theme,
@@ -392,6 +427,34 @@ fn migrate_v5(v5: SnapshotV5) -> SnapshotV6 {
     }
 }
 
+/// Maps `Species::Fish -> Habitat::Aquarium`, `Species::Gecko ->
+/// Habitat::Terrarium` — exhaustive, since `Species::Snail` doesn't exist
+/// yet at this version (see the v7 comment above).
+fn migrate_v6(v6: SnapshotV6) -> SnapshotV7 {
+    SnapshotV7 {
+        critters: v6.critters,
+        sim_seconds: v6.sim_seconds,
+        speed: v6.speed,
+        settings: JarSettings {
+            habitat: match v6.settings.mode {
+                Species::Fish => Habitat::Aquarium,
+                Species::Gecko => Habitat::Terrarium,
+            },
+            frame: v6.settings.frame,
+            dialog_theme: v6.settings.dialog_theme,
+            theme_variants: v6.settings.theme_variants,
+            light_on: v6.settings.light_on,
+            light_colour: v6.settings.light_colour,
+            light_intensity: v6.settings.light_intensity,
+            ambient_particles_on: v6.settings.ambient_particles_on,
+            bubble_intensity: v6.settings.bubble_intensity,
+            sound_on: v6.settings.sound_on,
+            simulation_speed: v6.settings.simulation_speed,
+            always_on_top: v6.settings.always_on_top,
+        },
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
@@ -399,28 +462,34 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
         return Err(SnapshotError::BadMagic);
     }
 
-    let body: SnapshotV6 = match header.version {
+    let body: SnapshotV7 = match header.version {
         1 => {
             let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(migrate_v3(migrate_v2(migrate_v1(v1)))))
+            migrate_v6(migrate_v5(migrate_v4(migrate_v3(migrate_v2(migrate_v1(
+                v1,
+            ))))))
         }
         2 => {
             let v2: SnapshotV2 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(migrate_v3(migrate_v2(v2))))
+            migrate_v6(migrate_v5(migrate_v4(migrate_v3(migrate_v2(v2)))))
         }
         3 => {
             let v3: SnapshotV3 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(migrate_v3(v3)))
+            migrate_v6(migrate_v5(migrate_v4(migrate_v3(v3))))
         }
         4 => {
             let v4: SnapshotV4 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(v4))
+            migrate_v6(migrate_v5(migrate_v4(v4)))
         }
         5 => {
             let v5: SnapshotV5 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(v5)
+            migrate_v6(migrate_v5(v5))
         }
-        6 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        6 => {
+            let v6: SnapshotV6 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v6(v6)
+        }
+        7 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
         other => return Err(SnapshotError::UnsupportedVersion(other)),
     };
 
@@ -665,7 +734,7 @@ mod tests {
         assert_eq!(restored.settings.light_colour, LightColour::Daylight);
         assert_eq!(restored.settings.light_intensity, 100);
         // The rest of v2's settings and the clock carry over too.
-        assert_eq!(restored.settings.mode, Species::Gecko);
+        assert_eq!(restored.settings.habitat, Habitat::Terrarium);
         assert_eq!(restored.settings.frame, TankFrame::RoundedGlass);
         assert_eq!(restored.settings.simulation_speed, 10);
         assert_eq!(restored.clock.sim_seconds, 7.0);

@@ -10,7 +10,7 @@ const COMMANDS: &[&str] = &[
     "start",
     "stop",
     "set_speed",
-    "set_mode",
+    "set_habitat",
     "add_critter",
     "rename_critter",
     "set_toggle",

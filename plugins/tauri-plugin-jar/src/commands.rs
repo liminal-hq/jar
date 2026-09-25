@@ -8,7 +8,8 @@
 
 use chrono::Timelike;
 use jar_protocol::{
-    Critter, CritterId, DialogTheme, JarSettings, LightColour, SimEvent, Species, TankFrame,
+    Critter, CritterId, DialogTheme, Habitat, JarSettings, LightColour, SimEvent, Species,
+    TankFrame,
 };
 use serde::Deserialize;
 use tauri::ipc::Channel;
@@ -68,9 +69,9 @@ pub fn set_speed(plugin: State<'_, JarPlugin>, speed: u8) -> Result<()> {
 }
 
 #[command]
-pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
+pub fn set_habitat(plugin: State<'_, JarPlugin>, habitat: Habitat) -> Result<()> {
     let settings = with_jar(&plugin, |jar| {
-        jar.settings.mode = mode;
+        jar.settings.habitat = habitat;
         Ok(jar.settings.clone())
     })?;
     push_event(&plugin, SimEvent::SettingsChanged { settings });
@@ -397,7 +398,7 @@ mod tests {
     #[test]
     fn reset_to_defaults_restores_every_field() {
         let mut settings = JarSettings {
-            mode: Species::Gecko,
+            habitat: Habitat::Terrarium,
             frame: TankFrame::NeonCrt,
             dialog_theme: DialogTheme::NeonTerminal,
             theme_variants: BTreeMap::new(),

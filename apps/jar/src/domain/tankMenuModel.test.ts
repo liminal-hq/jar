@@ -86,14 +86,14 @@ describe('buildTankMenuModel', () => {
 
   it('labels the ambient toggle Bubbles in Fish mode, Mist in Gecko mode', () => {
     const fishModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Fish' },
+      { ...DEFAULT_SETTINGS, habitat: 'Aquarium' },
       'auto',
       makeActions(),
     );
     expect(itemById(fishModel, 'ambient').label).toBe('Bubbles');
 
     const geckoModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Gecko' },
+      { ...DEFAULT_SETTINGS, habitat: 'Terrarium' },
       'auto',
       makeActions(),
     );
@@ -102,14 +102,14 @@ describe('buildTankMenuModel', () => {
 
   it('names the other mode on the mode-switch row', () => {
     const fishModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Fish' },
+      { ...DEFAULT_SETTINGS, habitat: 'Aquarium' },
       'auto',
       makeActions(),
     );
     expect(itemById(fishModel, 'mode').label).toBe('Switch to gecko');
 
     const geckoModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Gecko' },
+      { ...DEFAULT_SETTINGS, habitat: 'Terrarium' },
       'auto',
       makeActions(),
     );

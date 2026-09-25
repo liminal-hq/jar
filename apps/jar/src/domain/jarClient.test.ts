@@ -23,7 +23,7 @@ vi.mock('tauri-plugin-jar-api', () => ({
   start: vi.fn(),
   stop: vi.fn(),
   setSpeed: vi.fn(),
-  setMode: vi.fn(),
+  setHabitat: vi.fn(),
   addCritter: vi.fn(),
   renameCritter: vi.fn(),
   setToggle: vi.fn(),

@@ -44,6 +44,7 @@ import { create } from 'zustand';
 import type { Critter } from './protocol/generated/Critter';
 import type { CritterId } from './protocol/generated/CritterId';
 import type { DialogTheme } from './protocol/generated/DialogTheme';
+import type { Habitat } from './protocol/generated/Habitat';
 import type { JarSettings } from './protocol/generated/JarSettings';
 import type { LightColour } from './protocol/generated/LightColour';
 import type { SimEvent } from './protocol/generated/SimEvent';
@@ -55,7 +56,7 @@ const JAR_REBROADCAST_EVENT = 'jar://event';
 const TANK_WINDOW_LABEL = 'tank';
 
 export const DEFAULT_SETTINGS: JarSettings = {
-  mode: 'Fish',
+  habitat: 'Aquarium',
   frame: 'Bevelled98',
   dialog_theme: 'Modern',
   theme_variants: {
@@ -305,7 +306,7 @@ async function doStart(settings: JarSettings): Promise<void> {
  * window should call these, not `pluginApi` directly. */
 export const jar = {
   setSpeed: (speed: number) => pluginApi.setSpeed(speed),
-  setMode: (mode: Species) => pluginApi.setMode(mode),
+  setHabitat: (habitat: Habitat) => pluginApi.setHabitat(habitat),
   addCritter: (species: Species) => pluginApi.addCritter(species) as Promise<Critter>,
   renameCritter: (id: CritterId, name: string) => pluginApi.renameCritter(id, name),
   // camelCase to match `Toggle`'s `#[serde(rename_all = "camelCase")]` on the

@@ -20,6 +20,7 @@ import { MouseDebugCapture } from '../../components/MouseDebugCapture';
 import { TankContextMenu } from '../../components/TankContextMenu';
 import { ToastLayer } from '../../components/Toast';
 import { useMouseOverlayEnabled } from '../../domain/devSettings';
+import { speciesOfHabitat } from '../../domain/habitat';
 import { ensureJarClientStarted, useJarStore } from '../../domain/jarClient';
 import { closeAllSatelliteWindows } from '../../domain/windows';
 import { TankScene } from '../../render/tank/TankScene';
@@ -107,12 +108,13 @@ export function TankWindow() {
 
   const statusText = useMemo(() => {
     if (!hydrated) return 'loading…';
+    const habitatSpecies = speciesOfHabitat(settings.habitat);
     const livingCount = Object.values(critters).filter(
-      (c) => c.alive && c.species === settings.mode,
+      (c) => c.alive && habitatSpecies.includes(c.species),
     ).length;
-    const label = settings.mode === 'Fish' ? 'fish' : 'gecko';
+    const label = settings.habitat === 'Aquarium' ? 'fish' : 'gecko';
     return `${livingCount} ${label}`;
-  }, [critters, hydrated, settings.mode]);
+  }, [critters, hydrated, settings.habitat]);
 
   // A fixed-position overlay over the tank, not a second window or a
   // window resize (the previous drawer's approach) — sidesteps Wayland

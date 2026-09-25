@@ -8,10 +8,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
+import { defaultSpeciesFor } from '../../domain/habitat';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { DialogTheme } from '../../domain/protocol/generated/DialogTheme';
+import type { Habitat } from '../../domain/protocol/generated/Habitat';
 import type { LightColour } from '../../domain/protocol/generated/LightColour';
-import type { Species } from '../../domain/protocol/generated/Species';
 import type { TankFrame } from '../../domain/protocol/generated/TankFrame';
 import { defaultVariantOf, variantNamesFor } from '../../theme/theme';
 
@@ -125,11 +126,11 @@ export function SetupWindow() {
         <label>
           Mode
           <select
-            value={settings.mode}
-            onChange={(e) => void jar.setMode(e.target.value as Species)}
+            value={settings.habitat}
+            onChange={(e) => void jar.setHabitat(e.target.value as Habitat)}
           >
-            <option value="Fish">Aquarium — fish</option>
-            <option value="Gecko">Terrarium — gecko</option>
+            <option value="Aquarium">Aquarium — fish</option>
+            <option value="Terrarium">Terrarium — gecko</option>
           </select>
         </label>
 
@@ -253,12 +254,12 @@ export function SetupWindow() {
             checked={settings.ambient_particles_on}
             onChange={(e) => void jar.setToggle('ambientParticles', e.target.checked)}
           />{' '}
-          {settings.mode === 'Fish' ? 'Bubbles' : 'Mist'}
+          {settings.habitat === 'Aquarium' ? 'Bubbles' : 'Mist'}
         </label>
-        {/* Fish-mode only — terrarium's "Mist" doesn't exist yet, so this
+        {/* Aquarium-only — terrarium's "Mist" doesn't exist yet, so this
             slider (Bubbles.tsx's own particle count) has nothing to affect
-            in Gecko mode. */}
-        {settings.ambient_particles_on && settings.mode === 'Fish' && (
+            in Terrarium habitat. */}
+        {settings.ambient_particles_on && settings.habitat === 'Aquarium' && (
           <label>
             Bubble intensity: {settings.bubble_intensity}%
             <input
@@ -292,7 +293,9 @@ export function SetupWindow() {
         </label>
         <p>Jar clock: day {jarDay}</p>
 
-        <button onClick={() => void jar.addCritter(settings.mode)}>+ Add a critter</button>
+        <button onClick={() => void jar.addCritter(defaultSpeciesFor(settings.habitat))}>
+          + Add a critter
+        </button>
 
         <div
           style={{

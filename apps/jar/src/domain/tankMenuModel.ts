@@ -34,7 +34,7 @@ export function buildTankMenuModel(
   dayNightOverride: DayNightOverride,
   actions: TankMenuActions,
 ): MenuModel {
-  const otherMode = settings.mode === 'Fish' ? 'gecko' : 'fish';
+  const otherMode = settings.habitat === 'Aquarium' ? 'gecko' : 'fish';
 
   return {
     sections: [
@@ -43,7 +43,7 @@ export function buildTankMenuModel(
           { id: 'light', label: 'Light', checked: settings.light_on, action: actions.toggleLight },
           {
             id: 'ambient',
-            label: settings.mode === 'Fish' ? 'Bubbles' : 'Mist',
+            label: settings.habitat === 'Aquarium' ? 'Bubbles' : 'Mist',
             checked: settings.ambient_particles_on,
             action: actions.toggleAmbient,
           },
