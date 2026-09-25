@@ -1,4 +1,4 @@
-// Per-fish Yuka vehicle + behaviors — `docs/architecture/3d-engine.md`
+// Per-fish Yuka vehicle + behaviours — `docs/architecture/3d-engine.md`
 // §4.1: `WanderBehavior` + `SeparationBehavior` active by default
 // (deliberately not Cohesion/Alignment — individual pets, not a school),
 // an `ArriveBehavior` toward the favourite spot that `Fish.tsx`'s periodic
@@ -137,7 +137,7 @@ export function useFishSteering(
 
     // Added after `containment` deliberately — Yuka's priority-budget
     // accumulation (`SteeringManager`'s calculate order) gives earlier-added
-    // behaviors first claim on `vehicle.maxForce`, so containment keeps its
+    // behaviours first claim on `vehicle.maxForce`, so containment keeps its
     // share even while a chase's pursuit force is large. No evader yet
     // (`ChasePursuitBehaviour`'s own null guard covers that until `Fish.tsx`
     // assigns one).
@@ -222,9 +222,9 @@ export function useFishSteering(
     targetWeightsRef.current = MODE_WEIGHTS[mode];
   };
 
-  /** Called every frame (`Fish.tsx`) to fade each behavior's `.weight`
+  /** Called every frame (`Fish.tsx`) to fade each behaviour's `.weight`
    * toward whatever `setMode` last targeted — see `steeringWeights.ts`'s
-   * `BEHAVIOR_WEIGHT_RAMP_RATE` comment for why this exists instead of
+   * `BEHAVIOUR_WEIGHT_RAMP_RATE` comment for why this exists instead of
    * `setMode` changing weights directly. */
   const rampWeights = (delta: number) => {
     const next = computeRampedWeights(

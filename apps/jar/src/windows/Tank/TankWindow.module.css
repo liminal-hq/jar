@@ -14,7 +14,7 @@
   height: 100%;
   box-sizing: border-box;
   overflow: hidden;
-  /* `--jar-bezel-width`/`--jar-bezel-color` (theme.ts's `applyTankFrame`)
+  /* `--jar-bezel-width`/`--jar-bezel-colour` (theme.ts's `applyTankFrame`)
    * paint every frame as a `border`, never a `background` — a background
    * paints under the padding *and* content box alike, which would flood
    * the transparent tank interior with the frame's opaque colour behind
@@ -30,7 +30,7 @@
    * not a clipped square. */
   border-style: solid;
   border-width: var(--jar-bezel-width, 0px);
-  border-color: var(--jar-bezel-color, transparent);
+  border-color: var(--jar-bezel-colour, transparent);
 }
 
 .bezel[data-frame='Bevelled98'] .tankInterior {

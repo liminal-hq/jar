@@ -142,13 +142,13 @@ export function defaultVariantOf(theme: DialogTheme): string {
 /** Bezel treatment per `TankFrame` (SPEC.md §4). Only the CSS-level parts —
  * the 3D-side Neon/CRT scanline pass lives in
  * `render/effects` per `docs/architecture/3d-engine.md` §10.3. */
-export const TANK_FRAMES: Record<TankFrame, { bezelWidth: string; bezelColor: string }> = {
-  Bevelled98: { bezelWidth: '14px', bezelColor: '#c9c6bd' },
-  WoodStand: { bezelWidth: '18px', bezelColor: '#6b4a30' },
-  BrushedMetal: { bezelWidth: '10px', bezelColor: '#9a9a9e' },
-  RoundedGlass: { bezelWidth: '0px', bezelColor: 'transparent' },
-  NeonCrt: { bezelWidth: '12px', bezelColor: '#141018' },
-  CardboardCutout: { bezelWidth: '16px', bezelColor: '#b89666' },
+export const TANK_FRAMES: Record<TankFrame, { bezelWidth: string; bezelColour: string }> = {
+  Bevelled98: { bezelWidth: '14px', bezelColour: '#c9c6bd' },
+  WoodStand: { bezelWidth: '18px', bezelColour: '#6b4a30' },
+  BrushedMetal: { bezelWidth: '10px', bezelColour: '#9a9a9e' },
+  RoundedGlass: { bezelWidth: '0px', bezelColour: 'transparent' },
+  NeonCrt: { bezelWidth: '12px', bezelColour: '#141018' },
+  CardboardCutout: { bezelWidth: '16px', bezelColour: '#b89666' },
 };
 
 /** Perceived brightness (ITU-R BT.601 luma, not full WCAG relative
@@ -207,5 +207,5 @@ export function applyTankFrame(frame: TankFrame): void {
   const tokens = TANK_FRAMES[frame];
   const root = document.documentElement.style;
   root.setProperty('--jar-bezel-width', tokens.bezelWidth);
-  root.setProperty('--jar-bezel-color', tokens.bezelColor);
+  root.setProperty('--jar-bezel-colour', tokens.bezelColour);
 }

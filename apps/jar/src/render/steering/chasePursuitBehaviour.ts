@@ -1,7 +1,7 @@
 // Null-safe wrapper around Yuka's own `PursuitBehavior` — its `calculate()`
 // dereferences `this.evader.position` unguarded (`yuka.module.js`), but this
-// behavior is added once per fish at spawn and stays permanently `active`
-// (the weight-ramp architecture in `steeringWeights.ts` — behaviors are
+// behaviour is added once per fish at spawn and stays permanently `active`
+// (the weight-ramp architecture in `steeringWeights.ts` — behaviours are
 // never toggled, only their `.weight`), long before any chase has ever
 // assigned it a target. Without this guard every fish would throw on its
 // very first frame.

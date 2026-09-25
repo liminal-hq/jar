@@ -1,4 +1,4 @@
-// Tests for the per-mode behavior-weight table and the rampWeights approach function.
+// Tests for the per-mode behaviour-weight table and the rampWeights approach function.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { MODE_WEIGHTS, rampWeights } from './steeringWeights';
 
 describe('MODE_WEIGHTS', () => {
-  it('gives every mode a definite 0-or-1 target for each behavior', () => {
+  it('gives every mode a definite 0-or-1 target for each behaviour', () => {
     for (const weights of Object.values(MODE_WEIGHTS)) {
       for (const w of Object.values(weights)) {
         expect(w === 0 || w === 1).toBe(true);
@@ -41,7 +41,7 @@ describe('MODE_WEIGHTS', () => {
     expect(MODE_WEIGHTS.chasing).toEqual({ wander: 0, separation: 1, arrive: 0, pursuit: 1 });
   });
 
-  it('settled wants every ramped behavior off', () => {
+  it('settled wants every ramped behaviour off', () => {
     expect(MODE_WEIGHTS.settled).toEqual({ wander: 0, separation: 0, arrive: 0, pursuit: 0 });
   });
 });

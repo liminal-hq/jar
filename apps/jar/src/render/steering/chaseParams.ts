@@ -159,7 +159,7 @@ export function burstMultiplierFor(personality: Personality): number {
 /** ~0.33s to reach a burst (a lunge) — deliberately faster than the ~0.7s
  * glide back down (`BURST_RAMP_DOWN_RATE`): an instant ceiling *drop* while
  * still moving at burst speed would shear velocity in one frame, the same
- * snap class `BEHAVIOR_WEIGHT_RAMP_RATE` (`steeringWeights.ts`) exists to
+ * snap class `BEHAVIOUR_WEIGHT_RAMP_RATE` (`steeringWeights.ts`) exists to
  * prevent. */
 export const BURST_RAMP_UP_RATE = 3;
 export const BURST_RAMP_DOWN_RATE = 1.5;
