@@ -88,6 +88,14 @@ export function Submenu({
     // suppress that document-level listener for one 3-item submenu.
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
     e.preventDefault();
+    // Without this, the still-bubbling synthetic event also reaches
+    // ContextMenu's own handleKeyDown (portals bubble through the React
+    // component tree, not the DOM tree — preventDefault alone doesn't stop
+    // that) — which then moves focus using its *top-level* item list, since
+    // the newly-focused submenu button isn't in that list. That walks focus
+    // straight out of the submenu and onto the main menu after a single
+    // arrow-key press.
+    e.stopPropagation();
     moveFocus(e.key, ids, itemRefs.current);
   }
 
