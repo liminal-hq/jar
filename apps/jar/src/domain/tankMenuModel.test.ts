@@ -18,6 +18,7 @@ function makeActions(): TankMenuActions {
     openFamilyTree: vi.fn(),
     openFishMonitor: vi.fn(),
     openFishEye: vi.fn(),
+    toggleAlwaysOnTop: vi.fn(),
     openSetup: vi.fn(),
     openDevSettings: vi.fn(),
     exit: vi.fn(),
@@ -48,17 +49,29 @@ describe('buildTankMenuModel', () => {
       'fish-monitor',
       'fish-eye',
     ]);
-    expect(items(app!).map((i) => i.id)).toEqual(['setup', 'dev-settings', 'exit']);
+    expect(items(app!).map((i) => i.id)).toEqual([
+      'always-on-top',
+      'setup',
+      'dev-settings',
+      'exit',
+    ]);
   });
 
   it('follows checkbox settings', () => {
     const onModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, light_on: true, ambient_particles_on: false, sound_on: true },
+      {
+        ...DEFAULT_SETTINGS,
+        light_on: true,
+        ambient_particles_on: false,
+        sound_on: true,
+        always_on_top: true,
+      },
       makeActions(),
     );
     expect(itemById(onModel, 'light').checked).toBe(true);
     expect(itemById(onModel, 'ambient').checked).toBe(false);
     expect(itemById(onModel, 'sound').checked).toBe(true);
+    expect(itemById(onModel, 'always-on-top').checked).toBe(true);
   });
 
   it('labels the ambient toggle Bubbles in Fish mode, Mist in Gecko mode', () => {
@@ -104,6 +117,22 @@ describe('buildTankMenuModel', () => {
     expect(actions.captureScreenshot).toHaveBeenCalledOnce();
     expect(actions.switchMode).not.toHaveBeenCalled();
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
+  });
+
+  it('wires Always on top to toggleAlwaysOnTop and nothing else', () => {
+    const actions = makeActions();
+    const model = buildTankMenuModel(DEFAULT_SETTINGS, actions);
+    const alwaysOnTopItem = itemById(model, 'always-on-top');
+
+    expect(alwaysOnTopItem.label).toBe('Always on top');
+    expect(alwaysOnTopItem.checked).toBe(false);
+
+    alwaysOnTopItem.action?.();
+
+    expect(actions.toggleAlwaysOnTop).toHaveBeenCalledOnce();
+    expect(actions.openSetup).not.toHaveBeenCalled();
+    expect(actions.openDevSettings).not.toHaveBeenCalled();
+    expect(actions.exit).not.toHaveBeenCalled();
   });
 
   it('wires Add a critter to addCritter and nothing else', () => {

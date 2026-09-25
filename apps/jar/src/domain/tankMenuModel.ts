@@ -19,6 +19,7 @@ export interface TankMenuActions {
   openFamilyTree: () => void;
   openFishMonitor: () => void;
   openFishEye: () => void;
+  toggleAlwaysOnTop: () => void;
   openSetup: () => void;
   openDevSettings: () => void;
   exit: () => void;
@@ -65,6 +66,12 @@ export function buildTankMenuModel(settings: JarSettings, actions: TankMenuActio
       },
       {
         items: [
+          {
+            id: 'always-on-top',
+            label: 'Always on top',
+            checked: settings.always_on_top,
+            action: actions.toggleAlwaysOnTop,
+          },
           { id: 'setup', label: 'Setup', action: actions.openSetup },
           { id: 'dev-settings', label: 'Dev', action: actions.openDevSettings },
           { id: 'exit', label: 'Exit', action: actions.exit },

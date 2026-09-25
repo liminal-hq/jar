@@ -67,6 +67,7 @@ export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankC
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
     openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),
+    toggleAlwaysOnTop: () => void jar.setToggle('alwaysOnTop', !settings.always_on_top),
     openSetup: () => void openSatelliteWindow('setup'),
     openDevSettings: () => void openSatelliteWindow('dev-settings'),
     // The shutdown autosave flush (rust-core.md §5.3) fires from the
