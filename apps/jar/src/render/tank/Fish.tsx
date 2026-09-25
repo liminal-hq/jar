@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import * as YUKA from 'yuka';
 
 import { useDayNightOverride } from '../../domain/devSettings';
+import { isAsleep } from '../../domain/dayNight';
 import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
@@ -172,11 +173,11 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // (`jarClient.ts`'s `isNight` store field) rather than re-derived here.
   const simNight = useJarStore((s) => s.isNight);
   // Dev-only override (`windows/FishMonitor/FishMonitorWindow.tsx`) to pin
-  // day or night on demand rather than wait out a real day/night cycle —
-  // `'auto'` (the real jar clock) in production builds, where the toggle
-  // can't be set.
+  // day, night, or "always active" on demand rather than wait out a real
+  // day/night cycle — `'auto'` (the real jar clock) in production builds,
+  // where the toggle can't be set.
   const dayNightOverride = useDayNightOverride();
-  const night = dayNightOverride === 'auto' ? simNight : dayNightOverride === 'night';
+  const night = isAsleep('Fish', dayNightOverride, simNight);
   const nightRef = useRef(night);
   const debugAnimRef = useRef<FishDebugAnim | null>(null);
   useEffect(() => {

@@ -75,6 +75,7 @@ export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankC
     setDayNightAuto: () => setDayNightOverride('auto'),
     setDayNightDay: () => setDayNightOverride('day'),
     setDayNightNight: () => setDayNightOverride('night'),
+    setDayNightActive: () => setDayNightOverride('active'),
     openSetup: () => void openSatelliteWindow('setup'),
     openDevSettings: () => void openSatelliteWindow('dev-settings'),
     // The shutdown autosave flush (rust-core.md §5.3) fires from the

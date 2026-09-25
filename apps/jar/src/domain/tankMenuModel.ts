@@ -24,6 +24,7 @@ export interface TankMenuActions {
   setDayNightAuto: () => void;
   setDayNightDay: () => void;
   setDayNightNight: () => void;
+  setDayNightActive: () => void;
   openSetup: () => void;
   openDevSettings: () => void;
   exit: () => void;
@@ -74,6 +75,12 @@ export function buildTankMenuModel(
                 label: 'Always night',
                 checked: dayNightOverride === 'night',
                 action: actions.setDayNightNight,
+              },
+              {
+                id: 'day-night-active',
+                label: 'Always active',
+                checked: dayNightOverride === 'active',
+                action: actions.setDayNightActive,
               },
             ],
           },

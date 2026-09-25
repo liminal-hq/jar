@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import type * as YUKA from 'yuka';
 
 import { publishFishPositions } from '../../domain/debugChannel';
+import { isNightPresentation } from '../../domain/dayNight';
 import {
   useDayNightOverride,
   useFishEyeEnabled,
@@ -229,7 +230,12 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
   // energy/breeding eligibility this tick.
   const coreIsNight = useJarStore((s) => s.isNight);
   const dayNightOverride = useDayNightOverride();
-  const effectiveIsNight = dayNightOverride === 'auto' ? coreIsNight : dayNightOverride === 'night';
+  // `isNightPresentation`, not a hand-rolled auto/night ternary — that
+  // pattern predates `'active'` (added by this same PR) and silently
+  // reports "day" for it instead of the real clock state, since it only
+  // ever compared against `'night'`. This is telemetry-only (the fish
+  // monitor's status line), not read by any actual steering/sim logic.
+  const effectiveIsNight = isNightPresentation(dayNightOverride, coreIsNight);
   const publishElapsedRef = useRef(0);
 
   // A ref, not read directly in `useFrame` — the toggle can flip mid-session

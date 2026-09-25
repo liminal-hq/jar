@@ -240,7 +240,7 @@ export function FishMonitorWindow() {
           }}
         >
           <span style={{ opacity: 0.7 }}>Day/night:</span>
-          {(['auto', 'day', 'night'] as const).map((value) => (
+          {(['auto', 'day', 'night', 'active'] as const).map((value) => (
             <label key={value}>
               <input
                 type="radio"
@@ -248,7 +248,13 @@ export function FishMonitorWindow() {
                 checked={dayNightOverride === value}
                 onChange={() => setDayNightOverride(value)}
               />{' '}
-              {value === 'auto' ? 'Auto' : value === 'day' ? 'Always day' : 'Always night'}
+              {value === 'auto'
+                ? 'Auto'
+                : value === 'day'
+                  ? 'Always day'
+                  : value === 'night'
+                    ? 'Always night'
+                    : 'Always active'}
             </label>
           ))}
         </div>

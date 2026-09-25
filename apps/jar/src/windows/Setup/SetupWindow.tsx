@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { DialogShell } from '../../components/DialogShell';
+import { setDayNightOverride } from '../../domain/devSettings';
 import { defaultSpeciesFor } from '../../domain/habitat';
 import { ensureJarClientStarted, jar, useJarStore } from '../../domain/jarClient';
 import type { DialogTheme } from '../../domain/protocol/generated/DialogTheme';
@@ -307,7 +308,19 @@ export function SetupWindow() {
             borderTop: '1px solid var(--jar-ink)',
           }}
         >
-          <button onClick={() => void jar.resetSettings()}>Restore default settings</button>
+          <button
+            onClick={() => {
+              void jar.resetSettings();
+              // `JarSettings` itself resets via the command above, but the
+              // Day/night override is a frontend-only `localStorage` pref
+              // (`domain/devSettings.ts`) that command never touches — reset
+              // it here so "restore defaults" is honest about every setting
+              // it claims to restore, not just the backend-owned ones.
+              setDayNightOverride('active');
+            }}
+          >
+            Restore default settings
+          </button>
           <button onClick={handleResetJarClick}>
             {resetJarArmed
               ? `Really reset? All ${resetJarCritterCount} critters will be lost`

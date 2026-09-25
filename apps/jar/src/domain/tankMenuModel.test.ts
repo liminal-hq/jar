@@ -22,6 +22,7 @@ function makeActions(): TankMenuActions {
     setDayNightAuto: vi.fn(),
     setDayNightDay: vi.fn(),
     setDayNightNight: vi.fn(),
+    setDayNightActive: vi.fn(),
     openSetup: vi.fn(),
     openDevSettings: vi.fn(),
     exit: vi.fn(),
@@ -187,6 +188,7 @@ describe('buildTankMenuModel', () => {
       'day-night-auto',
       'day-night-day',
       'day-night-night',
+      'day-night-active',
     ]);
   });
 
@@ -196,12 +198,21 @@ describe('buildTankMenuModel', () => {
     expect(childById(autoItem, 'day-night-auto').checked).toBe(true);
     expect(childById(autoItem, 'day-night-day').checked).toBe(false);
     expect(childById(autoItem, 'day-night-night').checked).toBe(false);
+    expect(childById(autoItem, 'day-night-active').checked).toBe(false);
 
     const nightModel = buildTankMenuModel(DEFAULT_SETTINGS, 'night', makeActions());
     const nightItem = itemById(nightModel, 'day-night');
     expect(childById(nightItem, 'day-night-auto').checked).toBe(false);
     expect(childById(nightItem, 'day-night-day').checked).toBe(false);
     expect(childById(nightItem, 'day-night-night').checked).toBe(true);
+    expect(childById(nightItem, 'day-night-active').checked).toBe(false);
+
+    const activeModel = buildTankMenuModel(DEFAULT_SETTINGS, 'active', makeActions());
+    const activeItem = itemById(activeModel, 'day-night');
+    expect(childById(activeItem, 'day-night-auto').checked).toBe(false);
+    expect(childById(activeItem, 'day-night-day').checked).toBe(false);
+    expect(childById(activeItem, 'day-night-night').checked).toBe(false);
+    expect(childById(activeItem, 'day-night-active').checked).toBe(true);
   });
 
   it('wires each Day/night submenu item to its own action and nothing else', () => {
@@ -214,5 +225,9 @@ describe('buildTankMenuModel', () => {
     expect(actions.setDayNightNight).toHaveBeenCalledOnce();
     expect(actions.setDayNightAuto).not.toHaveBeenCalled();
     expect(actions.setDayNightDay).not.toHaveBeenCalled();
+    expect(actions.setDayNightActive).not.toHaveBeenCalled();
+
+    childById(dayNightItem, 'day-night-active').action?.();
+    expect(actions.setDayNightActive).toHaveBeenCalledOnce();
   });
 });

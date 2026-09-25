@@ -86,22 +86,27 @@ export const isFishEyeEnabled = fishEye.isEnabled;
 export const setFishEyeEnabled = fishEye.setEnabled;
 export const useFishEyeEnabled = fishEye.useEnabled;
 
-export type DayNightOverride = 'auto' | 'day' | 'night';
+export type DayNightOverride = 'auto' | 'day' | 'night' | 'active';
 
 const DAY_NIGHT_OVERRIDE_KEY = 'jar:dev:dayNightOverride';
 
-/** Overrides the tank's night/settle behaviour regardless of the actual jar
- * clock (`Fish.tsx`) — `'day'`/`'night'` pin it there, `'auto'` follows the
- * normal jar clock. Reachable from the tank's own right-click menu (the
+/** Overrides every critter's asleep/awake presentation regardless of the
+ * actual jar clock (`domain/dayNight.ts`'s `isAsleep`, consumed by
+ * `Fish.tsx` and, once it exists, the snail controller) — `'day'`/`'night'`
+ * pin the real jar clock's day or night state, `'active'` keeps every
+ * critter awake regardless of species or clock, `'auto'` follows the normal
+ * jar clock. Reachable from the tank's own right-click menu (the
  * "Day/night" submenu, `tankMenuModel.ts`) as well as the Fish monitor
  * window's own radio group — no longer just a Fish-monitor-scoped tuning
- * aid, so the default below is `'day'`, not `'auto'`: an always-lively tank
- * is the out-of-the-box experience, and the real day/night cycle is
- * opt-in. Same live-sync pattern as `createDevToggle`, just a 3-way string
- * instead of a boolean. */
+ * aid, so the default below is `'active'`, not `'auto'`: an always-lively
+ * tank is the out-of-the-box experience, and once a nocturnal species
+ * (the snail) exists, `'active'` is the only override under which every
+ * species is visibly out at once — `'day'` would leave a snail sealed all
+ * day, hiding the very critter a user just added. Same live-sync pattern as
+ * `createDevToggle`, just a 4-way string instead of a boolean. */
 export function getDayNightOverride(): DayNightOverride {
   const raw = localStorage.getItem(DAY_NIGHT_OVERRIDE_KEY);
-  return raw === 'auto' || raw === 'night' ? raw : 'day';
+  return raw === 'auto' || raw === 'day' || raw === 'night' ? raw : 'active';
 }
 
 export function setDayNightOverride(value: DayNightOverride): void {
