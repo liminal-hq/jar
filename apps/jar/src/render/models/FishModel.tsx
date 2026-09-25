@@ -36,7 +36,11 @@ import {
   wrapInPivot,
 } from './fishGeometry';
 import { FIN_SWIM_TIP_GAIN, SWIM_WAVE_ONSET_X, swimWaveU, swimWaveVertexAngle } from './swimWave';
-import { attachSwimWaveVertexShader, setSwimWaveUniforms } from './swimWaveShader';
+import {
+  attachSwimWaveDepthMaterial,
+  attachSwimWaveVertexShader,
+  setSwimWaveUniforms,
+} from './swimWaveShader';
 import { advanceTailPhase } from './tailPhase';
 import { computeTurnRate } from './turnRate';
 
@@ -369,6 +373,15 @@ export function FishModel({
   // old `rotationOffsetX` parameter), and returns the three per-frame
   // uniforms (`phase`/`amplitude`/`bend`) the `useFrame` callback below
   // writes to instead of rewriting geometry.
+  //
+  // Each part also gets a matching `customDepthMaterial` (`attachSwimWaveDepthMaterial`,
+  // sharing that same uniforms object — see that function's own comment):
+  // `castShadow` alone isn't enough to keep a swim-waving mesh's shadow
+  // tracking its bent shape, since `geometry.attributes.position` itself is
+  // never rewritten any more (the whole point of the GPU port) — three's
+  // shadow pass would otherwise substitute its own generic depth material,
+  // which renders each mesh's raw *rest-pose* geometry into the shadow map
+  // regardless of how the visible material bends it on screen.
   const bodyMaterial = useMemo(() => {
     const material = new THREE.MeshStandardMaterial({
       vertexColors: true,
@@ -387,19 +400,31 @@ export function FishModel({
     () => attachSwimWaveVertexShader(bodyMaterial, swimParamsBase),
     [bodyMaterial, swimParamsBase],
   );
+  const bodyDepthMaterial = useMemo(
+    () => attachSwimWaveDepthMaterial(swimParamsBase, bodySwimUniforms),
+    [swimParamsBase, bodySwimUniforms],
+  );
   const dorsalMaterial = useMemo(() => createFinMaterial(finColour), [finColour]);
   const dorsalSwimUniforms = useMemo(
     () => attachSwimWaveVertexShader(dorsalMaterial, swimParamsBase),
     [dorsalMaterial, swimParamsBase],
   );
+  const dorsalDepthMaterial = useMemo(
+    () => attachSwimWaveDepthMaterial(swimParamsBase, dorsalSwimUniforms),
+    [swimParamsBase, dorsalSwimUniforms],
+  );
   const tailMaterial = useMemo(() => createFinMaterial(finColour), [finColour]);
+  const tailSwimParams = useMemo(
+    () => ({ ...swimParamsBase, spaceOffsetX: TAIL_PIVOT.x }),
+    [swimParamsBase],
+  );
   const tailSwimUniforms = useMemo(
-    () =>
-      attachSwimWaveVertexShader(tailMaterial, {
-        ...swimParamsBase,
-        spaceOffsetX: TAIL_PIVOT.x,
-      }),
-    [tailMaterial, swimParamsBase],
+    () => attachSwimWaveVertexShader(tailMaterial, tailSwimParams),
+    [tailMaterial, tailSwimParams],
+  );
+  const tailDepthMaterial = useMemo(
+    () => attachSwimWaveDepthMaterial(tailSwimParams, tailSwimUniforms),
+    [tailSwimParams, tailSwimUniforms],
   );
 
   // Each spot's own (u, env) at its fixed rest x — spots don't move
@@ -460,6 +485,9 @@ export function FishModel({
       bodyMaterial.dispose();
       dorsalMaterial.dispose();
       tailMaterial.dispose();
+      bodyDepthMaterial.dispose();
+      dorsalDepthMaterial.dispose();
+      tailDepthMaterial.dispose();
       pectoralMaterial.dispose();
       mouthMaterial.dispose();
     };
@@ -470,6 +498,9 @@ export function FishModel({
     bodyMaterial,
     dorsalMaterial,
     tailMaterial,
+    bodyDepthMaterial,
+    dorsalDepthMaterial,
+    tailDepthMaterial,
     pectoralMaterial,
     mouthMaterial,
   ]);
@@ -698,9 +729,20 @@ export function FishModel({
 
   return (
     <group ref={rootRef} scale={scale}>
-      <mesh geometry={bodyGeometry} material={bodyMaterial} castShadow receiveShadow />
+      <mesh
+        geometry={bodyGeometry}
+        material={bodyMaterial}
+        customDepthMaterial={bodyDepthMaterial}
+        castShadow
+        receiveShadow
+      />
 
-      <mesh geometry={dorsalGeometry} material={dorsalMaterial} castShadow />
+      <mesh
+        geometry={dorsalGeometry}
+        material={dorsalMaterial}
+        customDepthMaterial={dorsalDepthMaterial}
+        castShadow
+      />
 
       <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]} castShadow>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
@@ -721,6 +763,7 @@ export function FishModel({
       <mesh
         geometry={tailGeometry}
         material={tailMaterial}
+        customDepthMaterial={tailDepthMaterial}
         position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]}
         castShadow
       />

@@ -47,6 +47,15 @@ export function TankScene() {
     <Canvas
       frameloop={frameloop}
       camera={{ fov: 38, position: [0, 2, 9] }}
+      // Shadows recompute every frame (three.js's default `shadowMap.autoUpdate`)
+      // rather than the one-shot-then-freeze optimization PR #95 tried here
+      // (issue #94): with fish and swaying plants back to casting shadows —
+      // see `FishModel.tsx`/`fishGeometry.ts`/`Plants.tsx` — a frozen shadow
+      // map can't track a moving caster. Reintroducing this continuous
+      // per-frame cost is a deliberate, accepted trade for correctness, not
+      // an oversight; a future perf pass revisiting it needs a real fix for
+      // moving casters (e.g. re-freezing only while the tank is provably
+      // static), not just flipping this back off.
       shadows
       gl={{
         alpha: true,
