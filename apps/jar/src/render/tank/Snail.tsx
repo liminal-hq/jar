@@ -1,0 +1,269 @@
+// One snail: a self-contained controller, not a generalized `SteeringSystem`
+// participant — no Yuka vehicle, no steering-registry entry
+// (`docs/architecture/3d-engine.md` §4.4's settled architecture: the
+// accepted cost is that fish won't separation-steer around a snail, but the
+// kinematic collider below still keeps them from overlapping one). It owns
+// a `CrawlPose` (`crawlSurfaces.ts`) directly, advances it in `useFrame`, and
+// converts it to a script-authored position/rotation on a **kinematic**
+// Rapier `RigidBody` — the same "no gravity fight" discipline as `Fish.tsx`'s
+// dynamic one, just without physics ever moving it. Presents `SnailModel`,
+// driving its `tuckProgress`/`tuckMode` from `snailBehaviour.ts`'s state
+// machine.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+import { useFrame } from '@react-three/fiber';
+import {
+  CuboidCollider,
+  RigidBody,
+  type CollisionEnterPayload,
+  type RapierRigidBody,
+} from '@react-three/rapier';
+import { useRef, useState } from 'react';
+import * as THREE from 'three';
+
+import { useDayNightOverride } from '../../domain/devSettings';
+import { isAsleep } from '../../domain/dayNight';
+import { useJarStore } from '../../domain/jarClient';
+import type { Critter } from '../../domain/protocol/generated/Critter';
+import { selectCritter } from '../../domain/selection';
+import { lifeStageScale } from '../../domain/simConstants';
+import {
+  advance,
+  dropToFloor,
+  poseToWorld,
+  randomFloorPose,
+  turn,
+  type CrawlFrame,
+  type CrawlPose,
+} from '../environment/crawlSurfaces';
+import { SnailModel } from '../models/SnailModel';
+import { SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
+import {
+  createInitialSnailBehaviour,
+  DETACH_SINK_DURATION_SEC,
+  isMoving,
+  stepSnailBehaviour,
+  type SnailBehaviourState,
+} from './snailBehaviour';
+import { snailColliderHalfExtentsFor } from './snailCollider';
+
+interface SnailProps {
+  critter: Critter;
+}
+
+/** World units/sec — slow and exaggerated for legibility (project
+ * convention: bias toward visual exaggeration over physical accuracy, not
+ * a literal snail's real crawl speed), tuned by eye the same way `Fish.tsx`
+ * tunes its own speed/roll constants. */
+const CRAWL_SPEED = 0.12;
+
+/** A slow random-walk on heading (rather than fixed straight lines between
+ * bounces) so a crawling snail reads as wandering, not marching — the
+ * Yuka-free stand-in for a fish's wander-circle behaviour. Tune by eye. */
+const HEADING_BIAS_JITTER = 0.6;
+const MAX_HEADING_BIAS = 0.8;
+
+/** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
+ * (issue #98's settled spec) — a small decaying horizontal sway layered on
+ * top of a smoothstep-eased straight-line descent to the landing spot. */
+const DETACH_SWAY_AMPLITUDE = 0.03;
+const DETACH_SWAY_CYCLES = 2.5;
+
+interface DetachAnchor {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  landed: CrawlPose;
+  /** Derived from `landed` once, here, rather than every frame of the
+   * ~1.4s detach animation — `landed` (and so these) never change once
+   * the anchor is set, only the lerp/slerp ratio toward them does. */
+  targetPosition: THREE.Vector3;
+  targetQuaternion: THREE.Quaternion;
+}
+
+/** `frame.forward`→local `+Z`, `frame.up`→local `+Y` — the same axis
+ * convention `fishCollider.ts` and `Fish.tsx` use, so this component's inner
+ * model group needs the identical `-90°` yaw correction `Fish.tsx` applies
+ * (both models are authored facing `+X`). `xAxis` (local `+X`) is derived
+ * as `up × forward` rather than reusing `frame.right` directly, since that's
+ * the assignment that keeps (`forward`, `up`, `xAxis`) a proper
+ * right-handed basis under this module's `(x, y, z)` axis order. */
+function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
+  const forward = new THREE.Vector3(frame.forward.x, frame.forward.y, frame.forward.z);
+  const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
+  const xAxis = new THREE.Vector3().crossVectors(up, forward).normalize();
+  return new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(xAxis, up, forward),
+  );
+}
+
+/** The RigidBody's own root sits above the sole by `-SOLE_Y * scale` along
+ * the surface's `up` (`SOLE_Y` is negative, in `snailGeometry.ts`'s raw-SVG-
+ * derived convention) — the model's local origin isn't the contact point;
+ * `snailCollider.ts`'s own `centreOffsetY` is the collider's equivalent
+ * correction. */
+function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 {
+  const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
+  return new THREE.Vector3(frame.position.x, frame.position.y, frame.position.z).addScaledVector(
+    up,
+    -SOLE_Y * scale,
+  );
+}
+
+function isFishRigidBody(userData: unknown): boolean {
+  return (
+    typeof userData === 'object' &&
+    userData !== null &&
+    (userData as { kind?: unknown }).kind === 'fish'
+  );
+}
+
+export function Snail({ critter }: SnailProps) {
+  const rigidBodyRef = useRef<RapierRigidBody>(null);
+
+  const scale = lifeStageScale(critter.life_stage) * SVG_SCALE;
+  const he = snailColliderHalfExtentsFor(critter);
+
+  // Spawn once at mount, mutated in place every frame thereafter — this
+  // pose drives an imperative kinematic body transform, not a render, so it
+  // lives in a ref rather than React state (same rationale as `Fish.tsx`'s
+  // `currentHeadingRef`).
+  const poseRef = useRef<CrawlPose>(randomFloorPose(Math.random));
+  const initialFrame = poseToWorld(poseRef.current);
+  const positionRef = useRef<THREE.Vector3>(rootPositionFromFrame(initialFrame, scale));
+  const quaternionRef = useRef<THREE.Quaternion>(quaternionFromFrame(initialFrame));
+
+  const behaviourRef = useRef<SnailBehaviourState>(createInitialSnailBehaviour());
+  const headingBiasRef = useRef(0);
+  const startleRequestRef = useRef(false);
+  const fishContactRequestRef = useRef(false);
+  const detachAnchorRef = useRef<DetachAnchor | null>(null);
+
+  const [tuckProgress, setTuckProgress] = useState(0);
+  const [tuckMode, setTuckMode] = useState<'sleep' | 'startle'>('sleep');
+
+  const simNight = useJarStore((s) => s.isNight);
+  const dayNightOverride = useDayNightOverride();
+
+  useFrame((_, delta) => {
+    const body = rigidBodyRef.current;
+    if (!body) return;
+
+    const asleep = isAsleep('Snail', dayNightOverride, simNight);
+    const onFloor = poseRef.current.faceId === 'floor';
+    const prevMode = behaviourRef.current.mode;
+
+    behaviourRef.current = stepSnailBehaviour(
+      behaviourRef.current,
+      {
+        asleep,
+        onFloor,
+        startle: startleRequestRef.current,
+        fishContact: fishContactRequestRef.current,
+        random: Math.random,
+      },
+      delta,
+    );
+    startleRequestRef.current = false;
+    fishContactRequestRef.current = false;
+
+    const mode = behaviourRef.current.mode;
+
+    if (mode === 'detached') {
+      if (prevMode !== 'detached' || !detachAnchorRef.current) {
+        const landed = dropToFloor(positionRef.current);
+        const targetFrame = poseToWorld(landed);
+        detachAnchorRef.current = {
+          position: positionRef.current.clone(),
+          quaternion: quaternionRef.current.clone(),
+          landed,
+          targetPosition: rootPositionFromFrame(targetFrame, scale),
+          targetQuaternion: quaternionFromFrame(targetFrame),
+        };
+      }
+      const anchor = detachAnchorRef.current;
+
+      const ratio = THREE.MathUtils.clamp(
+        behaviourRef.current.elapsed / DETACH_SINK_DURATION_SEC,
+        0,
+        1,
+      );
+      const eased = THREE.MathUtils.smoothstep(ratio, 0, 1);
+
+      positionRef.current.copy(anchor.position).lerp(anchor.targetPosition, eased);
+      positionRef.current.x +=
+        DETACH_SWAY_AMPLITUDE * Math.sin(ratio * Math.PI * DETACH_SWAY_CYCLES) * (1 - ratio);
+      quaternionRef.current.copy(anchor.quaternion).slerp(anchor.targetQuaternion, eased);
+    } else {
+      if (prevMode === 'detached' && detachAnchorRef.current) {
+        poseRef.current = detachAnchorRef.current.landed;
+        detachAnchorRef.current = null;
+      }
+
+      if (isMoving(mode)) {
+        headingBiasRef.current = THREE.MathUtils.clamp(
+          headingBiasRef.current + (Math.random() - 0.5) * HEADING_BIAS_JITTER * delta,
+          -MAX_HEADING_BIAS,
+          MAX_HEADING_BIAS,
+        );
+        poseRef.current = advance(
+          turn(poseRef.current, headingBiasRef.current * delta),
+          CRAWL_SPEED * delta,
+        );
+      }
+
+      const frame = poseToWorld(poseRef.current);
+      positionRef.current.copy(rootPositionFromFrame(frame, scale));
+      quaternionRef.current.copy(quaternionFromFrame(frame));
+    }
+
+    body.setNextKinematicTranslation(positionRef.current);
+    body.setNextKinematicRotation(quaternionRef.current);
+
+    if (
+      tuckProgress !== behaviourRef.current.tuckProgress ||
+      tuckMode !== behaviourRef.current.tuckMode
+    ) {
+      setTuckProgress(behaviourRef.current.tuckProgress);
+      setTuckMode(behaviourRef.current.tuckMode);
+    }
+  });
+
+  return (
+    <RigidBody
+      ref={rigidBodyRef}
+      type="kinematicPosition"
+      position={[positionRef.current.x, positionRef.current.y, positionRef.current.z]}
+      quaternion={[
+        quaternionRef.current.x,
+        quaternionRef.current.y,
+        quaternionRef.current.z,
+        quaternionRef.current.w,
+      ]}
+      colliders={false}
+      userData={{ kind: 'snail', critterId: critter.id }}
+      onCollisionEnter={(event: CollisionEnterPayload) => {
+        if (isFishRigidBody(event.other.rigidBody?.userData)) {
+          fishContactRequestRef.current = true;
+        }
+      }}
+    >
+      <CuboidCollider args={[he.x, he.y, he.z]} position={[0, he.centreOffsetY, 0]} />
+      <group
+        // Both models are authored facing `+X` (`snailGeometry.ts` mirrors
+        // `fishGeometry.ts`'s convention) — see `quaternionFromFrame`'s own
+        // doc comment above for why this rotation exists.
+        rotation={[0, -Math.PI / 2, 0]}
+        onClick={(e) => {
+          e.stopPropagation();
+          e.nativeEvent.stopPropagation();
+          startleRequestRef.current = true;
+          void selectCritter(critter.id);
+        }}
+      >
+        <SnailModel critter={critter} tuckProgress={tuckProgress} tuckMode={tuckMode} />
+      </group>
+    </RigidBody>
+  );
+}

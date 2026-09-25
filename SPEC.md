@@ -72,7 +72,7 @@ The discrete rules below (aging, mood/energy, breeding, genetics, passing, namin
   - Mood 0–100. Drifts toward a target: base 66, +4 light on / −6 off, shy −3×population, curious +2×population, greedy −5, low energy −15. Dramatic critters get 4× noise.
   - Energy 0–100. Drains slowly by day, refills asleep. Low energy slows movement and drops mood.
   - Age & stage, trait (shy · greedy · curious · sleepy · bold · dramatic), genetics, favourite spot (random point; ~30% of destinations return to it).
-- **Movement**: fish pick random targets (bold ones roam the full height), sleepy fish pause between trips; geckos crawl the floor, climb to the branch ~35% of the time, and pause 1–4 s at each stop. (Movement/steering implementation: `docs/architecture/3d-engine.md` §4.)
+- **Movement**: fish pick random targets (bold ones roam the full height), sleepy fish pause between trips; geckos crawl the floor, climb to the branch ~35% of the time, and pause 1–4 s at each stop; snails crawl the floor, glass and castle at a slow, deliberate pace, pausing between stretches, sealing into their shell when startled (briefly, no operculum) or when sleep catches them, and — knocked loose by a fish or caught asleep off the floor — ease gently down to the floor before crawling on. (Movement/steering implementation: `docs/architecture/3d-engine.md` §4.)
 - **Sound** (opt-in): occasional fish "blub" (sine sweep down) or gecko chirp (triangle sweep up), never at night.
 - **Naming**: auto from a silly per-species list (fish/gecko: Pickle, Sir Bubbles, Mortimer, Dr. Fins…; snail: Gary, Turbo, Escargot…); repeats get II, III…; user can rename inline.
 

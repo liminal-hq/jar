@@ -457,6 +457,12 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       colliders={false}
       gravityScale={0}
       linearDamping={2.5}
+      // The first `userData` tag in the codebase (`Snail.tsx`'s own
+      // `RigidBody` carries the `snail` counterpart) — lets the snail's
+      // `onCollisionEnter` tell a fish contact apart from anything else it
+      // might touch, for the fish-knocks-a-snail-loose mechanic
+      // (`snailBehaviour.ts`'s `detached` state).
+      userData={{ kind: 'fish', critterId: critter.id }}
       // Rotation is exclusively script-authored (`SteeringSystem.tsx`'s
       // `setRotation` every frame) — locking all three axes here stops
       // wall/fish collisions from injecting spin between those writes.
