@@ -50,17 +50,28 @@ export function TankScene() {
       shadows
       gl={{
         alpha: true,
-        antialias: true,
+        // No MSAA (issue #94): `antialias: true` is continuous, real GPU
+        // cost, and was already fighting `powerPreference: 'low-power'`
+        // right below it — a contradictory pairing (request the cheapest
+        // GPU tier, then ask it to do full-scene multisampling every
+        // frame). This canvas is transparent over themed HTML/CSS chrome
+        // at a small, fixed desktop-widget size, and reads acceptably
+        // without it on both target platforms — checked live before
+        // landing on this over a cheaper post-process AA pass (the
+        // `postprocessing`/`@react-three/postprocessing` dependency this
+        // app already carries, for `CrtEffect.tsx`, does offer SMAA/FXAA,
+        // but the plain-shape/flat-material aliasing here reads as mild
+        // enough not to earn that added complexity).
+        antialias: false,
         premultipliedAlpha: false,
         powerPreference: 'low-power',
-        // Without this, `canvas.toBlob()` called on demand from the
-        // Screenshot menu item — well after this frame's already been
-        // presented, not synchronously inside the render loop — can read
-        // a cleared buffer instead of the last drawn frame. Usually a
-        // negligible cost at this canvas's size; not a default to reach
-        // for lightly on a `gl` config this file's header already calls
-        // load-bearing (docs/architecture/3d-engine.md §1.1).
-        preserveDrawingBuffer: true,
+        // Off (issue #94): permanently retaining the drawing buffer for an
+        // on-demand screenshot feature is real, continuous cost for a
+        // rarely-used menu action. `canvasCapture.ts`'s `captureTankPng`
+        // instead reads the canvas synchronously on the render loop's own
+        // very next frame, before the browser has any chance to clear it —
+        // see that file's own comment for why that works without this flag.
+        preserveDrawingBuffer: false,
       }}
       onCreated={({ gl, scene, clock }) => {
         gl.setClearColor(0x000000, 0);
@@ -68,6 +79,20 @@ export function TankScene() {
         scene.environment = null;
         clampClockDelta(clock, MAX_FRAME_DELTA_SEC);
         setTankCanvasElement(gl.domElement);
+        // The tank's shadow map never needs to update after this first
+        // render (issue #94): the only shadow-casting light is the
+        // `directionalLight` below, and — now that fish
+        // (`FishModel.tsx`/`fishGeometry.ts`'s `wrapInPivot`) and swaying
+        // plant blades (`Plants.tsx`) no longer cast shadows — nothing
+        // shadow-relevant left in the scene ever moves: the castle, the
+        // rest of the decor, and the sand floor are all static geometry at
+        // static transforms. Continuously re-rendering a 1024×1024 shadow
+        // depth pass for a scene that never changes was pure waste.
+        // `needsUpdate` triggers exactly one more shadow pass on the very
+        // next render call (by which point this frame's whole scene graph
+        // has already mounted), then `autoUpdate: false` stops it there.
+        gl.shadowMap.autoUpdate = false;
+        gl.shadowMap.needsUpdate = true;
       }}
     >
       <ambientLight intensity={0.6} />

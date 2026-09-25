@@ -35,15 +35,9 @@ import {
   TAIL_PIVOT,
   wrapInPivot,
 } from './fishGeometry';
+import { FIN_SWIM_TIP_GAIN, SWIM_WAVE_ONSET_X, swimWaveU, swimWaveVertexAngle } from './swimWave';
+import { attachSwimWaveVertexShader, setSwimWaveUniforms } from './swimWaveShader';
 import { advanceTailPhase } from './tailPhase';
-import {
-  applySwimWave,
-  buildWaveTables,
-  FIN_SWIM_TIP_GAIN,
-  swimWaveU,
-  swimWaveVertexAngle,
-  type WaveTables,
-} from './swimWave';
 import { computeTurnRate } from './turnRate';
 
 interface FishModelProps {
@@ -339,44 +333,86 @@ export function FishModel({
   const tailGeometry = useMemo(() => createTailGeometry(finType, tailScale), []);
   const dorsalGeometry = useMemo(() => createDorsalGeometry(), []);
 
-  // Rest-pose position snapshots, taken once per geometry clone before any
-  // deformation ever runs — the swim wave always rotates *from* these,
-  // never accumulates onto the previous frame's already-deformed values.
-  const bodyRestPositions = useMemo(() => snapshotRestPositions(bodyGeometry), [bodyGeometry]);
-  const tailRestPositions = useMemo(() => snapshotRestPositions(tailGeometry), [tailGeometry]);
-  const dorsalRestPositions = useMemo(
-    () => snapshotRestPositions(dorsalGeometry),
-    [dorsalGeometry],
-  );
-
   // The tail's own tip, in the shared body-space x the wave is defined in
-  // (`swimWave.ts`) — found empirically from the actual geometry rather
-  // than computed from `TAIL_TIP_SVG_DISTANCE` by hand, so it's automatically
-  // correct for whichever fin type this fish actually has. Tail vertices are
+  // (`swimWave.ts`) — found empirically from the actual geometry (scanned
+  // once, directly off the rest-pose `position` attribute — the swim wave
+  // is now GPU-only, §6.6, so there's no per-fish CPU rest-position
+  // snapshot to scan instead) rather than computed from
+  // `TAIL_TIP_SVG_DISTANCE` by hand, so it's automatically correct for
+  // whichever fin type this fish actually has. Tail vertices are
   // hinge-shifted (`extrudeAtHinge`), so `TAIL_PIVOT.x` converts back into
   // that shared space.
   const tailTipCommonX = useMemo(() => {
+    const positions = tailGeometry.attributes.position;
     let maxNegX = 0;
-    for (let i = 0; i < tailRestPositions.length; i += 3) {
-      maxNegX = Math.max(maxNegX, -tailRestPositions[i]!);
+    if (positions) {
+      for (let i = 0; i < positions.count; i++) {
+        maxNegX = Math.max(maxNegX, -positions.getX(i));
+      }
     }
     return TAIL_PIVOT.x - maxNegX;
-  }, [tailRestPositions]);
+  }, [tailGeometry]);
   const seamU = useMemo(() => swimWaveU(TAIL_PIVOT.x, tailTipCommonX), [tailTipCommonX]);
   const tipGain = FIN_SWIM_TIP_GAIN[finType];
 
-  const bodyWaveTables: WaveTables = useMemo(
-    () => buildWaveTables(bodyRestPositions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
-    [bodyRestPositions, tailTipCommonX, tipGain],
+  // The swim wave itself (`swimWave.ts`'s formula) now runs on the GPU
+  // (`swimWaveShader.ts`, issue #94) — each material gets the wave's
+  // displacement/normal-correction logic injected once at shader-compile
+  // time, baking in this fish-part's own constants (`spaceOffsetX` is `0`
+  // for body/dorsal, `TAIL_PIVOT.x` for the tail, same as `applySwimWave`'s
+  // old `rotationOffsetX` parameter), and returns the three per-frame
+  // uniforms (`phase`/`amplitude`/`bend`) the `useFrame` callback below
+  // writes to instead of rewriting geometry.
+  const bodyMaterial = useMemo(() => {
+    const material = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.6,
+      side: THREE.DoubleSide,
+    });
+    return material;
+  }, []);
+  const bodySwimUniforms = useMemo(
+    () =>
+      attachSwimWaveVertexShader(bodyMaterial, {
+        onsetX: SWIM_WAVE_ONSET_X,
+        tipCommonX: tailTipCommonX,
+        seamU,
+        tipGain,
+      }),
+    [bodyMaterial, tailTipCommonX, seamU, tipGain],
   );
-  const dorsalWaveTables: WaveTables = useMemo(
-    () => buildWaveTables(dorsalRestPositions, 0, TAIL_PIVOT.x, tailTipCommonX, tipGain),
-    [dorsalRestPositions, tailTipCommonX, tipGain],
+  const dorsalMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({ color: finColour, roughness: 0.6, side: THREE.DoubleSide }),
+    [finColour],
   );
-  const tailWaveTables: WaveTables = useMemo(
-    () => buildWaveTables(tailRestPositions, TAIL_PIVOT.x, TAIL_PIVOT.x, tailTipCommonX, tipGain),
-    [tailRestPositions, tailTipCommonX, tipGain],
+  const dorsalSwimUniforms = useMemo(
+    () =>
+      attachSwimWaveVertexShader(dorsalMaterial, {
+        onsetX: SWIM_WAVE_ONSET_X,
+        tipCommonX: tailTipCommonX,
+        seamU,
+        tipGain,
+      }),
+    [dorsalMaterial, tailTipCommonX, seamU, tipGain],
   );
+  const tailMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({ color: finColour, roughness: 0.6, side: THREE.DoubleSide }),
+    [finColour],
+  );
+  const tailSwimUniforms = useMemo(
+    () =>
+      attachSwimWaveVertexShader(tailMaterial, {
+        onsetX: SWIM_WAVE_ONSET_X,
+        tipCommonX: tailTipCommonX,
+        seamU,
+        tipGain,
+        spaceOffsetX: TAIL_PIVOT.x,
+      }),
+    [tailMaterial, tailTipCommonX, seamU, tipGain],
+  );
+
   // Each spot's own (u, env) at its fixed rest x — spots don't move
   // relative to the body, so this is a one-time lookup, not a per-frame
   // table scan.
@@ -429,19 +465,29 @@ export function FishModel({
   // Per-fish geometry clones and manually constructed materials aren't
   // JSX-owned, so R3F never disposes them on its own — over a long-running
   // app's worth of `Born`/`Passed` cycles that would otherwise leak a
-  // `BufferGeometry` and two `Material`s per fish. `SHARED_GEOMETRY` and
-  // the JSX-declared `<meshStandardMaterial>`s elsewhere in this component
-  // are excluded on purpose: the former is shared read-only across every
-  // fish instance, and the latter are already R3F-managed.
+  // `BufferGeometry`/`Material` per fish. `SHARED_GEOMETRY` is excluded on
+  // purpose: it's shared read-only across every fish instance.
   useEffect(() => {
     return () => {
       bodyGeometry.dispose();
       tailGeometry.dispose();
       dorsalGeometry.dispose();
+      bodyMaterial.dispose();
+      dorsalMaterial.dispose();
+      tailMaterial.dispose();
       pectoralMaterial.dispose();
       mouthMaterial.dispose();
     };
-  }, [bodyGeometry, tailGeometry, dorsalGeometry, pectoralMaterial, mouthMaterial]);
+  }, [
+    bodyGeometry,
+    tailGeometry,
+    dorsalGeometry,
+    bodyMaterial,
+    dorsalMaterial,
+    tailMaterial,
+    pectoralMaterial,
+    mouthMaterial,
+  ]);
 
   useFrame((state, delta) => {
     if (still) return;
@@ -609,23 +655,18 @@ export function FishModel({
     });
 
     // The swim wave: one continuous per-vertex bend spanning the body,
-    // dorsal fin, and tail (`swimWave.ts`). All three share this frame's
-    // `phase`/`amplitude` so they beat as one coherent wave, not three
-    // independent pieces — and the tail rotates with a `TAIL_PIVOT.x`
-    // offset so it shares the body's own rotation pivot instead of its own
-    // hinge-local one, keeping the body/tail seam closed as amplitude
-    // varies (`applySwimWave`'s own comment).
-    applySwimWave(bodyGeometry, bodyRestPositions, bodyWaveTables, phase, amplitude, 0, bend);
-    applySwimWave(dorsalGeometry, dorsalRestPositions, dorsalWaveTables, phase, amplitude, 0, bend);
-    applySwimWave(
-      tailGeometry,
-      tailRestPositions,
-      tailWaveTables,
-      phase,
-      amplitude,
-      TAIL_PIVOT.x,
-      bend,
-    );
+    // dorsal fin, and tail (`swimWave.ts`), now evaluated on the GPU
+    // (`swimWaveShader.ts`, issue #94) rather than rewriting geometry here.
+    // All three share this frame's `phase`/`amplitude`/`bend` so they beat
+    // as one coherent wave, not three independent pieces — the tail
+    // material's own baked-in `spaceOffsetX` (`TAIL_PIVOT.x`, set once when
+    // its shader was attached) is what keeps it rotating about the body's
+    // shared pivot instead of its own hinge-local one, closing the
+    // body/tail seam as amplitude varies, exactly as `applySwimWave`'s
+    // `rotationOffsetX` used to.
+    setSwimWaveUniforms(bodySwimUniforms, phase, amplitude, bend);
+    setSwimWaveUniforms(dorsalSwimUniforms, phase, amplitude, bend);
+    setSwimWaveUniforms(tailSwimUniforms, phase, amplitude, bend);
 
     // Spots ride the same wave (bend included) at their own fixed
     // body-space x — a group rotation about the (untranslated) root's own
@@ -672,18 +713,21 @@ export function FishModel({
 
   return (
     <group ref={rootRef} scale={scale}>
-      <mesh geometry={bodyGeometry} castShadow receiveShadow>
-        <meshStandardMaterial vertexColors roughness={0.6} side={THREE.DoubleSide} />
-      </mesh>
+      {/* No `castShadow` on any fish part any more (body/dorsal/gill/tail
+          here, plus `fishGeometry.ts`'s `wrapInPivot` for the pectorals/
+          mouth): `TankScene.tsx` freezes the tank's shadow map after its
+          first frame (issue #94) since the only things that used to move
+          within it — fish and swaying plant blades — no longer cast at
+          all. `receiveShadow` stays on the body so a fish swimming past the
+          castle/plants still visibly picks up their (now-static) shadow. */}
+      <mesh geometry={bodyGeometry} material={bodyMaterial} receiveShadow />
 
-      <mesh geometry={dorsalGeometry} castShadow>
+      <mesh geometry={dorsalGeometry} material={dorsalMaterial} />
+
+      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]}>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
-
-      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, BODY_DEPTH / 2 + 0.3]} castShadow>
-        <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]} castShadow>
+      <mesh geometry={SHARED_GEOMETRY.gill} position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]}>
         <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
       </mesh>
 
@@ -696,9 +740,11 @@ export function FishModel({
         <meshStandardMaterial color="#22222a" roughness={0.4} />
       </mesh>
 
-      <mesh geometry={tailGeometry} position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]} castShadow>
-        <meshStandardMaterial color={finColour} roughness={0.6} side={THREE.DoubleSide} />
-      </mesh>
+      <mesh
+        geometry={tailGeometry}
+        material={tailMaterial}
+        position={[TAIL_PIVOT.x, TAIL_PIVOT.y, 0]}
+      />
 
       <mesh position={[EYE.x, EYE.y, BODY_DEPTH / 2 + 3]}>
         <sphereGeometry args={[EYE.r, 16, 16]} />
@@ -729,12 +775,4 @@ export function FishModel({
         ))}
     </group>
   );
-}
-
-/** Captures a geometry's current position attribute as a plain array — the
- * swim wave always deforms *from* this rest pose, never accumulates onto
- * whatever the previous frame already wrote. */
-function snapshotRestPositions(geometry: THREE.BufferGeometry): Float32Array {
-  const positions = geometry.attributes.position?.array;
-  return positions ? (positions.slice() as Float32Array) : new Float32Array(0);
 }

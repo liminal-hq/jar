@@ -4,6 +4,14 @@
 // its own independent hinge or bend. See
 // `docs/architecture/3d-engine.md` §6.2/§6.6.
 //
+// `swimWaveU`/`swimWaveEnvelope`/`swimWaveAngle`/`swimWaveVertexAngle` below
+// are the actual formula — the source of truth `swimWaveShader.ts` ports
+// into GLSL for `FishModel.tsx`'s per-frame render path (issue #94). This
+// file's own `buildWaveTables`/`applySwimWave` (the CPU per-vertex loop
+// that used to run 3x per fish per frame) are no longer called from there;
+// kept here, still covered by `swimWave.test.ts`, as the tested reference
+// implementation the shader's behaviour is checked against.
+//
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
