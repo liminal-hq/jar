@@ -11,6 +11,12 @@
   padding: 4px;
   min-width: 180px;
   max-width: 280px;
+  /* The positioning logic in ContextMenu.tsx clamps top/left to the
+   * viewport but never shrinks the menu itself — on a short window this
+   * left it clipped at the bottom with no way to reach the rest. This is a
+   * no-op (no scrollbar) whenever the menu already fits. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   z-index: 10000;
   font-family: 'Nunito', sans-serif;
   font-size: 13px;
@@ -50,7 +56,10 @@
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  /* Not `pointer` — a menu row isn't a hyperlink, same reasoning as
+   * TitleBar.module.css's `.controlButton`. `<button>`'s own UA stylesheet
+   * defaults to `pointer`, so this has to be a real override. */
+  cursor: default;
   border-radius: 4px;
   outline: none;
 }
