@@ -29,7 +29,6 @@ function makeCritter(shell: ShellType, lifeStage: LifeStage): Critter {
     name: 'Test',
     hue: 120,
     fin: null,
-    spots: false,
     shell,
     pattern: 'Solid',
     sex: 'Female',

@@ -16,7 +16,6 @@ use crate::rng::JarRng;
 /// forward unchanged (`docs/architecture/3d-engine.md` §7).
 const GECKO_HUE_PALETTE: [u16; 5] = [28, 42, 75, 110, 150];
 
-const SPOT_INHERIT_CHANCE: f32 = 0.7;
 const HUE_MUTATION_RANGE: f32 = 18.0;
 /// Chance a child's personality is pulled from a parent rather than rolled
 /// fresh from the full pool — real family resemblance across generations
@@ -84,12 +83,7 @@ pub fn roll_original(
         Species::Snail => Some(roll_shell(rng)),
         Species::Fish | Species::Gecko => None,
     };
-    let pattern = match species {
-        Species::Snail => Some(roll_pattern(rng)),
-        // Fish/gecko keep rolling the boolean `spots` field below until
-        // issue #98's follow-up widens `pattern` to every species.
-        Species::Fish | Species::Gecko => None,
-    };
+    let pattern = roll_pattern(species, rng);
 
     Critter {
         id,
@@ -97,7 +91,6 @@ pub fn roll_original(
         name: roll_name(species, existing_names),
         hue,
         fin,
-        spots: rng.chance(0.4),
         shell,
         pattern,
         sex: roll_sex(rng),
@@ -148,12 +141,9 @@ pub fn roll_child(
         Species::Gecko | Species::Snail => None,
     };
 
-    let either_has_spots = parent_a.critter.spots || parent_b.critter.spots;
-    let spots = either_has_spots && rng.chance(SPOT_INHERIT_CHANCE);
-
-    // `shell`/`pattern` each come from exactly one parent by coin flip — the
-    // same "one parent, wholesale" mechanic as `fin` above (issue #98's
-    // settled decision). Parents are always the same species (`tick.rs`'s
+    // `shell` comes from exactly one parent by coin flip — the same "one
+    // parent, wholesale" mechanic as `fin` above (issue #98's settled
+    // decision). Parents are always the same species (`tick.rs`'s
     // `try_breed` only pairs same-species critters), so if `parent_a` has a
     // shell, `parent_b` does too.
     let shell = match species {
@@ -166,15 +156,15 @@ pub fn roll_child(
         }
         Species::Fish | Species::Gecko => None,
     };
-    let pattern = match species {
-        Species::Snail => {
-            if rng.chance(0.5) {
-                parent_a.critter.pattern
-            } else {
-                parent_b.critter.pattern
-            }
-        }
-        Species::Fish | Species::Gecko => None,
+    // `pattern` comes from one parent by coin flip too — now for every
+    // species (issue #98's follow-up widened this from snail-only). Fish
+    // inheritance changes here from the old boolean `spots`' "70% if either
+    // parent has them": one Spotted + one Solid parent is now a 50/50 split,
+    // not 70% Spotted; two Solid parents still never produce Spotted.
+    let pattern = if rng.chance(0.5) {
+        parent_a.critter.pattern
+    } else {
+        parent_b.critter.pattern
     };
 
     Critter {
@@ -183,7 +173,6 @@ pub fn roll_child(
         name: roll_name(species, existing_names),
         hue,
         fin,
-        spots,
         shell,
         pattern,
         sex: roll_sex(rng), // not inherited — SPEC.md §5's amended rule
@@ -220,11 +209,37 @@ fn roll_shell(rng: &mut JarRng) -> ShellType {
     }
 }
 
-fn roll_pattern(rng: &mut JarRng) -> Pattern {
-    match rng.range_u16(0, 3) {
-        0 => Pattern::Solid,
-        1 => Pattern::Banded,
-        _ => Pattern::Spotted,
+/// Weighted per species (issue #98's follow-up widened `pattern` from
+/// snail-only to universal): fish keeps roughly its old ~40% spotted rate
+/// for continuity with the boolean `spots` gene it replaces (40% Spotted /
+/// 35% Solid / 25% Banded — the exact split is tunable, only the ~40%
+/// spotted rate matters for continuity); gecko never rolls `Banded` (no
+/// banded-gecko art exists yet — 60% Solid / 40% Spotted); snail keeps its
+/// original even split across all three.
+fn roll_pattern(species: Species, rng: &mut JarRng) -> Pattern {
+    match species {
+        Species::Fish => {
+            let roll = rng.range_f32(0.0, 1.0);
+            if roll < 0.40 {
+                Pattern::Spotted
+            } else if roll < 0.75 {
+                Pattern::Solid
+            } else {
+                Pattern::Banded
+            }
+        }
+        Species::Gecko => {
+            if rng.chance(0.4) {
+                Pattern::Spotted
+            } else {
+                Pattern::Solid
+            }
+        }
+        Species::Snail => match rng.range_u16(0, 3) {
+            0 => Pattern::Solid,
+            1 => Pattern::Banded,
+            _ => Pattern::Spotted,
+        },
     }
 }
 
@@ -248,10 +263,9 @@ fn roll_personality(rng: &mut JarRng) -> Personality {
 }
 
 /// `PERSONALITY_INHERIT_CHANCE` of the time, pick whichever parent's
-/// personality wins a coin flip (mirrors `fin`'s exact "one parent,
-/// wholesale" pattern above); otherwise roll fresh from the full pool
-/// (mirrors `spots`' probabilistic-inherit-with-fallback pattern) rather
-/// than a flat 50/50 alone.
+/// personality wins a coin flip (mirrors `fin`/`pattern`'s exact "one
+/// parent, wholesale" pattern above); otherwise roll fresh from the full
+/// pool, rather than a flat 50/50 alone.
 fn roll_child_personality(parent_a: &Critter, parent_b: &Critter, rng: &mut JarRng) -> Personality {
     if rng.chance(PERSONALITY_INHERIT_CHANCE) {
         if rng.chance(0.5) {
@@ -330,16 +344,15 @@ mod tests {
 
     use super::*;
 
-    fn parent(species: Species, hue: u16, fin: Option<FinType>, spots: bool) -> Critter {
+    fn parent(species: Species, hue: u16, fin: Option<FinType>, pattern: Pattern) -> Critter {
         Critter {
             id: CritterId(0),
             species,
             name: "Parent".into(),
             hue,
             fin,
-            spots,
             shell: None,
-            pattern: None,
+            pattern,
             sex: Sex::Male,
             personality: Personality::Bold,
             mood: 66.0,
@@ -363,8 +376,8 @@ mod tests {
     #[test]
     fn child_hue_is_parents_mean_plus_minus_18() {
         let mut rng = JarRng::new();
-        let a = parent(Species::Fish, 100, Some(FinType::Veil), false);
-        let b = parent(Species::Fish, 200, Some(FinType::Veil), false);
+        let a = parent(Species::Fish, 100, Some(FinType::Veil), Pattern::Solid);
+        let b = parent(Species::Fish, 200, Some(FinType::Veil), Pattern::Solid);
         for _ in 0..200 {
             let child = roll_child(
                 CritterId(1),
@@ -389,8 +402,8 @@ mod tests {
         // formula deliberately isn't hue-wheel-aware — the mean is a plain
         // arithmetic (350+10)/2 = 180, not something near 0.
         let mut rng = JarRng::new();
-        let a = parent(Species::Fish, 350, Some(FinType::Veil), false);
-        let b = parent(Species::Fish, 10, Some(FinType::Veil), false);
+        let a = parent(Species::Fish, 350, Some(FinType::Veil), Pattern::Solid);
+        let b = parent(Species::Fish, 10, Some(FinType::Veil), Pattern::Solid);
         for _ in 0..200 {
             let child = roll_child(
                 CritterId(1),
@@ -412,8 +425,8 @@ mod tests {
     #[test]
     fn child_hue_stays_in_0_360_across_the_wrap() {
         let mut rng = JarRng::new();
-        let a = parent(Species::Fish, 355, Some(FinType::Veil), false);
-        let b = parent(Species::Fish, 359, Some(FinType::Veil), false);
+        let a = parent(Species::Fish, 355, Some(FinType::Veil), Pattern::Solid);
+        let b = parent(Species::Fish, 359, Some(FinType::Veil), Pattern::Solid);
         for _ in 0..200 {
             let child = roll_child(
                 CritterId(1),
@@ -431,8 +444,8 @@ mod tests {
     #[test]
     fn fin_comes_from_exactly_one_parent() {
         let mut rng = JarRng::new();
-        let a = parent(Species::Fish, 180, Some(FinType::Fan), false);
-        let b = parent(Species::Fish, 180, Some(FinType::Veil), false);
+        let a = parent(Species::Fish, 180, Some(FinType::Fan), Pattern::Solid);
+        let b = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
         let mut saw_fan = false;
         let mut saw_veil = false;
         for _ in 0..200 {
@@ -460,8 +473,8 @@ mod tests {
     #[test]
     fn gecko_children_never_have_a_fin() {
         let mut rng = JarRng::new();
-        let a = parent(Species::Gecko, 75, None, false);
-        let b = parent(Species::Gecko, 110, None, false);
+        let a = parent(Species::Gecko, 75, None, Pattern::Solid);
+        let b = parent(Species::Gecko, 110, None, Pattern::Solid);
         for _ in 0..50 {
             let child = roll_child(
                 CritterId(1),
@@ -477,10 +490,10 @@ mod tests {
     }
 
     #[test]
-    fn spots_never_appear_from_two_plain_parents() {
+    fn gecko_children_never_inherit_a_banded_pattern() {
         let mut rng = JarRng::new();
-        let a = parent(Species::Fish, 180, Some(FinType::Veil), false);
-        let b = parent(Species::Fish, 180, Some(FinType::Veil), false);
+        let a = parent(Species::Gecko, 75, None, Pattern::Solid);
+        let b = parent(Species::Gecko, 110, None, Pattern::Spotted);
         for _ in 0..200 {
             let child = roll_child(
                 CritterId(1),
@@ -491,15 +504,68 @@ mod tests {
                 &mut rng,
                 &[],
             );
-            assert!(!child.spots);
+            assert_ne!(child.pattern, Pattern::Banded);
         }
     }
 
     #[test]
-    fn spots_inherit_at_roughly_seventy_percent_when_one_parent_has_them() {
+    fn pattern_never_appears_from_two_solid_parents() {
         let mut rng = JarRng::new();
-        let a = parent(Species::Fish, 180, Some(FinType::Veil), true);
-        let b = parent(Species::Fish, 180, Some(FinType::Veil), false);
+        let a = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
+        let b = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
+        for _ in 0..200 {
+            let child = roll_child(
+                CritterId(1),
+                Parent { critter: &a },
+                Parent { critter: &b },
+                2,
+                0.0,
+                &mut rng,
+                &[],
+            );
+            assert_eq!(child.pattern, Pattern::Solid);
+        }
+    }
+
+    #[test]
+    fn fish_pattern_comes_from_exactly_one_parent() {
+        // Mirrors `snail_shell_and_pattern_each_come_from_exactly_one_parent`
+        // below — `pattern` now uses the same "one parent, wholesale"
+        // mechanic for every species, not just the snail. One Spotted + one
+        // Solid parent is a 50/50 split under this rule, not the old boolean
+        // `spots`' 70%-if-either-parent-has-them.
+        let mut rng = JarRng::new();
+        let a = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Spotted);
+        let b = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
+        let mut saw_spotted = false;
+        let mut saw_solid = false;
+        for _ in 0..200 {
+            let child = roll_child(
+                CritterId(1),
+                Parent { critter: &a },
+                Parent { critter: &b },
+                2,
+                0.0,
+                &mut rng,
+                &[],
+            );
+            match child.pattern {
+                Pattern::Spotted => saw_spotted = true,
+                Pattern::Solid => saw_solid = true,
+                other => panic!("child pattern {other:?} came from neither parent"),
+            }
+        }
+        assert!(
+            saw_spotted && saw_solid,
+            "expected both parents' pattern genes to appear over 200 rolls"
+        );
+    }
+
+    #[test]
+    fn fish_pattern_inherits_close_to_a_fifty_fifty_split_not_seventy_percent() {
+        let mut rng = JarRng::new();
+        let a = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Spotted);
+        let b = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
         let n = 2000;
         let mut spotted = 0;
         for _ in 0..n {
@@ -512,14 +578,14 @@ mod tests {
                 &mut rng,
                 &[],
             );
-            if child.spots {
+            if child.pattern == Pattern::Spotted {
                 spotted += 1;
             }
         }
         let rate = spotted as f64 / n as f64;
         assert!(
-            (0.6..=0.8).contains(&rate),
-            "spot inheritance rate {rate} far from 70%"
+            (0.4..=0.6).contains(&rate),
+            "pattern inheritance rate {rate} far from the expected 50%"
         );
     }
 
@@ -527,8 +593,8 @@ mod tests {
     fn sex_is_rolled_independently_of_parent_sexes() {
         let mut rng = JarRng::new();
         // Both parents constructed as Male via `parent()`.
-        let a = parent(Species::Fish, 180, Some(FinType::Veil), false);
-        let b = parent(Species::Fish, 180, Some(FinType::Veil), false);
+        let a = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
+        let b = parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid);
         let mut saw_male = false;
         let mut saw_female = false;
         for _ in 0..200 {
@@ -618,20 +684,65 @@ mod tests {
         for _ in 0..50 {
             let original = roll_original(CritterId(1), Species::Snail, 1, 0.0, &mut rng, &[]);
             assert!(original.shell.is_some());
-            assert!(original.pattern.is_some());
             assert_eq!(original.fin, None);
         }
     }
 
     #[test]
-    fn fish_and_gecko_originals_never_have_a_shell_or_pattern() {
+    fn fish_and_gecko_originals_never_have_a_shell() {
         let mut rng = JarRng::new();
         for species in [Species::Fish, Species::Gecko] {
             for _ in 0..20 {
                 let original = roll_original(CritterId(1), species, 1, 0.0, &mut rng, &[]);
                 assert_eq!(original.shell, None);
-                assert_eq!(original.pattern, None);
             }
+        }
+    }
+
+    #[test]
+    fn every_species_always_has_a_pattern() {
+        // `pattern` is a plain (never-`Option`) field now — this is really a
+        // compile-time guarantee (`Critter.pattern: Pattern`), but a live
+        // roll for every species is a cheap, honest smoke test of that.
+        let mut rng = JarRng::new();
+        for species in Species::ALL {
+            let original = roll_original(CritterId(1), species, 1, 0.0, &mut rng, &[]);
+            match original.pattern {
+                Pattern::Solid | Pattern::Banded | Pattern::Spotted => {}
+            }
+        }
+    }
+
+    #[test]
+    fn fish_original_spotted_rate_stays_near_the_old_forty_percent() {
+        // Continuity with the retired boolean `spots` gene's ~40% rate
+        // (issue #98's follow-up) — not a promise the exact split never
+        // moves, just that a fish is still "spotted" about 4 times in 10.
+        let mut rng = JarRng::new();
+        let n = 2000;
+        let mut spotted = 0;
+        for _ in 0..n {
+            let original = roll_original(CritterId(1), Species::Fish, 1, 0.0, &mut rng, &[]);
+            if original.pattern == Pattern::Spotted {
+                spotted += 1;
+            }
+        }
+        let rate = spotted as f64 / n as f64;
+        assert!(
+            (0.35..=0.45).contains(&rate),
+            "fish spotted-original rate {rate} far from the ~40% continuity target"
+        );
+    }
+
+    #[test]
+    fn gecko_originals_never_roll_banded() {
+        // No banded-gecko art exists yet (`docs/architecture/3d-engine.md`
+        // §7) — the enum stays reachable whenever that lands, but today's
+        // roll must never produce it.
+        let mut rng = JarRng::new();
+        for _ in 0..500 {
+            let original = roll_original(CritterId(1), Species::Gecko, 1, 0.0, &mut rng, &[]);
+            assert_ne!(original.pattern, Pattern::Banded);
         }
     }
 
@@ -651,8 +762,8 @@ mod tests {
     fn snail_parent(shell: ShellType, pattern: Pattern) -> Critter {
         Critter {
             shell: Some(shell),
-            pattern: Some(pattern),
-            ..parent(Species::Snail, 180, None, false)
+            pattern,
+            ..parent(Species::Snail, 180, None, Pattern::Solid)
         }
     }
 
@@ -681,8 +792,8 @@ mod tests {
                 other => panic!("child shell {other:?} came from neither parent"),
             }
             match child.pattern {
-                Some(Pattern::Solid) => saw_a_pattern = true,
-                Some(Pattern::Spotted) => saw_b_pattern = true,
+                Pattern::Solid => saw_a_pattern = true,
+                Pattern::Spotted => saw_b_pattern = true,
                 other => panic!("child pattern {other:?} came from neither parent"),
             }
         }
@@ -701,11 +812,11 @@ mod tests {
         let mut rng = JarRng::new();
         let a = Critter {
             personality: Personality::Bold,
-            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+            ..parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid)
         };
         let b = Critter {
             personality: Personality::Sleepy,
-            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+            ..parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid)
         };
         let n = 2000;
         let mut matched_a_parent = 0;
@@ -739,11 +850,11 @@ mod tests {
         let mut rng = JarRng::new();
         let a = Critter {
             personality: Personality::Bold,
-            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+            ..parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid)
         };
         let b = Critter {
             personality: Personality::Bold,
-            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+            ..parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid)
         };
         let n = 2000;
         let mut bold_count = 0;
@@ -784,11 +895,11 @@ mod tests {
         let mut rng = JarRng::new();
         let a = Critter {
             personality: Personality::Bold,
-            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+            ..parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid)
         };
         let b = Critter {
             personality: Personality::Bold,
-            ..parent(Species::Fish, 180, Some(FinType::Veil), false)
+            ..parent(Species::Fish, 180, Some(FinType::Veil), Pattern::Solid)
         };
         for _ in 0..2000 {
             let child = roll_child(

@@ -114,12 +114,7 @@ export function CritterCardWindow() {
           hue {critter.hue}° · {critter.sex}
           {critter.fin ? ` · ${critter.fin}` : ''}
           {critter.shell ? ` · ${critter.shell}` : ''}
-          {/* `pattern` is snail-only for now (fish/gecko still roll the
-              boolean `spots` until issue #98's follow-up widens `pattern`
-              to every species) — shown in its place once it's populated. */}
-          {critter.pattern
-            ? ` · ${critter.pattern.toLowerCase()}`
-            : ` · ${critter.spots ? 'spotted' : 'plain'}`}
+          {` · ${critter.pattern.toLowerCase()}`}
         </dd>
         <dt>Favourite spot</dt>
         <dd>

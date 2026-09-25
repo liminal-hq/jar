@@ -45,9 +45,8 @@ function makeCritter(overrides: Partial<Critter> = {}): Critter {
     name: 'Pickle',
     hue: 210,
     fin: 'Veil',
-    spots: true,
     shell: null,
-    pattern: null,
+    pattern: 'Spotted',
     sex: 'Male',
     personality: 'Bold',
     mood: 66,
@@ -134,7 +133,7 @@ describe('applyEvent — TickUpdate', () => {
     expect(updated.name).toBe(original.name);
     expect(updated.hue).toBe(original.hue);
     expect(updated.fin).toBe(original.fin);
-    expect(updated.spots).toBe(original.spots);
+    expect(updated.pattern).toBe(original.pattern);
     expect(updated.favourite_spot).toEqual(original.favourite_spot);
     expect(updated.parents).toBe(original.parents);
   });

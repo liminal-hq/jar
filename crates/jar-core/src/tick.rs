@@ -309,7 +309,7 @@ fn spawn_child(
 
 #[cfg(test)]
 mod tests {
-    use jar_protocol::{Critter, FavouriteSpot, FinType, JarSettings};
+    use jar_protocol::{Critter, FavouriteSpot, FinType, JarSettings, Pattern};
 
     use super::*;
 
@@ -344,9 +344,8 @@ mod tests {
                 Species::Fish => Some(FinType::Veil),
                 Species::Gecko | Species::Snail => None,
             },
-            spots: false,
             shell: None,
-            pattern: None,
+            pattern: Pattern::Solid,
             sex,
             personality,
             mood: 66.0,

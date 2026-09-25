@@ -19,4 +19,35 @@
     C 48 46, 76 32, 88 18
     Z"/>
   <circle id="eye" fill="#22222a" cx="68" cy="-10" r="7"/>
+  <!-- `Banded` pattern gene (issue #98's follow-up): 3 vertical body-band
+       decals, tapered-lens shapes (echoing gill.svg's own curve-only
+       authoring), spaced along the body so they clear the eye/mouth/gill
+       area (x > ~35). Sized to stay inside body-back's own silhouette at
+       each x — verified against that path's control points, not just eyeballed.
+       Mounted/mirrored exactly like gill.svg (FishModel.tsx), but — unlike
+       the rigid gill — ride the swim wave via their own material
+       (attachSwimWaveVertexShader/attachSwimWaveDepthMaterial), since a band
+       spans a range of body x rather than sitting at one fixed point.
+       Placeholder fill; runtime colour is a darkened tint of the fish's hue. -->
+  <path id="band-1" fill="#4a4a55" d="
+    M -30 -16
+    C -33.6 -9.6 -36 -8 -36 0
+    C -36 8 -33.6 9.6 -30 16
+    C -26.4 9.6 -24 8 -24 0
+    C -24 -8 -26.4 -9.6 -30 -16
+    Z"/>
+  <path id="band-2" fill="#4a4a55" d="
+    M 0 -30
+    C -4.2 -18 -7 -15 -7 0
+    C -7 15 -4.2 18 0 30
+    C 4.2 18 7 15 7 0
+    C 7 -15 4.2 -18 0 -30
+    Z"/>
+  <path id="band-3" fill="#4a4a55" d="
+    M 30 -26
+    C 25.8 -15.6 23 -13 23 0
+    C 23 13 25.8 15.6 30 26
+    C 34.2 15.6 37 13 37 0
+    C 37 -13 34.2 -15.6 30 -26
+    Z"/>
 </svg>

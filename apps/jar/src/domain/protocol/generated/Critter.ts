@@ -9,14 +9,13 @@ import type { Sex } from "./Sex";
 import type { ShellType } from "./ShellType";
 import type { Species } from "./Species";
 
-export type Critter = { id: CritterId, species: Species, name: string, hue: number, fin: FinType | null, spots: boolean, 
+export type Critter = { id: CritterId, species: Species, name: string, hue: number, fin: FinType | null, 
 /**
  * Shell shape — snail only, `None` on fish/gecko (mirrors `fin`).
  */
 shell: ShellType | null, 
 /**
- * Body/shell pattern — snail only for now (`None` on fish/gecko, which
- * keep using `spots` above until issue #98's follow-up widens this to
- * every species).
+ * Body/shell pattern — every species always has one (issue #98's
+ * follow-up retired fish's separate boolean `spots` field for this).
  */
-pattern: Pattern | null, sex: Sex, personality: Personality, mood: number, energy: number, age_sec: number, life_stage: LifeStage, life: number, gen: number, parents: [CritterId, CritterId] | null, alive: boolean, born: number, died: number | null, favourite_spot: FavouriteSpot, };
+pattern: Pattern, sex: Sex, personality: Personality, mood: number, energy: number, age_sec: number, life_stage: LifeStage, life: number, gen: number, parents: [CritterId, CritterId] | null, alive: boolean, born: number, died: number | null, favourite_spot: FavouriteSpot, };

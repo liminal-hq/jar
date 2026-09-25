@@ -18,7 +18,8 @@ const PERSONALITIES = ['Shy', 'Greedy', 'Curious', 'Sleepy', 'Bold', 'Dramatic']
 
 /** Mean of many draws — used to compare personalities' burst ranges without
  * pinning an exact (now randomized) value, same "roughly" pattern as the
- * Rust genetics tests (e.g. `spots_inherit_at_roughly_seventy_percent`). */
+ * Rust genetics tests (e.g. the personality-inheritance-rate test in
+ * `genetics.rs`). */
 function meanBurstMultiplier(personality: (typeof PERSONALITIES)[number], samples = 500): number {
   let total = 0;
   for (let i = 0; i < samples; i++) total += burstMultiplierFor(personality);

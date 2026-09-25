@@ -147,12 +147,13 @@ export function SnailModel({
 
   const phaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
 
-  // `shell`/`pattern` never change after birth (SPEC.md §5), same
-  // fallback-for-fish-and-gecko convention as `FishModel.tsx`'s `fin`.
+  // `shell`/`pattern` never change after birth (SPEC.md §5). `shell` keeps
+  // a fish/gecko-`None` fallback (mirrors `FishModel.tsx`'s `fin`); `pattern`
+  // is always populated now, so it's read directly.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const shellType = useMemo<ShellType>(() => critter.shell ?? 'Coil', []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pattern = useMemo<Pattern>(() => critter.pattern ?? 'Solid', []);
+  const pattern = useMemo<Pattern>(() => critter.pattern, []);
 
   const scale = lifeStageScale(critter.life_stage) * SVG_SCALE;
 

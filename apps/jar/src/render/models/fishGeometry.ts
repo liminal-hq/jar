@@ -72,10 +72,10 @@ export const TAIL_PIVOT = { x: -60, y: 0 };
 export const PECTORAL_HINGE = { x: 52, y: -10 };
 export const MOUTH_HINGE = { x: 90, y: -8 };
 
-// `body.svg` carries three named elements (`body-back`, `body-belly`,
-// `eye`) in one file — `SVGLoader` exposes the source SVG node on
-// `ShapePath.userData`, so one parse of the file can be filtered by id
-// rather than needing three separate SVG files for one silhouette. Parse
+// `body.svg` carries several named elements (`body-back`, `body-belly`,
+// `eye`, the `band-*` pattern decals) in one file — `SVGLoader` exposes the
+// source SVG node on `ShapePath.userData`, so one parse of the file can be
+// filtered by id rather than needing a separate SVG file per element. Parse
 // once up front and reuse the result.
 const bodyParsed = svgLoader.parse(bodySvg);
 function bodyShapesById(id: string): THREE.Shape[] {
@@ -86,18 +86,39 @@ function bodyShapesById(id: string): THREE.Shape[] {
 
 /** Shared, read-only — safe to reuse across every fish instance (and, for
  * `pectoral`, across both the near and far mirrored copies within one
- * fish) since nothing mutates it per-frame or per-fish. These three sit
- * forward of the swim wave's onset (`swimWave.ts`'s `SWIM_WAVE_ONSET_X`)
- * and stay rigid; the tail and dorsal fin deform per-frame per-fish now,
- * so they're per-fish clones instead (`createTailGeometry`/
- * `createDorsalGeometry` below), not shared here. `pectoral`/`mouth` are
- * pre-translated to their hinge origin (see `extrudeAtHinge`); `gill` is
- * rigid (no pivot) and stays in its natural authored coordinates. */
+ * fish) since nothing mutates it per-frame or per-fish. `gill`/`pectoral`/
+ * `mouth` sit forward of the swim wave's onset (`swimWave.ts`'s
+ * `SWIM_WAVE_ONSET_X`) and stay rigid; the tail and dorsal fin deform
+ * per-frame per-fish now, so they're per-fish clones instead
+ * (`createTailGeometry`/`createDorsalGeometry` below), not shared here.
+ * `pectoral`/`mouth` are pre-translated to their hinge origin (see
+ * `extrudeAtHinge`); `gill` is rigid (no pivot) and stays in its natural
+ * authored coordinates.
+ *
+ * `band1`/`band2`/`band3` (the `Banded` pattern gene's decals, `body.svg`'s
+ * `band-*` paths) sit *within* the swim-wave zone unlike the three above —
+ * the geometry itself is still safely shared (the GPU shader deforms it at
+ * render time, §6.6, not a CPU rewrite of these vertices), but
+ * `FishModel.tsx` still needs its own per-fish material for them (baked
+ * swim-wave constants + this fish's hue), the same way it already does for
+ * `dorsal`/`tail`. */
 export const SHARED_GEOMETRY = {
   gill: extrude(shapesFromSvg(gillSvg), 2),
+  band1: extrude(bodyShapesById('band-1'), 2),
+  band2: extrude(bodyShapesById('band-2'), 2),
+  band3: extrude(bodyShapesById('band-3'), 2),
   pectoral: extrudeAtHinge(shapesFromSvg(pectoralSvg), 5, PECTORAL_HINGE.x, PECTORAL_HINGE.y),
   mouth: extrudeAtHinge(shapesFromSvg(mouthSvg), BODY_DEPTH, MOUTH_HINGE.x, MOUTH_HINGE.y),
 };
+
+/** The `Banded` pattern's 3 body-band decals, in mount order — plain array
+ * so `FishModel.tsx` can iterate/mirror them instead of hand-listing each
+ * one twice (once per mirrored face). */
+export const BAND_GEOMETRIES: THREE.BufferGeometry[] = [
+  SHARED_GEOMETRY.band1,
+  SHARED_GEOMETRY.band2,
+  SHARED_GEOMETRY.band3,
+];
 
 /** Body's `body-back` shape only — per-fish clones of this are what get
  * vertex-painted with the belly gradient (`paintBellyGradient` below), so

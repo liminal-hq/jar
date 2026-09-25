@@ -64,11 +64,11 @@ pub enum ShellType {
     Turret,
 }
 
-/// Body/shell pattern gene. Species-neutral by design (not `ShellPattern`)
-/// so it can widen to fish and gecko later without a rename migration
-/// (issue #98's follow-up "clean up the spots gene" work) — for now, only
-/// snails ever roll a `Some` here; fish/gecko keep their existing `spots:
-/// bool` until that follow-up lands.
+/// Body/shell pattern gene — species-neutral by design (not `ShellPattern`),
+/// carried forward from the snail's own original gene (issue #98) once fish
+/// retired their separate boolean `spots` field for this instead. Every
+/// species always has one; `genetics::roll_original` weights the roll
+/// per species (fish/gecko never roll every value — see that function).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum Pattern {
@@ -142,13 +142,11 @@ pub struct Critter {
     pub name: String,
     pub hue: u16, // 0-360
     pub fin: Option<FinType>,
-    pub spots: bool,
     /// Shell shape — snail only, `None` on fish/gecko (mirrors `fin`).
     pub shell: Option<ShellType>,
-    /// Body/shell pattern — snail only for now (`None` on fish/gecko, which
-    /// keep using `spots` above until issue #98's follow-up widens this to
-    /// every species).
-    pub pattern: Option<Pattern>,
+    /// Body/shell pattern — every species always has one (issue #98's
+    /// follow-up retired fish's separate boolean `spots` field for this).
+    pub pattern: Pattern,
     pub sex: Sex,
     pub personality: Personality,
     pub mood: f32,   // 0-100
