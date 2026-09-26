@@ -128,6 +128,32 @@ describe('resetSpine', () => {
 });
 
 describe('advanceSpine', () => {
+  it('returns promptly and lands at the correct arc length for an extreme one-shot distance', () => {
+    // A stalled-then-resumed render loop with no delta clamp of its own is
+    // the scenario this guards against — nothing in ordinary crawling ever
+    // hands this a distance anywhere near this large, but the call must
+    // still return (not hang stepping in crumb-sized increments) and must
+    // still advance the head by the exact requested distance.
+    const floor = faceById('floor');
+    const headPose: CrawlPose = {
+      faceId: 'floor',
+      u: floor.uLength / 2,
+      v: floor.vLength / 2,
+      heading: 0.4,
+    };
+    const spine = createSpine(headPose, BODY_LENGTH, CRUMB_SPACING);
+    const startArcLength = spine.headArcLength;
+
+    const started = Date.now();
+    advanceSpine(spine, 50, 0.1);
+    const elapsedMs = Date.now() - started;
+
+    expect(spine.headArcLength).toBeCloseTo(startArcLength + 50, 6);
+    expect(elapsedMs).toBeLessThan(1000);
+    expect(Number.isFinite(spine.headPose.u)).toBe(true);
+    expect(Number.isFinite(spine.headPose.v)).toBe(true);
+  });
+
   it('preserves the tail-to-head arc length as the head moves in a straight line', () => {
     const floor = faceById('floor');
     const headPose: CrawlPose = { faceId: 'floor', u: 0.3, v: floor.vLength / 2, heading: 0 };

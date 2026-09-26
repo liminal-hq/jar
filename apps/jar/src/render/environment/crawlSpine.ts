@@ -134,6 +134,18 @@ export function resetSpine(spine: CrawlSpine, headPose: CrawlPose): void {
   spine.distanceSinceLastCrumb = 0;
 }
 
+/** A generous safety valve, not a value normal crawling ever approaches —
+ * this caller's own render loop clamps its frame delta well below one
+ * `crumbSpacing` per call in practice, so the loop below only ever runs a
+ * handful of iterations. It exists for the same reason `crawlSurfaces.ts`'s
+ * own `MAX_FOLD_STEPS` does: this module is deliberately reusable by a
+ * future second crawling critter (this file's own header), and a future
+ * caller that hands this an extreme one-shot `distance` (a render loop with
+ * no delta clamp of its own, recovering from a long stall) shouldn't be
+ * able to force thousands of synchronous crumb-sized sub-steps in one
+ * call. */
+const MAX_ADVANCE_STEPS = 256;
+
 /** Advances the spine's head by `distance` along its current heading
  * turned first by `turnDelta` (mirroring `Snail.tsx`'s own
  * `advance(turn(pose, delta), distance)` pattern), recording a new
@@ -152,19 +164,32 @@ export function advanceSpine(spine: CrawlSpine, distance: number, turnDelta: num
   let pose = turn(spine.headPose, turnDelta);
   let remaining = distance;
 
-  while (remaining > 0) {
+  for (let step = 0; remaining > 0 && step < MAX_ADVANCE_STEPS; step++) {
     const toNextCrumb = spine.crumbSpacing - spine.distanceSinceLastCrumb;
-    const step = Math.min(remaining, toNextCrumb);
-    pose = advance(pose, step);
-    spine.headArcLength += step;
-    spine.distanceSinceLastCrumb += step;
-    remaining -= step;
+    const stepDistance = Math.min(remaining, toNextCrumb);
+    pose = advance(pose, stepDistance);
+    spine.headArcLength += stepDistance;
+    spine.distanceSinceLastCrumb += stepDistance;
+    remaining -= stepDistance;
 
     if (spine.distanceSinceLastCrumb >= spine.crumbSpacing - 1e-9) {
       spine.distanceSinceLastCrumb = 0;
       const frame = poseToWorld(pose);
       spine.crumbs.push({ pose, position: frame.position, arcLength: spine.headArcLength });
     }
+  }
+
+  if (remaining > 0) {
+    // The safety valve above tripped — cover whatever's left in a single
+    // jump rather than continuing to stall on crumb-sized sub-steps. This
+    // trades fine-grained crumb resolution across that one extreme jump
+    // for a call that's guaranteed to return, which is the right side of
+    // that trade for a caller that's already catching up from a stall.
+    pose = advance(pose, remaining);
+    spine.headArcLength += remaining;
+    spine.distanceSinceLastCrumb = 0;
+    const frame = poseToWorld(pose);
+    spine.crumbs.push({ pose, position: frame.position, arcLength: spine.headArcLength });
   }
 
   spine.headPose = pose;
