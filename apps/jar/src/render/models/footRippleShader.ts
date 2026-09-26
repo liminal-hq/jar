@@ -66,13 +66,27 @@ function injectAfter(source: string, marker: string, injected: string): string {
   return source.replace(marker, `${marker}\n${injected}`);
 }
 
+/** The lateral "jelly skirt" wobble (`RIPPLE_WOBBLE_*` below) is a second,
+ * lower-amplitude term riding the same envelope/phase as the vertical
+ * ripple, at its own wavelength and offset so it reads as a distinct,
+ * organic jiggle rather than a scaled clone of the same wave — see
+ * `RIPPLE_POSITION_GLSL`'s own doc comment for the full formula and why it
+ * needs no new per-frame uniform of its own. */
+const WOBBLE_AMPLITUDE_RATIO = 0.35;
+const WOBBLE_WAVELENGTH_RATIO = 1.6;
+const WOBBLE_PHASE_OFFSET = 1.1;
+
 function buildRippleConstantsGLSL(params: FootRippleShaderParams): string {
   const { soleY, envelopeHeight, wavelength } = params;
   const k = (2 * Math.PI) / wavelength;
+  const wobbleK = k / WOBBLE_WAVELENGTH_RATIO;
   return `
 const float RIPPLE_SOLE_Y = ${glslFloat(soleY)};
 const float RIPPLE_ENVELOPE_HEIGHT = ${glslFloat(envelopeHeight)};
 const float RIPPLE_K = ${glslFloat(k)};
+const float RIPPLE_WOBBLE_K = ${glslFloat(wobbleK)};
+const float RIPPLE_WOBBLE_AMPLITUDE_RATIO = ${glslFloat(WOBBLE_AMPLITUDE_RATIO)};
+const float RIPPLE_WOBBLE_PHASE_OFFSET = ${glslFloat(WOBBLE_PHASE_OFFSET)};
 uniform float uRipplePhase;
 uniform float uRippleAmplitude;
 `;
@@ -88,12 +102,25 @@ uniform float uRippleAmplitude;
  * the bump one-sided: `rippleDisp` is never negative, so combined with the
  * envelope's zero at the sole, no vertex can ever end up *below* its own
  * rest position, let alone below the sole line itself — the one guarantee
- * issue #98 asks for. Shared verbatim between the visible material's vertex
+ * issue #98 asks for.
+ *
+ * `rippleWobble` is a second, lower-amplitude term riding the same
+ * `rippleEnv` envelope (so it's equally pinned to zero at the sole) but at
+ * its own wavelength and phase offset (`RIPPLE_WOBBLE_K`/
+ * `RIPPLE_WOBBLE_PHASE_OFFSET`), applied laterally (local `z`) rather than
+ * vertically — the foot's edge jellies side to side instead of staying a
+ * crisp silhouette (issue #112). Unlike the vertical bump, this one is a
+ * genuine two-sided wave: there's no "never below the sole" contract on the
+ * lateral axis to preserve, so nothing needs one-siding it.
+ *
+ * Both terms are shared verbatim between the visible material's vertex
  * shader (`attachFootRippleVertexShader`, which additionally derives the
- * position's local derivatives to correct the normal) and the depth
- * material's (`attachFootRippleDepthMaterial`, position-only), so a
- * crawling snail's shadow can never drift from what it actually looks
- * like. */
+ * *vertical* displacement's local derivatives to correct the normal — the
+ * lateral wobble's own, smaller effect on the normal is left uncorrected,
+ * a deliberate simplification for a secondary flourish rather than the
+ * shape-defining ripple) and the depth material's
+ * (`attachFootRippleDepthMaterial`, position-only), so a crawling snail's
+ * shadow can never drift from what it actually looks like. */
 const RIPPLE_POSITION_GLSL = `
 	float rippleT = clamp((position.y - RIPPLE_SOLE_Y) / RIPPLE_ENVELOPE_HEIGHT, 0.0, 1.0);
 	float rippleEnv = rippleT * rippleT * (3.0 - 2.0 * rippleT);
@@ -101,10 +128,13 @@ const RIPPLE_POSITION_GLSL = `
 	float rippleSin = sin(ripplePhaseAtX);
 	float rippleWave = max(0.0, rippleSin);
 	float rippleDisp = uRippleAmplitude * rippleEnv * rippleWave;
+	float rippleWobble = uRippleAmplitude * RIPPLE_WOBBLE_AMPLITUDE_RATIO * rippleEnv *
+		sin(position.x * RIPPLE_WOBBLE_K - uRipplePhase + RIPPLE_WOBBLE_PHASE_OFFSET);
 `;
 
 const POSITION_INJECTION = `
 	transformed.y += rippleDisp;
+	transformed.z += rippleWobble;
 `;
 
 /**
