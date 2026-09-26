@@ -130,22 +130,6 @@ function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 
   );
 }
 
-/** The same lift, taken along the model's *current* (eased) up instead of
- * the face normal — `quaternionFromFrame`'s basis maps local `+Y` to `up`,
- * so the two agree exactly once a turn has settled and differ only while
- * the orientation is still easing across a fold. */
-function rootPositionFromEasedUp(
-  contact: Vec3,
-  quaternion: THREE.Quaternion,
-  scale: number,
-): THREE.Vector3 {
-  return rootPositionFromContact(
-    contact,
-    new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion),
-    scale,
-  );
-}
-
 function isFishRigidBody(userData: unknown): boolean {
   return (
     typeof userData === 'object' &&
@@ -249,21 +233,23 @@ export function Snail({ critter }: SnailProps) {
       }
 
       // Orientation eases toward the pose rather than snapping onto it, so
-      // a fold crossing bends instead of blipping. The contact point
-      // deliberately gets no equivalent smoothing: `advance()` already
-      // carries it continuously across every fold (`crossLink` re-projects
-      // the identical world point onto the neighbouring face), so
-      // interpolating it would add pure lag — and at a fold that lag points
-      // off the new surface, floating the sole or sinking it into the
-      // glass. Taking the sole-to-root lift along the eased up instead of
-      // the face normal is what keeps the foot planted on that exact
-      // contact point for the whole bend.
+      // a fold crossing bends instead of blipping. Position deliberately
+      // does not: it's always lifted along the *current face's own* up
+      // (`rootPositionFromFrame`'s `frame.up`), never the still-easing
+      // quaternion's — lifting along a lagging orientation was tried first
+      // and looks worse than either alternative: right after crossing a
+      // fold, the eased "up" is still pointing along the *previous* face's
+      // normal, so the lift barely clears the new surface at all, and the
+      // root sinks toward (or through) it until the slow rotation catches
+      // up. Anchoring position to the true, always-correct normal instead
+      // means the root never leaves the surface it's actually standing on;
+      // the body just visibly swings around that fixed anchor as its own
+      // rotation eases in, which reads as the bend, not the floor clipping
+      // through the model.
       const frame = poseToWorld(poseRef.current);
       const slerpFactor = 1 - Math.exp(-ORIENTATION_SLERP_RATE * delta);
       quaternionRef.current.slerp(quaternionFromFrame(frame), slerpFactor);
-      positionRef.current.copy(
-        rootPositionFromEasedUp(frame.position, quaternionRef.current, scale),
-      );
+      positionRef.current.copy(rootPositionFromFrame(frame, scale));
     }
 
     body.setNextKinematicTranslation(positionRef.current);
