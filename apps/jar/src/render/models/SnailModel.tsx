@@ -76,6 +76,22 @@ const EYE_SWAY_FAR_PHASE_OFFSET = 1.1;
  * is offset ±7; the eyestalks are a smaller, closer-set pair). */
 const EYESTALK_Z_OFFSET = 4;
 
+/** Stalks don't merely lie down on the way in — they invert into the head
+ * and disappear, the way a real snail's tentacles do and the way the foot
+ * already shrinks on withdrawal below. The pivot scales about the stalk's
+ * own hinge (`wrapInPivot` puts the group there), so it shortens into its
+ * base rather than shrinking toward some arbitrary centre, and the eye
+ * bulb — a child of that pivot — goes in with it. Retraction rides the
+ * back half of the existing `eyestalkFold` window rather than all of it:
+ * the fold wants to read as a fold before the stalk starts vanishing.
+ * Being a pure function of `eyestalkFold`, it runs in reverse on waking
+ * with no separate path. */
+const EYESTALK_RETRACT_START = 0.45;
+
+/** Never exactly zero — a zero-scaled node has a singular normal matrix.
+ * Far below a pixel at any plausible camera distance. */
+const EYESTALK_RETRACT_MIN_SCALE = 0.001;
+
 /** Foot doesn't fully vanish on withdrawal — it shrinks toward the shell,
  * which is what actually hides most of it as the shell settles over the
  * same window (`snailGeometry.ts`'s `tuckPose`). */
@@ -307,12 +323,17 @@ export function SnailModel({
     const idleSway = Math.sin(t * EYE_SWAY_FREQUENCY + phaseSeed) * EYE_SWAY_AMPLITUDE;
     const idleSwayFar =
       Math.sin(t * EYE_SWAY_FREQUENCY + phaseSeed + EYE_SWAY_FAR_PHASE_OFFSET) * EYE_SWAY_AMPLITUDE;
+    const eyestalkScale = Math.max(
+      1 - THREE.MathUtils.smoothstep(pose.eyestalkFold, EYESTALK_RETRACT_START, 1),
+      EYESTALK_RETRACT_MIN_SCALE,
+    );
     if (eyestalkPivotRef.current) {
       eyestalkPivotRef.current.rotation.z = THREE.MathUtils.lerp(
         idleSway,
         EYESTALK_FOLD_ROTATION_Z,
         pose.eyestalkFold,
       );
+      eyestalkPivotRef.current.scale.setScalar(eyestalkScale);
     }
     if (eyestalkFarPivotRef.current) {
       eyestalkFarPivotRef.current.rotation.z = THREE.MathUtils.lerp(
@@ -320,6 +341,7 @@ export function SnailModel({
         EYESTALK_FOLD_ROTATION_Z,
         pose.eyestalkFold,
       );
+      eyestalkFarPivotRef.current.scale.setScalar(eyestalkScale);
     }
 
     if (footGroupRef.current) {

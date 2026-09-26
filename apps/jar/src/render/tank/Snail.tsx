@@ -37,6 +37,7 @@ import {
   turn,
   type CrawlFrame,
   type CrawlPose,
+  type Vec3,
 } from '../environment/crawlSurfaces';
 import { SnailModel } from '../models/SnailModel';
 import { SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
@@ -64,6 +65,20 @@ const CRAWL_SPEED = 0.12;
  * Yuka-free stand-in for a fish's wander-circle behaviour. Tune by eye. */
 const HEADING_BIAS_JITTER = 0.6;
 const MAX_HEADING_BIAS = 0.8;
+
+/** Framerate-independent slerp rate toward the crawl pose's own
+ * orientation — `SteeringSystem.tsx`'s fish-heading pattern
+ * (`1 - Math.exp(-rate * delta)`) at a snail's pace. A ~0.4s time constant,
+ * so crossing a fold in `crawlSurfaces.ts` (floor onto a wall, wall onto a
+ * castle face) bends over about a second instead of flipping in one frame.
+ * Deliberately far below the fish's `6`: pitching a whole body onto a new
+ * surface is a much larger event than a fish trimming its heading
+ * mid-swim, and the project's exaggeration bias wants that visibly gooey.
+ * The lower bound on the rate is ordinary wandering, where the smoothing
+ * lags a sustained heading drift by roughly `MAX_HEADING_BIAS / rate`
+ * radians — much slower than this and a wandering snail stops reading as
+ * bending into its turns and starts reading as crabbing sideways. */
+const ORIENTATION_SLERP_RATE = 2.5;
 
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
@@ -99,15 +114,35 @@ function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
 }
 
 /** The RigidBody's own root sits above the sole by `-SOLE_Y * scale` along
- * the surface's `up` (`SOLE_Y` is negative, in `snailGeometry.ts`'s raw-SVG-
- * derived convention) — the model's local origin isn't the contact point;
+ * `up` (`SOLE_Y` is negative, in `snailGeometry.ts`'s raw-SVG-derived
+ * convention) — the model's local origin isn't the contact point;
  * `snailCollider.ts`'s own `centreOffsetY` is the collider's equivalent
  * correction. */
+function rootPositionFromContact(contact: Vec3, up: THREE.Vector3, scale: number): THREE.Vector3 {
+  return new THREE.Vector3(contact.x, contact.y, contact.z).addScaledVector(up, -SOLE_Y * scale);
+}
+
 function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 {
-  const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
-  return new THREE.Vector3(frame.position.x, frame.position.y, frame.position.z).addScaledVector(
-    up,
-    -SOLE_Y * scale,
+  return rootPositionFromContact(
+    frame.position,
+    new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z),
+    scale,
+  );
+}
+
+/** The same lift, taken along the model's *current* (eased) up instead of
+ * the face normal — `quaternionFromFrame`'s basis maps local `+Y` to `up`,
+ * so the two agree exactly once a turn has settled and differ only while
+ * the orientation is still easing across a fold. */
+function rootPositionFromEasedUp(
+  contact: Vec3,
+  quaternion: THREE.Quaternion,
+  scale: number,
+): THREE.Vector3 {
+  return rootPositionFromContact(
+    contact,
+    new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion),
+    scale,
   );
 }
 
@@ -213,9 +248,22 @@ export function Snail({ critter }: SnailProps) {
         );
       }
 
+      // Orientation eases toward the pose rather than snapping onto it, so
+      // a fold crossing bends instead of blipping. The contact point
+      // deliberately gets no equivalent smoothing: `advance()` already
+      // carries it continuously across every fold (`crossLink` re-projects
+      // the identical world point onto the neighbouring face), so
+      // interpolating it would add pure lag — and at a fold that lag points
+      // off the new surface, floating the sole or sinking it into the
+      // glass. Taking the sole-to-root lift along the eased up instead of
+      // the face normal is what keeps the foot planted on that exact
+      // contact point for the whole bend.
       const frame = poseToWorld(poseRef.current);
-      positionRef.current.copy(rootPositionFromFrame(frame, scale));
-      quaternionRef.current.copy(quaternionFromFrame(frame));
+      const slerpFactor = 1 - Math.exp(-ORIENTATION_SLERP_RATE * delta);
+      quaternionRef.current.slerp(quaternionFromFrame(frame), slerpFactor);
+      positionRef.current.copy(
+        rootPositionFromEasedUp(frame.position, quaternionRef.current, scale),
+      );
     }
 
     body.setNextKinematicTranslation(positionRef.current);
