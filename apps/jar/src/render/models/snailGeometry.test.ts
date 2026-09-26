@@ -6,10 +6,16 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
 import type { ShellType } from '../../domain/protocol/generated/ShellType';
 import {
+  addFootSkinAttributes,
+  createFootBones,
+  createFootGeometry,
+  FOOT_BONE_COUNT,
+  FOOT_BONE_XS,
   FOOT_TAIL_TIP_X,
   FOOT_TOE_X,
   OPERCULUM_EXTRUSION_DEPTH,
@@ -174,5 +180,97 @@ describe('tuckPoseForMode', () => {
     expect(tuckPoseForMode(0.5, 'startle')).toEqual(tuckPose(0.5));
     expect(STARTLE_MAX_PROGRESS).toBeLessThanOrEqual(1);
     expect(STARTLE_MAX_PROGRESS).toBeGreaterThan(0);
+  });
+});
+
+describe('foot bone chain', () => {
+  it('spans exactly the foot`s own measured x extent, evenly spaced, tail to toe', () => {
+    expect(FOOT_BONE_XS).toHaveLength(FOOT_BONE_COUNT);
+    expect(FOOT_BONE_XS[0]).toBeCloseTo(FOOT_TAIL_TIP_X, 9);
+    expect(FOOT_BONE_XS[FOOT_BONE_XS.length - 1]!).toBeCloseTo(FOOT_TOE_X, 9);
+    for (let i = 1; i < FOOT_BONE_XS.length; i++) {
+      expect(FOOT_BONE_XS[i]!).toBeGreaterThan(FOOT_BONE_XS[i - 1]!);
+    }
+    const spacing = FOOT_BONE_XS[1]! - FOOT_BONE_XS[0]!;
+    for (let i = 2; i < FOOT_BONE_XS.length; i++) {
+      expect(FOOT_BONE_XS[i]! - FOOT_BONE_XS[i - 1]!).toBeCloseTo(spacing, 9);
+    }
+  });
+
+  it('builds a chain whose composed world positions reconstruct FOOT_BONE_XS exactly, at rest', () => {
+    const bones = createFootBones();
+    expect(bones).toHaveLength(FOOT_BONE_COUNT);
+    // Every bone at rest should sit on the sole line with zero rotation —
+    // a `Bone` extends `Object3D`, so `updateWorldMatrix` composes each
+    // one's parent-relative `position` up the chain root-to-tip.
+    bones[0]!.updateWorldMatrix(true, true);
+    const world = new THREE.Vector3();
+    bones.forEach((bone, i) => {
+      bone.getWorldPosition(world);
+      expect(world.x).toBeCloseTo(FOOT_BONE_XS[i]!, 9);
+      expect(world.y).toBeCloseTo(SOLE_Y, 9);
+      expect(world.z).toBeCloseTo(0, 9);
+    });
+  });
+
+  it('parents each bone under the previous one, tail-most as the root', () => {
+    const bones = createFootBones();
+    expect(bones[0]!.parent).toBeNull();
+    for (let i = 1; i < bones.length; i++) {
+      expect(bones[i]!.parent).toBe(bones[i - 1]);
+    }
+  });
+});
+
+describe('addFootSkinAttributes', () => {
+  it('gives every vertex skin weights that sum to exactly 1', () => {
+    const geometry = createFootGeometry();
+    addFootSkinAttributes(geometry);
+    const weights = geometry.attributes.skinWeight!;
+    for (let i = 0; i < weights.count; i++) {
+      const sum = weights.getX(i) + weights.getY(i) + weights.getZ(i) + weights.getW(i);
+      expect(sum).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('only ever assigns two adjacent, in-range bone indices per vertex', () => {
+    const geometry = createFootGeometry();
+    addFootSkinAttributes(geometry);
+    const indices = geometry.attributes.skinIndex!;
+    const weights = geometry.attributes.skinWeight!;
+    for (let i = 0; i < indices.count; i++) {
+      const boneA = indices.getX(i);
+      const boneB = indices.getY(i);
+      expect(boneB).toBe(boneA + 1);
+      expect(boneA).toBeGreaterThanOrEqual(0);
+      expect(boneB).toBeLessThanOrEqual(FOOT_BONE_XS.length - 1);
+      expect(indices.getZ(i)).toBe(0);
+      expect(weights.getZ(i)).toBe(0);
+      expect(indices.getW(i)).toBe(0);
+      expect(weights.getW(i)).toBe(0);
+    }
+  });
+
+  it('assigns the outermost bone pair, fully weighted to the extreme, for a vertex beyond the named extent', () => {
+    // `FOOT_TAIL_TIP_X`/`FOOT_TOE_X` are the *named* extremes, not a laser-
+    // tight bound on literally every extruded vertex (a curve's own control
+    // points can extend a little past its labelled anchor — the same
+    // caveat `fishGeometry.ts`'s `DORSAL_CREST_SVG_DISTANCE` documents for
+    // itself) — `addFootSkinAttributes`'s own clamp is what keeps a vertex
+    // out there fully (not over-) weighted onto the outermost bone.
+    const geometry = createFootGeometry();
+    addFootSkinAttributes(geometry);
+    const position = geometry.attributes.position!;
+    const indices = geometry.attributes.skinIndex!;
+    const weights = geometry.attributes.skinWeight!;
+    const lastBone = FOOT_BONE_XS.length - 1;
+    let sawOneBeyond = false;
+    for (let i = 0; i < position.count; i++) {
+      if (position.getX(i) <= FOOT_TOE_X) continue;
+      sawOneBeyond = true;
+      expect(indices.getY(i)).toBe(lastBone);
+      expect(weights.getY(i)).toBeCloseTo(1, 6);
+    }
+    expect(sawOneBeyond).toBe(true);
   });
 });

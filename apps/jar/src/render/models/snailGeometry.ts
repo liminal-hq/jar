@@ -189,6 +189,85 @@ export function paintSoleGradient(
   geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
 }
 
+/** Bone count for the foot's rig (issue #112) — enough joints that the
+ * sharpest expected fold (a castle corner) reads as a continuous bend
+ * rather than a faceted one on a slab this thin, without being more than
+ * this small, five-snail-capped tank ever needs. Tune up first if a bend
+ * ever looks faceted; tune the crawl-surface fillet radius down only if
+ * more bones doesn't fix it. */
+export const FOOT_BONE_COUNT = 9;
+
+/** Evenly spaced along the foot's own measured x-span (toe to tail), on the
+ * sole line (`SOLE_Y`) — every bone sits exactly on the crawl-surface
+ * contact line, not at some mid-body height, so a bend pivots the body
+ * around the point that's actually touching the ground rather than
+ * swinging the sole up off it. */
+export const FOOT_BONE_XS: number[] = Array.from({ length: FOOT_BONE_COUNT }, (_, i) =>
+  THREE.MathUtils.lerp(FOOT_TAIL_TIP_X, FOOT_TOE_X, i / (FOOT_BONE_COUNT - 1)),
+);
+
+/** Builds the foot's bone chain at its rest pose — `bones[0]` (the
+ * tail-most bone) is the root, parented directly under `SnailModel.tsx`'s
+ * `footGroupRef`; every other bone is a child of the previous one, each
+ * carrying its correct rest-pose x as a *parent-relative* local offset
+ * (a `THREE.Bone`'s own `position` is local, not absolute — the loop below
+ * converts each `FOOT_BONE_XS` entry, computed in footGroupRef-space, into
+ * that relative form by walking the chain tail-to-head). At rest (no
+ * per-frame rotation applied — issue #112's PR 6 scope, before anything
+ * actually drives a bend) every bone's transform is the identity relative
+ * to its own bind pose, so skinning the foot mesh to this chain renders
+ * pixel-identical to the plain rigid mesh it replaces. */
+export function createFootBones(): THREE.Bone[] {
+  const bones = FOOT_BONE_XS.map((x) => {
+    const bone = new THREE.Bone();
+    bone.position.set(x, SOLE_Y, 0);
+    return bone;
+  });
+  for (let i = bones.length - 1; i > 0; i--) {
+    // Every bone shares the same y/z (they're all on the sole line at
+    // z=0) — only x varies along the chain, so the relative offset is x
+    // alone; y/z become 0 once parented, not `SOLE_Y`/`0` again (which
+    // would compound to `2 * SOLE_Y` and beyond down the chain).
+    bones[i]!.position.x -= bones[i - 1]!.position.x;
+    bones[i]!.position.y = 0;
+    bones[i]!.position.z = 0;
+    bones[i - 1]!.add(bones[i]!);
+  }
+  return bones;
+}
+
+/** Adds `skinIndex`/`skinWeight` attributes to a foot geometry, linear-
+ * blending each vertex between the two `FOOT_BONE_XS` entries bracketing
+ * its own local x — a plain 1D skin, since every bone sits along the same
+ * axis the foot itself is authored along. Weights always sum to exactly 1
+ * (`1 - t` and `t`), and every vertex's x falls within
+ * `[FOOT_TAIL_TIP_X, FOOT_TOE_X]` by construction (those are this same
+ * geometry's own measured extremes), so no vertex ever falls outside every
+ * bone's bracket. Call once per foot geometry, right after
+ * `createFootGeometry()` — the attributes never change per-frame or
+ * per-snail (unlike `paintSoleGradient`'s per-hue colours). */
+export function addFootSkinAttributes(geometry: THREE.BufferGeometry): void {
+  const pos = geometry.attributes.position;
+  if (!pos) return; // ExtrudeGeometry always has a position attribute; guards the type only
+  const skinIndices = new Uint16Array(pos.count * 4);
+  const skinWeights = new Float32Array(pos.count * 4);
+  const lastBone = FOOT_BONE_XS.length - 1;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    let bone = 0;
+    while (bone < lastBone - 1 && FOOT_BONE_XS[bone + 1]! < x) bone++;
+    const xa = FOOT_BONE_XS[bone]!;
+    const xb = FOOT_BONE_XS[bone + 1]!;
+    const t = xb > xa ? THREE.MathUtils.clamp((x - xa) / (xb - xa), 0, 1) : 0;
+    skinIndices[i * 4] = bone;
+    skinIndices[i * 4 + 1] = bone + 1;
+    skinWeights[i * 4] = 1 - t;
+    skinWeights[i * 4 + 1] = t;
+  }
+  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+}
+
 /** Shared, read-only — safe to reuse across every snail instance sharing an
  * eyestalk (both the near and far mirrored copies within one snail, and
  * across every snail), since nothing mutates it per-frame or per-snail;
