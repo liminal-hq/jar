@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
 import type { Critter } from '../../domain/protocol/generated/Critter';
@@ -27,6 +27,8 @@ import {
   setFootRippleUniforms,
 } from './footRippleShader';
 import {
+  addFootSkinAttributes,
+  createFootBones,
   createFootGeometry,
   EYESTALK_FOLD_ROTATION_Z,
   EYESTALK_GEOMETRY,
@@ -141,6 +143,7 @@ export function SnailModel({
   tuckMode = 'sleep',
 }: SnailModelProps) {
   const footGroupRef = useRef<THREE.Group>(null);
+  const footMeshRef = useRef<THREE.SkinnedMesh>(null);
   const eyestalkPivotRef = useRef<THREE.Group>(null);
   const eyestalkFarPivotRef = useRef<THREE.Group>(null);
   const shellGroupRef = useRef<THREE.Group>(null);
@@ -201,11 +204,35 @@ export function SnailModel({
   const operculumZOffset = shellDepth / 2 - operculumDepth / 2;
 
   // Per-snail clone: the foot's sole gradient is painted per snail from its
-  // own hue, so (like the fish body) it can't be shared read-only.
-  const footGeometry = useMemo(() => createFootGeometry(), []);
+  // own hue, so (like the fish body) it can't be shared read-only. Skin
+  // attributes are geometry-shape-derived, not per-snail, but are added
+  // here too rather than shared — same per-instance-clone reasoning.
+  const footGeometry = useMemo(() => {
+    const geometry = createFootGeometry();
+    addFootSkinAttributes(geometry);
+    return geometry;
+  }, []);
   useEffect(() => {
     paintSoleGradient(footGeometry, footColour, soleColour);
   }, [footGeometry, footColour, soleColour]);
+
+  // The bone chain the foot mesh skins to — at rest here (issue #112's PR 6
+  // scope; nothing yet drives a per-frame bend), so binding renders
+  // pixel-identical to the plain rigid mesh it replaces. `bones[0]` (the
+  // root) mounts as a *sibling* of `footGroupRef` below, not a child of it
+  // — see that JSX's own comment for why a skinned mesh's bone chain must
+  // not share a changing-scale ancestor with the mesh itself.
+  const footBones = useMemo(() => createFootBones(), []);
+  const footSkeleton = useMemo(() => new THREE.Skeleton(footBones), [footBones]);
+  useLayoutEffect(() => {
+    // `Skeleton`'s inverse bind matrices are derived from each bone's
+    // current `matrixWorld` the moment `bind()` runs — R3F mounts
+    // `<primitive object={footBones[0]}>` synchronously during commit, but
+    // matrixWorld propagation itself only happens on the next render tick
+    // unless forced here, so this must run before `bind()`, not after it.
+    footBones[0]!.updateWorldMatrix(true, true);
+    footMeshRef.current?.bind(footSkeleton);
+  }, [footBones, footSkeleton]);
 
   const footMaterial = useMemo(
     () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65 }),
@@ -297,6 +324,7 @@ export function SnailModel({
       footGeometry.dispose();
       footMaterial.dispose();
       footDepthMaterial.dispose();
+      footSkeleton.dispose();
       eyestalkMaterial.dispose();
       shellMaterial.dispose();
       identityDecalMaterial.dispose();
@@ -308,6 +336,7 @@ export function SnailModel({
     footGeometry,
     footMaterial,
     footDepthMaterial,
+    footSkeleton,
     eyestalkMaterial,
     shellMaterial,
     identityDecalMaterial,
@@ -369,13 +398,35 @@ export function SnailModel({
 
   return (
     <group scale={scale}>
+      {/* The bone chain is deliberately *not* inside `footGroupRef` — a
+          `SkinnedMesh`'s skinning math already bakes in the *change* in
+          every shared ancestor's transform between bind time and now (that's
+          how a bone's own rotation reaches the mesh at all), so if
+          `footGroupRef`'s own scale (withdrawal, and later squash-and-
+          stretch) were a shared ancestor of *both* the mesh and this chain,
+          that scale would be applied twice: once normally, via the mesh's
+          own `matrixWorld`, and a second time via the bone-transform ratio
+          picking up the very same change. Sitting here, as a sibling of
+          `footGroupRef` under the same static outer group, means the bones'
+          own `matrixWorld` never reflects `footGroupRef`'s scale at all —
+          the mesh alone carries it, exactly once, through the ordinary
+          (non-skinning) transform pipeline. */}
+      <primitive object={footBones[0]!} />
       <group ref={footGroupRef}>
-        <mesh
+        <skinnedMesh
+          ref={footMeshRef}
           geometry={footGeometry}
           material={footMaterial}
           customDepthMaterial={footDepthMaterial}
           castShadow
           receiveShadow
+          // The rig will actually deform beyond the rest geometry's own
+          // bounding box once something drives a bend (issue #112's later
+          // PRs) — three.js can't know that from a SkinnedMesh's static
+          // geometry bounds, so culling must stay off from the start
+          // rather than being remembered as a fast-follow once bending
+          // makes a snail flicker at the edge of the camera frustum.
+          frustumCulled={false}
         />
       </group>
 
