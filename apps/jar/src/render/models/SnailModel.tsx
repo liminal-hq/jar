@@ -85,7 +85,15 @@ interface SnailModelProps {
    * squash-and-stretch. Omitted (or its `.current` left at the default) for
    * `CritterPreview.tsx`'s undriven usage, which has no real gait to share —
    * the ripple falls back to a plain wall-clock oscillation and the body
-   * stays unstretched. */
+   * stays unstretched.
+   *
+   * Reading `.current` fresh each frame is only correct if `Snail.tsx`'s
+   * own `useFrame` (which writes it) has already run *this* frame by the
+   * time this component's `useFrame` reads it — true today because R3F
+   * runs same-priority callbacks in subscription order, and `Snail.tsx`
+   * (the parent, mounting `<SnailModel>` in its own JSX) always subscribes
+   * first. Neither call site pins an explicit priority; if one ever does,
+   * this ordering assumption needs revisiting alongside it. */
   gaitRef?: { current: SnailGait };
 }
 
