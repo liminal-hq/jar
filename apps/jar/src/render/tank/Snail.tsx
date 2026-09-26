@@ -125,22 +125,24 @@ function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
 
 /** The RigidBody's own root sits above the sole by `-SOLE_Y * scale` along
  * `up` (`SOLE_Y` is negative, in `snailGeometry.ts`'s raw-SVG-derived
- * convention), and offset by `-SHELL_SEAT_X * scale` along `xAxis` (issue
+ * convention), and offset by `-SHELL_SEAT_X * scale` along `forward` (issue
  * #112's PR 7 re-anchor) — the crawl-surface contact point tracks wherever
  * the *shell's own seat* sits, not the model's arbitrary local origin,
  * since that's what the physics collider (`snailCollider.ts`'s own
  * `SHELL_HALF_LENGTH_ABOUT_SEAT`) and, later, the spine's own frame
- * (issue #112's bend-wiring PR) both need to agree on. `xAxis` is computed
- * identically to `quaternionFromFrame`'s own (`up × forward`), since a
- * shift "along local +x" only means something once both functions agree
- * on which world direction local +x actually is. */
+ * (issue #112's bend-wiring PR) both need to agree on. `forward`, not
+ * `xAxis`: `SHELL_SEAT_X` is a distance along the model's own authored
+ * toe-tail axis, and the fixed `-90°` yaw the inner model group applies
+ * (`quaternionFromFrame`'s own doc comment) is exactly what maps that axis
+ * onto the RigidBody's `forward` (local `+Z`), not onto `xAxis` (local
+ * `+X`, the model's *thickness* axis once yawed) — using `xAxis` here would
+ * shift the root sideways instead of back toward the tail. */
 function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 {
   const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
   const forward = new THREE.Vector3(frame.forward.x, frame.forward.y, frame.forward.z);
-  const xAxis = new THREE.Vector3().crossVectors(up, forward).normalize();
   return new THREE.Vector3(frame.position.x, frame.position.y, frame.position.z)
     .addScaledVector(up, -SOLE_Y * scale)
-    .addScaledVector(xAxis, -SHELL_SEAT_X * scale);
+    .addScaledVector(forward, -SHELL_SEAT_X * scale);
 }
 
 function isFishRigidBody(userData: unknown): boolean {
