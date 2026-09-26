@@ -33,10 +33,10 @@
 // Links: floor↔each wall's bottom edge, wall↔wall at the four vertical
 // corners, floor↔each castle side's base (except the lintel — see
 // `buildCastleFacesAndLinks`'s own comment, it floats above the doorway and
-// isn't actually touching the floor), and each castle side↔its own top.
-// Adjacent castle side faces are *not* linked to each other (a crawler
-// reaching a side face's left/right edge bounces rather than wrapping
-// around the box) — out of scope for v1, per the plan.
+// isn't actually touching the floor), each castle side↔its own top, and
+// each castle side↔its two adjacent sides at the box's own four vertical
+// corners (the same wall↔wall corner pattern) — a crawler can wrap all the
+// way around a box rather than bouncing off a side's left/right edge.
 //
 // `roundedNormalAt`/`poseToWorldRounded` give a *continuous* frame near a
 // crease, on top of the instantaneous-fold model above: a face's normal
@@ -364,6 +364,38 @@ function buildCastleFacesAndLinks(): { faces: CrawlFace[]; links: FaceLink[] } {
     };
 
     faces.push(top, px, nx, pz, nz);
+
+    // Side -> adjacent side, at each of the box's four vertical corners —
+    // the same wall↔wall corner pattern `BASE_LINKS` already uses for the
+    // tank's own glass walls, applied here so a crawler can wrap all the
+    // way around a box instead of bouncing off its own left/right edges
+    // (the v1 limitation this module's own header used to call out).
+    links.push(
+      {
+        faceA: px.id,
+        faceB: pz.id,
+        edgeStart: { x: maxX, y: bottomY, z: maxZ },
+        edgeEnd: { x: maxX, y: topY, z: maxZ },
+      },
+      {
+        faceA: px.id,
+        faceB: nz.id,
+        edgeStart: { x: maxX, y: bottomY, z: minZ },
+        edgeEnd: { x: maxX, y: topY, z: minZ },
+      },
+      {
+        faceA: nx.id,
+        faceB: pz.id,
+        edgeStart: { x: minX, y: bottomY, z: maxZ },
+        edgeEnd: { x: minX, y: topY, z: maxZ },
+      },
+      {
+        faceA: nx.id,
+        faceB: nz.id,
+        edgeStart: { x: minX, y: bottomY, z: minZ },
+        edgeEnd: { x: minX, y: topY, z: minZ },
+      },
+    );
 
     // Side -> own top: each side's top edge (its own v1) coincides exactly
     // with one edge of the top face.
@@ -823,6 +855,64 @@ export function poseToWorldRounded(pose: CrawlPose, filletRadius: number): Crawl
   );
   const { forward, right } = reorthonormalize(planarForward, up);
   return { position, forward, up, right };
+}
+
+/** World-space distance at which a wanderer starts curving away from a
+ * genuinely unlinked edge (a wall's rim, or the lintel's own un-linked
+ * underside) rather than marching straight into it and bouncing hard —
+ * `unlinkedEdgeAvoidanceBias`'s own awareness radius. Deliberately larger
+ * than `FILLET_RADIUS`: rounding a *crease* only needs to smooth the moment
+ * of crossing, while steering away from a genuine dead end needs enough
+ * lead distance for the turn to read as a deliberate curve rather than a
+ * last-instant flinch. Tune by eye. */
+export const EDGE_AVOIDANCE_RADIUS = 0.15;
+
+/** A boundary candidate is a real bounce risk only if nothing *else* on
+ * this same face links across that same fixed coordinate — every linked
+ * edge (a wall's bottom, a box's own top) has both a `link`-bearing
+ * candidate and a coincident `link: null` "outer rectangle" one at the
+ * exact same position (`buildBoundaries` always adds all four outer edges
+ * regardless of whether a link happens to cover one), so a null-link
+ * candidate alone doesn't mean "unlinked" — it means "unlinked, unless a
+ * sibling candidate proves otherwise." */
+function isGenuinelyUnlinked(candidate: BoundaryCandidate, siblings: BoundaryCandidate[]): boolean {
+  if (candidate.link) return false;
+  const fixed = candidate.axis === 'u' ? candidate.u1 : candidate.v1;
+  return !siblings.some(
+    (other) =>
+      other.link !== null &&
+      other.axis === candidate.axis &&
+      Math.abs((other.axis === 'u' ? other.u1 : other.v1) - fixed) < 1e-6,
+  );
+}
+
+/** A heading nudge (radians, already scaled toward zero as the crawler
+ * moves away from the edge) that curves a wanderer back toward its current
+ * face's own centre as it nears a genuinely unlinked boundary — the softer
+ * alternative to `advance()`'s own clamp-and-reflect, which still applies
+ * unconditionally as the hard backstop for a crawler that manages to reach
+ * the edge anyway (a sharp turn, a large single step, or this bias's own
+ * imprecision near a corner where two different unlinked edges compete).
+ * `0` when nothing unlinked is within `EDGE_AVOIDANCE_RADIUS`. The caller
+ * (`Snail.tsx`) adds this to its own per-frame heading update, scaled by a
+ * turn-rate constant and `delta`, the same way it already layers in its
+ * own random-walk jitter. */
+export function unlinkedEdgeAvoidanceBias(pose: CrawlPose, awarenessRadius: number): number {
+  const face = requireFace(pose.faceId);
+  const candidates = BOUNDARIES.get(pose.faceId) ?? [];
+
+  let nearest = Infinity;
+  for (const candidate of candidates) {
+    if (!isGenuinelyUnlinked(candidate, candidates)) continue;
+    const d = pointToSegmentDistance(pose.u, pose.v, candidate);
+    if (d < nearest) nearest = d;
+  }
+  if (!Number.isFinite(nearest) || nearest >= awarenessRadius) return 0;
+
+  const towardCentre = Math.atan2(face.vLength / 2 - pose.v, face.uLength / 2 - pose.u);
+  const angularDelta = normalizeAngle(towardCentre - pose.heading);
+  const weight = 1 - smoothstep01(nearest / awarenessRadius);
+  return angularDelta * weight;
 }
 
 /** A plausible small-crawler footprint radius to keep a spawned/landed pose

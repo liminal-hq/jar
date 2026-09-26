@@ -39,11 +39,13 @@ import { lifeStageScale } from '../../domain/simConstants';
 import {
   advance,
   dropToFloor,
+  EDGE_AVOIDANCE_RADIUS,
   FILLET_RADIUS,
   poseToWorld,
   poseToWorldRounded,
   randomFloorPose,
   turn,
+  unlinkedEdgeAvoidanceBias,
   type CrawlFrame,
   type CrawlPose,
   type Vec3,
@@ -74,6 +76,14 @@ const CRAWL_SPEED = 0.12;
  * Yuka-free stand-in for a fish's wander-circle behaviour. Tune by eye. */
 const HEADING_BIAS_JITTER = 0.6;
 const MAX_HEADING_BIAS = 0.8;
+
+/** How strongly `unlinkedEdgeAvoidanceBias`'s own (already 0-to-1-weighted)
+ * signal steers a wandering snail back toward its face's centre as it
+ * nears a genuine dead end (a wall's rim, the lintel's un-linked
+ * underside) — the softer alternative to `advance()`'s hard clamp-and-
+ * reflect bounce, which still applies as the backstop if a snail reaches
+ * the edge anyway. Tune by eye. */
+const EDGE_AVOIDANCE_TURN_RATE = 1.5;
 
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
@@ -230,8 +240,12 @@ export function Snail({ critter }: SnailProps) {
           -MAX_HEADING_BIAS,
           MAX_HEADING_BIAS,
         );
+        const avoidance = unlinkedEdgeAvoidanceBias(poseRef.current, EDGE_AVOIDANCE_RADIUS);
         poseRef.current = advance(
-          turn(poseRef.current, headingBiasRef.current * delta),
+          turn(
+            poseRef.current,
+            headingBiasRef.current * delta + avoidance * EDGE_AVOIDANCE_TURN_RATE * delta,
+          ),
           CRAWL_SPEED * delta,
         );
       }
