@@ -112,10 +112,17 @@ export interface SnailGait {
  * and overshoot, so the shell settles a visible beat behind the foot's own
  * motion rather than moving in perfect lockstep with it. `STIFFNESS`/
  * `DAMPING` are picked for a couple of clearly visible wobbles before
- * settling (damping ratio ≈0.47 — underdamped, not a dead thud); tune by
- * eye alongside the position/tilt scales, which stay deliberately small
- * ("should be felt, not seen" — the same restraint issue #112's own design
- * notes call for on this layer specifically). */
+ * settling (damping ratio ≈0.47 — underdamped, not a dead thud) at a normal
+ * frame delta; tune by eye alongside the position/tilt scales, which stay
+ * deliberately small ("should be felt, not seen" — the same restraint issue
+ * #112's own design notes call for on this layer specifically). Damping is
+ * applied as `Math.exp(-DAMPING * delta)` (below), not the codebase's more
+ * common `1 - rate * delta` linear form — that form goes negative (and gets
+ * clamped to exactly zero, killing the spring's velocity outright rather
+ * than just damping it) for any `delta ≥ 1 / DAMPING`; the exponential form
+ * stays positive for every delta, matching every other frame-rate-
+ * independent decay in this codebase (`SteeringSystem.tsx`'s heading slerp,
+ * `Snail.tsx`'s own smoothed-speed easing). */
 const SHELL_SPRING_STIFFNESS = 40;
 const SHELL_SPRING_DAMPING = 6;
 const SHELL_SPRING_POSITION_SCALE = 3;
@@ -438,7 +445,7 @@ export function SnailModel({
     const springTarget = gaitRef?.current.stretch ?? 0;
     const spring = shellSpringRef.current;
     spring.velocity += (springTarget - spring.position) * SHELL_SPRING_STIFFNESS * delta;
-    spring.velocity *= Math.max(0, 1 - SHELL_SPRING_DAMPING * delta);
+    spring.velocity *= Math.exp(-SHELL_SPRING_DAMPING * delta);
     spring.position += spring.velocity * delta;
 
     const idleSway = Math.sin(t * EYE_SWAY_FREQUENCY + phaseSeed) * EYE_SWAY_AMPLITUDE;
