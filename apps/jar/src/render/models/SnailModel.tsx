@@ -219,8 +219,9 @@ export function SnailModel({
   // The bone chain the foot mesh skins to — at rest here (issue #112's PR 6
   // scope; nothing yet drives a per-frame bend), so binding renders
   // pixel-identical to the plain rigid mesh it replaces. `bones[0]` (the
-  // root) is mounted directly under `footGroupRef` below, so it inherits
-  // the exact same tuck-withdrawal scale the old plain `<mesh>` did.
+  // root) mounts as a *sibling* of `footGroupRef` below, not a child of it
+  // — see that JSX's own comment for why a skinned mesh's bone chain must
+  // not share a changing-scale ancestor with the mesh itself.
   const footBones = useMemo(() => createFootBones(), []);
   const footSkeleton = useMemo(() => new THREE.Skeleton(footBones), [footBones]);
   useLayoutEffect(() => {
@@ -397,8 +398,21 @@ export function SnailModel({
 
   return (
     <group scale={scale}>
+      {/* The bone chain is deliberately *not* inside `footGroupRef` — a
+          `SkinnedMesh`'s skinning math already bakes in the *change* in
+          every shared ancestor's transform between bind time and now (that's
+          how a bone's own rotation reaches the mesh at all), so if
+          `footGroupRef`'s own scale (withdrawal, and later squash-and-
+          stretch) were a shared ancestor of *both* the mesh and this chain,
+          that scale would be applied twice: once normally, via the mesh's
+          own `matrixWorld`, and a second time via the bone-transform ratio
+          picking up the very same change. Sitting here, as a sibling of
+          `footGroupRef` under the same static outer group, means the bones'
+          own `matrixWorld` never reflects `footGroupRef`'s scale at all —
+          the mesh alone carries it, exactly once, through the ordinary
+          (non-skinning) transform pipeline. */}
+      <primitive object={footBones[0]!} />
       <group ref={footGroupRef}>
-        <primitive object={footBones[0]!} />
         <skinnedMesh
           ref={footMeshRef}
           geometry={footGeometry}
