@@ -653,6 +653,12 @@ function crossLink(faceA: CrawlFace, poseAtEdge: CrawlPose, link: FaceLink): Cra
 interface StepResult {
   pose: CrawlPose;
   consumed: number;
+  /** True only for the clamp-and-reflect (unlinked-edge) branch — lets
+   * `advanceTracking` (below) report whether a whole `advance()` call ever
+   * bounced, which `crawlSpine.ts`'s back-trace seeding uses to stop
+   * extending a tail past a genuine dead end rather than reflecting it
+   * into a zigzag. */
+  bounced: boolean;
 }
 
 function stepAdvance(pose: CrawlPose, remaining: number): StepResult {
@@ -681,6 +687,7 @@ function stepAdvance(pose: CrawlPose, remaining: number): StepResult {
     return {
       pose: { ...pose, u: pose.u + remaining * du, v: pose.v + remaining * dv },
       consumed: remaining,
+      bounced: false,
     };
   }
 
@@ -691,6 +698,7 @@ function stepAdvance(pose: CrawlPose, remaining: number): StepResult {
     return {
       pose: crossLink(face, { ...pose, u: hitU, v: hitV }, bestCandidate.link),
       consumed: bestT,
+      bounced: false,
     };
   }
 
@@ -706,10 +714,36 @@ function stepAdvance(pose: CrawlPose, remaining: number): StepResult {
       heading: reflectedHeading,
     },
     consumed: bestT,
+    bounced: true,
   };
 }
 
 const MAX_FOLD_STEPS = 32;
+
+export interface AdvanceResult {
+  pose: CrawlPose;
+  /** Whether *any* step of this `advance()` call clamped and reflected off
+   * an unlinked edge, rather than folding across a link or moving freely.
+   * `crawlSpine.ts`'s back-trace seeding is the one consumer that cares —
+   * everything else just wants the final pose (`advance()`, below). */
+  bounced: boolean;
+}
+
+/** Like `advance()`, but also reports whether the crawler bounced off an
+ * unlinked edge anywhere along the way — see `AdvanceResult.bounced`. */
+export function advanceTracking(pose: CrawlPose, distance: number): AdvanceResult {
+  let current = pose;
+  let remaining = distance;
+  let bounced = false;
+  for (let step = 0; step < MAX_FOLD_STEPS && remaining > RAY_EPS; step++) {
+    const { pose: next, consumed, bounced: stepBounced } = stepAdvance(current, remaining);
+    current = next;
+    remaining -= consumed;
+    if (stepBounced) bounced = true;
+    if (consumed <= RAY_EPS) break;
+  }
+  return { pose: current, bounced };
+}
 
 /** Marches `pose` forward by `distance` (world units, along its current
  * heading), folding continuously across any `CRAWL_LINKS` edge it crosses
@@ -718,15 +752,7 @@ const MAX_FOLD_STEPS = 32;
  * boundary (e.g. floor -> castle side -> castle top in a single step).
  * `distance` should be non-negative; a negative value is a no-op. */
 export function advance(pose: CrawlPose, distance: number): CrawlPose {
-  let current = pose;
-  let remaining = distance;
-  for (let step = 0; step < MAX_FOLD_STEPS && remaining > RAY_EPS; step++) {
-    const { pose: next, consumed } = stepAdvance(current, remaining);
-    current = next;
-    remaining -= consumed;
-    if (consumed <= RAY_EPS) break;
-  }
-  return current;
+  return advanceTracking(pose, distance).pose;
 }
 
 function normalizeAngle(angle: number): number {
