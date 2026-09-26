@@ -17,12 +17,14 @@ import {
   CRAWL_FACES,
   CRAWL_LINKS,
   dropToFloor,
+  EDGE_AVOIDANCE_RADIUS,
   FILLET_RADIUS,
   poseToWorld,
   poseToWorldRounded,
   randomFloorPose,
   roundedNormalAt,
   turn,
+  unlinkedEdgeAvoidanceBias,
   type CrawlFace,
   type CrawlPose,
   type Vec3,
@@ -180,12 +182,36 @@ describe('castle faces track decorLayout directly', () => {
     }
   });
 
+  it('every box gets all four side-to-adjacent-side corner links, wrapping fully around it', () => {
+    for (const slug of slugs) {
+      const cornerLinks = CRAWL_LINKS.filter(
+        (link) =>
+          link.faceA.startsWith(`${slug}-side`) &&
+          link.faceB.startsWith(`${slug}-side`) &&
+          link.faceA !== link.faceB,
+      );
+      expect(cornerLinks).toHaveLength(4);
+      // Every side face appears in exactly two of this box's corner links
+      // (its two actual neighbours) — proof the wrap is complete, not just
+      // four links landing lopsidedly on fewer than four distinct sides.
+      const sides = ['px', 'nx', 'pz', 'nz'].map((suffix) => `${slug}-side-${suffix}`);
+      for (const sideId of sides) {
+        const touching = cornerLinks.filter(
+          (link) => link.faceA === sideId || link.faceB === sideId,
+        );
+        expect(touching).toHaveLength(2);
+      }
+    }
+  });
+
   it('the link count is exactly the base tank links plus each box`s own links', () => {
     const touchingFloor = CASTLE_COLLIDER_BOXES.filter(
       (box) =>
         Math.abs(CASTLE_POSITION.y + box.position.y - box.halfExtents.y - FLOOR_TOP_Y) < 1e-9,
     ).length;
-    const expected = 8 + CASTLE_COLLIDER_BOXES.length * 4 + touchingFloor * 4;
+    // Per box: 4 side-to-own-top links + 4 side-to-adjacent-side corner
+    // links, plus 4 side-to-floor links for a box that actually touches it.
+    const expected = 8 + CASTLE_COLLIDER_BOXES.length * 8 + touchingFloor * 4;
     expect(CRAWL_LINKS.length).toBe(expected);
   });
 });
@@ -342,7 +368,9 @@ describe('advance() at an unlinked edge', () => {
     expect(Number.isFinite(result.heading)).toBe(true);
   });
 
-  it('clamps and reflects at a castle side face`s un-linked left/right edge', () => {
+  it('wraps onto the adjacent side instead of bouncing, at a castle box`s own vertical corner', () => {
+    // Every side's left/right edge is now linked to its neighbour (PR 3) —
+    // a crawler wraps all the way around the box rather than bouncing.
     const side = faceById('castle-left-tower-side-px');
     const start: CrawlPose = {
       faceId: side.id,
@@ -351,13 +379,25 @@ describe('advance() at an unlinked edge', () => {
       heading: 0,
     };
     const result = advance(start, 0.03);
+    expect(result.faceId).not.toBe(side.id);
+    expect(result.faceId).toMatch(/^castle-left-tower-side-/);
+  });
+
+  it('clamps and reflects at a castle side face`s un-linked bottom edge (the lintel, which never touches the floor)', () => {
+    const side = faceById('castle-lintel-side-px');
+    const start: CrawlPose = {
+      faceId: side.id,
+      u: side.uLength / 2,
+      v: 0.02,
+      heading: -Math.PI / 2,
+    };
+    const result = advance(start, 0.03);
 
     expect(result.faceId).toBe(side.id);
-    expect(result.u).toBeLessThanOrEqual(side.uLength + 1e-9);
-    expect(result.u).toBeCloseTo(side.uLength - 0.01, 9);
-    // Reflected: heading's u-component (cos) should now point back the
-    // other way.
-    expect(Math.cos(result.heading)).toBeLessThanOrEqual(1e-9);
+    expect(result.v).toBeGreaterThanOrEqual(-1e-9);
+    expect(result.v).toBeCloseTo(0.01, 9);
+    // Reflected: heading's v-component (sin) should now point back up.
+    expect(Math.sin(result.heading)).toBeGreaterThanOrEqual(-1e-9);
   });
 
   it('never leaves the tank, even after many bounces (a wall-top corner)', () => {
@@ -587,6 +627,59 @@ describe('roundedNormalAt', () => {
       expect(angles[angles.length - 2]!).toBeCloseTo(0, 6);
       expect(angles[angles.length - 1]!).toBeCloseTo(0, 6);
     }
+  });
+});
+
+describe('unlinkedEdgeAvoidanceBias', () => {
+  it('is zero everywhere on a face with no unlinked edges (the floor)', () => {
+    const floor = faceById('floor');
+    const pose: CrawlPose = { faceId: 'floor', u: 0.01, v: floor.vLength - 0.01, heading: 0 };
+    expect(unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS)).toBe(0);
+  });
+
+  it('is zero far from a genuinely unlinked edge', () => {
+    const front = faceById('glass-front');
+    const pose: CrawlPose = {
+      faceId: 'glass-front',
+      u: front.uLength / 2,
+      v: front.vLength / 2,
+      heading: 0,
+    };
+    expect(unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS)).toBe(0);
+  });
+
+  it('steers a wanderer heading away from a wall`s unlinked top edge back toward the centre', () => {
+    const front = faceById('glass-front');
+    const pose: CrawlPose = {
+      faceId: 'glass-front',
+      u: front.uLength / 2,
+      v: front.vLength - 0.01,
+      heading: Math.PI / 2 + 0.3, // pointing up and off-axis, away from centre
+    };
+    const bias = unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS);
+    expect(bias).not.toBe(0);
+
+    const towardCentre = Math.atan2(front.vLength / 2 - pose.v, front.uLength / 2 - pose.u);
+    const angleTo = (a: number, b: number) =>
+      Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    const before = angleTo(pose.heading, towardCentre);
+    const after = angleTo(pose.heading + bias, towardCentre);
+    expect(after).toBeLessThan(before);
+  });
+
+  it('weakens smoothly with distance, reaching zero at (and beyond) the awareness radius', () => {
+    const front = faceById('glass-front');
+    const heading = Math.PI / 2;
+    const magnitudes = [0, 0.25, 0.5, 0.75, 0.99, 1, 1.5].map((f) => {
+      const v = front.vLength - f * EDGE_AVOIDANCE_RADIUS;
+      const pose: CrawlPose = { faceId: 'glass-front', u: front.uLength / 2, v, heading };
+      return Math.abs(unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS));
+    });
+    for (let i = 1; i < magnitudes.length; i++) {
+      expect(magnitudes[i]!).toBeLessThanOrEqual(magnitudes[i - 1]! + 1e-9);
+    }
+    expect(magnitudes[magnitudes.length - 2]!).toBeCloseTo(0, 6);
+    expect(magnitudes[magnitudes.length - 1]!).toBe(0);
   });
 });
 
