@@ -106,6 +106,28 @@ export interface SnailGait {
   stretch: number;
 }
 
+/** The shell mount's own secondary motion (issue #112) — a genuine mass-
+ * spring-damper, not just an eased follow, chasing `gaitRef`'s own
+ * `stretch` signal (already a smoothed acceleration proxy) with its own lag
+ * and overshoot, so the shell settles a visible beat behind the foot's own
+ * motion rather than moving in perfect lockstep with it. `STIFFNESS`/
+ * `DAMPING` are picked for a couple of clearly visible wobbles before
+ * settling (damping ratio ≈0.47 — underdamped, not a dead thud); tune by
+ * eye alongside the position/tilt scales, which stay deliberately small
+ * ("should be felt, not seen" — the same restraint issue #112's own design
+ * notes call for on this layer specifically). */
+const SHELL_SPRING_STIFFNESS = 40;
+const SHELL_SPRING_DAMPING = 6;
+const SHELL_SPRING_POSITION_SCALE = 3;
+const SHELL_SPRING_TILT_SCALE = 0.08;
+
+/** The eyestalks ride the same spring signal as the shell (not a second,
+ * independent spring) — a snail's whole forebody sways together, not the
+ * shell and the head each settling on their own separate schedule. Smaller
+ * than the shell's own tilt scale: the stalks are far lighter than the
+ * shell, so they should read as *following* its wobble, not matching it. */
+const EYESTALK_SPRING_TILT_SCALE = 0.15;
+
 /** Eyestalk sway — independent per stalk (its own phase offset) so the pair
  * doesn't move in lockstep, mirroring why `FishModel.tsx` seeds a random
  * `phaseSeed` per fish. Slow and modest: a snail's stalks drift, they don't
@@ -189,6 +211,11 @@ export function SnailModel({
   const eyestalkFarPivotRef = useRef<THREE.Group>(null);
   const shellGroupRef = useRef<THREE.Group>(null);
   const operculumGroupRef = useRef<THREE.Group>(null);
+
+  // The shell's own secondary-motion spring state — position and velocity
+  // of a one-dimensional mass-spring-damper chasing `gaitRef`'s `stretch`
+  // signal (see `SHELL_SPRING_STIFFNESS`'s own doc comment).
+  const shellSpringRef = useRef({ position: 0, velocity: 0 });
 
   const phaseSeed = useMemo(() => Math.random() * Math.PI * 2, []);
 
@@ -396,11 +423,23 @@ export function SnailModel({
     operculumNucleusMaterial,
   ]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (still) return;
 
     const t = state.clock.elapsedTime;
     const pose = tuckPoseForMode(tuckProgress, tuckMode);
+
+    // The shell's own secondary-motion spring (issue #112) — a genuine
+    // mass-spring-damper chasing `gaitRef`'s `stretch` signal, integrated
+    // with a plain semi-implicit Euler step (stable enough at this
+    // stiffness/timestep; nothing here needs a fancier integrator). Reused
+    // by the eyestalks below at their own, smaller scale, rather than
+    // running a second independent spring.
+    const springTarget = gaitRef?.current.stretch ?? 0;
+    const spring = shellSpringRef.current;
+    spring.velocity += (springTarget - spring.position) * SHELL_SPRING_STIFFNESS * delta;
+    spring.velocity *= Math.max(0, 1 - SHELL_SPRING_DAMPING * delta);
+    spring.position += spring.velocity * delta;
 
     const idleSway = Math.sin(t * EYE_SWAY_FREQUENCY + phaseSeed) * EYE_SWAY_AMPLITUDE;
     const idleSwayFar =
@@ -409,20 +448,17 @@ export function SnailModel({
       1 - THREE.MathUtils.smoothstep(pose.eyestalkFold, EYESTALK_RETRACT_START, 1),
       EYESTALK_RETRACT_MIN_SCALE,
     );
+    const eyestalkSpringTilt = spring.position * EYESTALK_SPRING_TILT_SCALE;
     if (eyestalkPivotRef.current) {
-      eyestalkPivotRef.current.rotation.z = THREE.MathUtils.lerp(
-        idleSway,
-        EYESTALK_FOLD_ROTATION_Z,
-        pose.eyestalkFold,
-      );
+      eyestalkPivotRef.current.rotation.z =
+        THREE.MathUtils.lerp(idleSway, EYESTALK_FOLD_ROTATION_Z, pose.eyestalkFold) +
+        eyestalkSpringTilt;
       eyestalkPivotRef.current.scale.setScalar(eyestalkScale);
     }
     if (eyestalkFarPivotRef.current) {
-      eyestalkFarPivotRef.current.rotation.z = THREE.MathUtils.lerp(
-        idleSwayFar,
-        EYESTALK_FOLD_ROTATION_Z,
-        pose.eyestalkFold,
-      );
+      eyestalkFarPivotRef.current.rotation.z =
+        THREE.MathUtils.lerp(idleSwayFar, EYESTALK_FOLD_ROTATION_Z, pose.eyestalkFold) +
+        eyestalkSpringTilt;
       eyestalkFarPivotRef.current.scale.setScalar(eyestalkScale);
     }
 
@@ -449,6 +485,13 @@ export function SnailModel({
 
     if (shellGroupRef.current) {
       shellGroupRef.current.position.y = -SHELL_SEALED_DROP * pose.shellSettle;
+      // Secondary motion (issue #112): the spring's own position becomes a
+      // small shift along local `+X` (the model's authored-forward axis)
+      // plus a matching tilt, layered on top of the sleep/wake settle
+      // above rather than replacing it — the shell visibly lags/overshoots
+      // as the body starts and stops, instead of moving in lockstep.
+      shellGroupRef.current.position.x = spring.position * SHELL_SPRING_POSITION_SCALE;
+      shellGroupRef.current.rotation.z = spring.position * SHELL_SPRING_TILT_SCALE;
     }
 
     // `gaitRef`'s own phase already only advances while genuinely crawling
