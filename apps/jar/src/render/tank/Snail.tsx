@@ -3,14 +3,16 @@
 // (`docs/architecture/3d-engine.md` §4.4's settled architecture: the
 // accepted cost is that fish won't separation-steer around a snail, but the
 // kinematic collider below still keeps them from overlapping one). It owns
-// a `CrawlPose` (`crawlSurfaces.ts`) directly, advances it in `useFrame`, and
-// converts it to a script-authored position/rotation on a **kinematic**
-// Rapier `RigidBody` — the same "no gravity fight" discipline as `Fish.tsx`'s
-// dynamic one, just without physics ever moving it. Presents `SnailModel`,
-// driving its `tuckProgress`/`tuckMode` from `snailBehaviour.ts`'s state
-// machine. Also publishes its own telemetry into `domain/critterDebug.ts`
-// (the Tank monitor window's bridge), gated by the same dev toggle as the
-// fish's own publisher in `SteeringSystem.tsx`.
+// a `CrawlSpine` (`crawlSpine.ts`) directly, advances its head in `useFrame`,
+// samples it at the shell seat and every foot bone's own offset, and
+// converts those into a script-authored position/rotation on a
+// **kinematic** Rapier `RigidBody` (the root) plus a driven bone chain (the
+// bend) — the same "no gravity fight" discipline as `Fish.tsx`'s dynamic
+// one, just without physics ever moving it. Presents `SnailModel`, driving
+// its `tuckProgress`/`tuckMode` from `snailBehaviour.ts`'s state machine.
+// Also publishes its own telemetry into `domain/critterDebug.ts` (the Tank
+// monitor window's bridge), gated by the same dev toggle as the fish's own
+// publisher in `SteeringSystem.tsx`.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -37,20 +39,34 @@ import type { Critter } from '../../domain/protocol/generated/Critter';
 import { selectCritter } from '../../domain/selection';
 import { lifeStageScale } from '../../domain/simConstants';
 import {
-  advance,
+  advanceSpine,
+  createSpine,
+  resetSpine,
+  sampleSpine,
+  type CrawlSpine,
+  type SpineSample,
+} from '../environment/crawlSpine';
+import {
   dropToFloor,
   EDGE_AVOIDANCE_RADIUS,
   FILLET_RADIUS,
   poseToWorld,
-  poseToWorldRounded,
   randomFloorPose,
-  turn,
+  roundedNormalAt,
   unlinkedEdgeAvoidanceBias,
   type CrawlFrame,
   type CrawlPose,
 } from '../environment/crawlSurfaces';
 import { SnailModel } from '../models/SnailModel';
-import { SHELL_SEAT_X, SNAIL_BODY_SCALE, SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
+import {
+  FOOT_BONE_XS,
+  FOOT_TAIL_TIP_X,
+  FOOT_TOE_X,
+  SHELL_SEAT_X,
+  SNAIL_BODY_SCALE,
+  SOLE_Y,
+  SVG_SCALE,
+} from '../models/snailGeometry';
 import {
   createInitialSnailBehaviour,
   DETACH_SINK_DURATION_SEC,
@@ -84,6 +100,22 @@ const MAX_HEADING_BIAS = 0.8;
  * the edge anyway. Tune by eye. */
 const EDGE_AVOIDANCE_TURN_RATE = 1.5;
 
+/** `crawlSpine.ts`'s crumb spacing, expressed as a fraction of the body's
+ * own length rather than a fixed world-unit constant — this keeps the
+ * spine's resolution (crumbs per body length) consistent across life
+ * stages, since a fry's whole body is much shorter than an adult's. */
+const CRUMB_SAMPLES_PER_BODY = 24;
+
+/** The fixed `-90°` yaw `Fish.tsx`'s model group already applies to its own
+ * mesh (both models are authored facing `+X`), as a quaternion rather than
+ * an Euler — `updateFootBones` needs its *inverse* to undo that yaw when
+ * projecting a bone's world-space surface frame back into the model's own
+ * (pre-yaw) local space. A module-level constant: the yaw never changes
+ * per-snail or per-frame. */
+const MODEL_YAW_QUAT_INV = new THREE.Quaternion()
+  .setFromEuler(new THREE.Euler(0, -Math.PI / 2, 0))
+  .invert();
+
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
  * top of a smoothstep-eased straight-line descent to the landing spot. */
@@ -107,42 +139,203 @@ interface DetachAnchor {
 // a snail row as a fish one.
 const scratchYawEuler = new THREE.Euler();
 
-/** `frame.forward`→local `+Z`, `frame.up`→local `+Y` — the same axis
- * convention `fishCollider.ts` and `Fish.tsx` use, so this component's inner
- * model group needs the identical `-90°` yaw correction `Fish.tsx` applies
- * (both models are authored facing `+X`). `xAxis` (local `+X`) is derived
- * as `up × forward` rather than reusing `frame.right` directly, since that's
- * the assignment that keeps (`forward`, `up`, `xAxis`) a proper
- * right-handed basis under this module's `(x, y, z)` axis order. */
-function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
-  const forward = new THREE.Vector3(frame.forward.x, frame.forward.y, frame.forward.z);
-  const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
+/** `forward`→local `+Z`, `up`→local `+Y` — the same axis convention
+ * `fishCollider.ts` and `Fish.tsx` use, so this component's inner model
+ * group needs the identical `-90°` yaw correction `Fish.tsx` applies (both
+ * models are authored facing `+X`). `xAxis` (local `+X`) is derived as
+ * `up × forward` rather than reusing a face's own `right` directly, since
+ * that's the assignment that keeps (`forward`, `up`, `xAxis`) a proper
+ * right-handed basis under this module's `(x, y, z)` axis order. Shared by
+ * every quaternion this file builds from a surface frame — the root's own
+ * (via `quaternionFromFrame`) and every bone's (via `updateFootBones`). */
+function basisQuaternionFromVectors(forward: THREE.Vector3, up: THREE.Vector3): THREE.Quaternion {
   const xAxis = new THREE.Vector3().crossVectors(up, forward).normalize();
   return new THREE.Quaternion().setFromRotationMatrix(
     new THREE.Matrix4().makeBasis(xAxis, up, forward),
   );
 }
 
+function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
+  return basisQuaternionFromVectors(
+    new THREE.Vector3(frame.forward.x, frame.forward.y, frame.forward.z),
+    new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z),
+  );
+}
+
 /** The RigidBody's own root sits above the sole by `-SOLE_Y * scale` along
  * `up` (`SOLE_Y` is negative, in `snailGeometry.ts`'s raw-SVG-derived
- * convention), and offset by `-SHELL_SEAT_X * scale` along `forward` (issue
- * #112's PR 7 re-anchor) — the crawl-surface contact point tracks wherever
- * the *shell's own seat* sits, not the model's arbitrary local origin,
- * since that's what the physics collider (`snailCollider.ts`'s own
- * `SHELL_HALF_LENGTH_ABOUT_SEAT`) and, later, the spine's own frame
- * (issue #112's bend-wiring PR) both need to agree on. `forward`, not
- * `xAxis`: `SHELL_SEAT_X` is a distance along the model's own authored
- * toe-tail axis, and the fixed `-90°` yaw the inner model group applies
- * (`quaternionFromFrame`'s own doc comment) is exactly what maps that axis
- * onto the RigidBody's `forward` (local `+Z`), not onto `xAxis` (local
- * `+X`, the model's *thickness* axis once yawed) — using `xAxis` here would
- * shift the root sideways instead of back toward the tail. */
+ * convention), and offset by `-SHELL_SEAT_X * scale` along `forward` — an
+ * approximation of "where the shell's seat would be," good enough for the
+ * detach/float-down animation's own target pose (a single instantaneous
+ * `CrawlPose`, not the spine). The main crawl loop no longer uses this: once
+ * a real spine exists, the seat's true position comes from sampling it
+ * directly (the `seatOffset`-based `sampleSpine` call in the main
+ * `useFrame` below) rather than approximating it off a single pose.
+ * `forward`, not `xAxis`: `SHELL_SEAT_X` is a distance along the model's own
+ * authored toe-tail axis, and the fixed `-90°` yaw the inner model group
+ * applies (`quaternionFromFrame`'s own doc comment) is exactly what maps
+ * that axis onto the RigidBody's `forward` (local `+Z`), not onto `xAxis`
+ * (local `+X`, the model's *thickness* axis once yawed) — using `xAxis`
+ * here shifted the root sideways instead of back toward the tail, a bug
+ * caught during this stack's own code-review pass. */
 function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 {
   const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
   const forward = new THREE.Vector3(frame.forward.x, frame.forward.y, frame.forward.z);
   return new THREE.Vector3(frame.position.x, frame.position.y, frame.position.z)
     .addScaledVector(up, -SOLE_Y * scale)
     .addScaledVector(forward, -SHELL_SEAT_X * scale);
+}
+
+/** A world-space position plus the surface frame (`up`/`forward`) at one
+ * point along the spine — `up` from `roundedNormalAt` (the continuous,
+ * crease-aware field, exactly as the rigid-body root already used), but
+ * `forward` from a *central difference* of neighbouring spine samples'
+ * positions rather than any single sample's own stored heading: a chord
+ * direction along the body's actual travelled path is what makes adjacent
+ * segments bend to follow a turn, not just a fold (`docs/architecture/
+ * 3d-engine.md` §4.4's own note on why a spine beats back-tracing alone).
+ * Re-orthonormalized against `up` (Gram-Schmidt, the same idea
+ * `crawlSurfaces.ts`'s own `poseToWorldRounded` used before the spine
+ * existed) since a raw chord isn't generally perpendicular to a *rounded*
+ * up near a fold. */
+interface SampledFrame {
+  position: THREE.Vector3;
+  up: THREE.Vector3;
+  forward: THREE.Vector3;
+}
+
+const FALLBACK_TANGENTS = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)];
+
+function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
+  const sample = samples[index]!;
+  const position = new THREE.Vector3(sample.position.x, sample.position.y, sample.position.z);
+  const normal = roundedNormalAt(sample.faceId, sample.u, sample.v, FILLET_RADIUS);
+  const up = new THREE.Vector3(normal.x, normal.y, normal.z);
+
+  // `samples` is sorted ascending by offset-behind-head, so `prev` (a
+  // smaller index) is the more head-ward neighbour and `next` (a larger
+  // index) is the more tail-ward one — `forward` (the direction of travel)
+  // points from tail-ward to head-ward, i.e. always `(the more head-ward
+  // point) - (the more tail-ward point)`.
+  const prev = samples[index - 1];
+  const next = samples[index + 1];
+  const tangent = new THREE.Vector3();
+  if (prev && next) {
+    tangent.set(
+      prev.position.x - next.position.x,
+      prev.position.y - next.position.y,
+      prev.position.z - next.position.z,
+    );
+  } else if (next) {
+    tangent.set(
+      sample.position.x - next.position.x,
+      sample.position.y - next.position.y,
+      sample.position.z - next.position.z,
+    );
+  } else if (prev) {
+    tangent.set(
+      prev.position.x - sample.position.x,
+      prev.position.y - sample.position.y,
+      prev.position.z - sample.position.z,
+    );
+  }
+
+  // Degenerate only when every recorded sample coincides exactly (a
+  // just-spawned or just-landed snail that hasn't moved at all yet) — any
+  // vector perpendicular to `up` is a fine placeholder until real spacing
+  // develops, so try two fixed candidates rather than propagating NaN.
+  let rejected = tangent.clone().sub(up.clone().multiplyScalar(tangent.dot(up)));
+  if (rejected.lengthSq() < 1e-12) {
+    for (const fallback of FALLBACK_TANGENTS) {
+      rejected = fallback.clone().sub(up.clone().multiplyScalar(fallback.dot(up)));
+      if (rejected.lengthSq() >= 1e-12) break;
+    }
+  }
+  return { position, up, forward: rejected.normalize() };
+}
+
+/** Drives `bones` (tail-most first, matching `snailGeometry.ts`'s
+ * `FOOT_BONE_XS` order) toward `frames` (one per bone, same order) —
+ * each bone's own rotation is *parent-relative*, so a world-space desired
+ * orientation has to be divided out one link at a time down the chain.
+ * Rather than juggling that division in true world space (which would also
+ * need to account for the fixed model yaw and the RigidBody's own current
+ * orientation), every frame is first projected into the model's own
+ * pre-yaw local space via `rootQuatInv`/`MODEL_YAW_QUAT_INV` — once there,
+ * bone 0's local rotation *is* its projected orientation directly (its
+ * parent, `footGroupRef`, carries no rotation of its own), and each
+ * following bone's local rotation is simply the previous bone's projected
+ * orientation "divided out" of its own. */
+function updateFootBones(
+  bones: THREE.Bone[],
+  frames: SampledFrame[],
+  rootQuatInv: THREE.Quaternion,
+): void {
+  let previousLocal: THREE.Quaternion | null = null;
+  for (let i = 0; i < bones.length; i++) {
+    const frame = frames[i]!;
+    const localForward = frame.forward
+      .clone()
+      .applyQuaternion(rootQuatInv)
+      .applyQuaternion(MODEL_YAW_QUAT_INV);
+    const localUp = frame.up
+      .clone()
+      .applyQuaternion(rootQuatInv)
+      .applyQuaternion(MODEL_YAW_QUAT_INV);
+    const local = basisQuaternionFromVectors(localForward, localUp);
+    if (previousLocal) {
+      bones[i]!.quaternion.copy(previousLocal).invert().multiply(local);
+    } else {
+      bones[i]!.quaternion.copy(local);
+    }
+    previousLocal = local;
+  }
+}
+
+/** The rigid root's own world position: `frame.position` (already the
+ * *exact* on-surface point, whether it came from a single rounded pose or
+ * — now — a spine sample) lifted along `frame.up` by `-SOLE_Y * scale`, so
+ * the foot's sole (not the model's local origin) is what actually touches
+ * the surface. */
+function liftedRootPosition(frame: SampledFrame, scale: number): THREE.Vector3 {
+  return frame.position.clone().addScaledVector(frame.up, -SOLE_Y * scale);
+}
+
+interface RootAndBoneFrames {
+  rootFrame: SampledFrame;
+  boneFrames: SampledFrame[];
+}
+
+/** Samples the spine once for the seat (the RigidBody's own root) and every
+ * bone offset together, sorted into one combined arc-length query — so each
+ * point's `sampledFrameAt` tangent comes from its own true neighbours along
+ * the body, not just whichever *other* point happens to share its fixed
+ * role. `boneOffsets`/`seatOffset` are arc-length distances behind the
+ * spine's head (the toe/head bone), all non-negative by construction —
+ * `FOOT_TOE_X` is itself the head bone's own offset, exactly `0`. */
+function computeRootAndBoneFrames(
+  spine: CrawlSpine,
+  boneOffsets: number[],
+  seatOffset: number,
+): RootAndBoneFrames {
+  const roles: Array<'seat' | number> = ['seat', ...boneOffsets.map((_, i) => i)];
+  const offsets = [seatOffset, ...boneOffsets];
+  const order = roles.map((_, i) => i).sort((a, b) => offsets[a]! - offsets[b]!);
+
+  const samples = sampleSpine(
+    spine,
+    order.map((i) => offsets[i]!),
+  );
+  const framesByOrder = samples.map((_, sortedIndex) => sampledFrameAt(samples, sortedIndex));
+
+  let rootFrame: SampledFrame | null = null;
+  const boneFrames: SampledFrame[] = new Array(boneOffsets.length);
+  order.forEach((originalIndex, sortedIndex) => {
+    const role = roles[originalIndex]!;
+    if (role === 'seat') rootFrame = framesByOrder[sortedIndex]!;
+    else boneFrames[role] = framesByOrder[sortedIndex]!;
+  });
+  return { rootFrame: rootFrame!, boneFrames };
 }
 
 function isFishRigidBody(userData: unknown): boolean {
@@ -159,14 +352,38 @@ export function Snail({ critter }: SnailProps) {
   const scale = lifeStageScale(critter.life_stage) * SVG_SCALE * SNAIL_BODY_SCALE;
   const he = snailColliderHalfExtentsFor(critter);
 
+  // Arc-length offsets behind the spine's own head (the toe/head bone,
+  // whose own offset is trivially `0`) — recomputed fresh each render, the
+  // same "cheap enough not to bother memoizing" treatment `scale`/`he`
+  // already get, since `FOOT_BONE_XS` is a fixed 9-entry array.
+  const bodyLength = (FOOT_TOE_X - FOOT_TAIL_TIP_X) * scale;
+  const crumbSpacing = bodyLength / CRUMB_SAMPLES_PER_BODY;
+  const seatOffset = (FOOT_TOE_X - SHELL_SEAT_X) * scale;
+  const boneOffsets = FOOT_BONE_XS.map((x) => (FOOT_TOE_X - x) * scale);
+
+  // The bone chain itself lives inside `SnailModel`, which hands it up via
+  // `onBonesReady` once created — a ref, not React state, since this
+  // component mutates the bones' rotations imperatively every frame rather
+  // than re-rendering to change them.
+  const footBonesRef = useRef<THREE.Bone[] | null>(null);
+
   // Spawn once at mount, mutated in place every frame thereafter — this
-  // pose drives an imperative kinematic body transform, not a render, so it
-  // lives in a ref rather than React state (same rationale as `Fish.tsx`'s
-  // `currentHeadingRef`).
-  const poseRef = useRef<CrawlPose>(randomFloorPose(Math.random));
-  const initialFrame = poseToWorldRounded(poseRef.current, FILLET_RADIUS);
-  const positionRef = useRef<THREE.Vector3>(rootPositionFromFrame(initialFrame, scale));
-  const quaternionRef = useRef<THREE.Quaternion>(quaternionFromFrame(initialFrame));
+  // spine drives an imperative kinematic body transform (and, now, a bone
+  // chain), not a render, so it lives in a ref rather than React state
+  // (same rationale as `Fish.tsx`'s `currentHeadingRef`). The spine's own
+  // head tracks the crawler's *leading* point (the toe), not the shell
+  // seat — the seat, and every bone, are obtained by sampling the spine at
+  // their own fixed offset behind that head (`computeRootAndBoneFrames`),
+  // so every one of them is a real point the spine has actually recorded
+  // reaching, never an extrapolation ahead of it.
+  const spineRef = useRef<CrawlSpine>(
+    createSpine(randomFloorPose(Math.random), bodyLength, crumbSpacing),
+  );
+  const initialFrames = computeRootAndBoneFrames(spineRef.current, boneOffsets, seatOffset);
+  const positionRef = useRef<THREE.Vector3>(liftedRootPosition(initialFrames.rootFrame, scale));
+  const quaternionRef = useRef<THREE.Quaternion>(
+    basisQuaternionFromVectors(initialFrames.rootFrame.forward, initialFrames.rootFrame.up),
+  );
 
   const behaviourRef = useRef<SnailBehaviourState>(createInitialSnailBehaviour());
   const headingBiasRef = useRef(0);
@@ -188,7 +405,7 @@ export function Snail({ critter }: SnailProps) {
     if (!body) return;
 
     const asleep = isAsleep('Snail', dayNightOverride, simNight);
-    const onFloor = poseRef.current.faceId === 'floor';
+    const onFloor = spineRef.current.headPose.faceId === 'floor';
     const prevMode = behaviourRef.current.mode;
 
     behaviourRef.current = stepSnailBehaviour(
@@ -234,7 +451,11 @@ export function Snail({ critter }: SnailProps) {
       quaternionRef.current.copy(anchor.quaternion).slerp(anchor.targetQuaternion, eased);
     } else {
       if (prevMode === 'detached' && detachAnchorRef.current) {
-        poseRef.current = detachAnchorRef.current.landed;
+        // Re-seeds the whole spine around the landing spot rather than
+        // carrying breadcrumbs over from wherever the snail detached —
+        // `resetSpine`'s own back-trace lays the body out correctly around
+        // `landed` immediately, with no warm-up pop.
+        resetSpine(spineRef.current, detachAnchorRef.current.landed);
         detachAnchorRef.current = null;
       }
 
@@ -244,32 +465,33 @@ export function Snail({ critter }: SnailProps) {
           -MAX_HEADING_BIAS,
           MAX_HEADING_BIAS,
         );
-        const avoidance = unlinkedEdgeAvoidanceBias(poseRef.current, EDGE_AVOIDANCE_RADIUS);
-        poseRef.current = advance(
-          turn(
-            poseRef.current,
-            headingBiasRef.current * delta + avoidance * EDGE_AVOIDANCE_TURN_RATE * delta,
-          ),
+        const avoidance = unlinkedEdgeAvoidanceBias(
+          spineRef.current.headPose,
+          EDGE_AVOIDANCE_RADIUS,
+        );
+        advanceSpine(
+          spineRef.current,
           CRAWL_SPEED * delta,
+          headingBiasRef.current * delta + avoidance * EDGE_AVOIDANCE_TURN_RATE * delta,
         );
       }
+      // Runs every frame regardless of `isMoving` — a paused/sealed snail's
+      // spine hasn't changed, so this just re-derives the same frames it
+      // already had, but skipping it would mean a special-cased "first
+      // frame after a mode change" resync that isn't worth the complexity
+      // at this population scale.
+      const { rootFrame, boneFrames } = computeRootAndBoneFrames(
+        spineRef.current,
+        boneOffsets,
+        seatOffset,
+      );
+      quaternionRef.current.copy(basisQuaternionFromVectors(rootFrame.forward, rootFrame.up));
+      positionRef.current.copy(liftedRootPosition(rootFrame, scale));
 
-      // Both position and orientation come from the same continuous,
-      // `FILLET_RADIUS`-rounded frame (`poseToWorldRounded`) now, rather
-      // than the mismatched pair this used to derive them from (the exact
-      // per-face normal for position, a time-eased quaternion for
-      // orientation) — that mismatch, not the easing rate, was the real
-      // cause of a fold crossing either blipping or (when position was
-      // eased instead) sinking into the new surface right after a
-      // crossing. `poseToWorldRounded` keeps `position` exactly on the
-      // true, sharp-cornered surface (rounding only ever applies to the
-      // frame's `up`/`forward`/`right`), so there's nothing left to ease
-      // over time — the bend now happens continuously over the crawler's
-      // own travel distance near a crease, matching whatever `FILLET_RADIUS`
-      // says a crease's rounding should span.
-      const frame = poseToWorldRounded(poseRef.current, FILLET_RADIUS);
-      quaternionRef.current.copy(quaternionFromFrame(frame));
-      positionRef.current.copy(rootPositionFromFrame(frame, scale));
+      const bones = footBonesRef.current;
+      if (bones) {
+        updateFootBones(bones, boneFrames, quaternionRef.current.clone().invert());
+      }
     }
 
     body.setNextKinematicTranslation(positionRef.current);
@@ -350,7 +572,14 @@ export function Snail({ critter }: SnailProps) {
           void selectCritter(critter.id);
         }}
       >
-        <SnailModel critter={critter} tuckProgress={tuckProgress} tuckMode={tuckMode} />
+        <SnailModel
+          critter={critter}
+          tuckProgress={tuckProgress}
+          tuckMode={tuckMode}
+          onBonesReady={(bones) => {
+            footBonesRef.current = bones;
+          }}
+        />
       </group>
     </RigidBody>
   );

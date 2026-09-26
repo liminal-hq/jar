@@ -65,6 +65,14 @@ interface SnailModelProps {
    * this only changes whether progress past the foot-withdrawal window can
    * seal the shell. Defaults to `'sleep'`. */
   tuckMode?: 'sleep' | 'startle';
+  /** Hands the caller the foot's own bone chain once it's created, so a
+   * real controller (`Snail.tsx`, issue #112's bend-wiring PR) can drive
+   * each bone's rotation imperatively every frame without this component
+   * re-rendering — the same "own the objects, mutate them directly"
+   * discipline `positionRef`/`quaternionRef` already use for the RigidBody
+   * transform itself. `CritterPreview.tsx`'s undriven usage simply omits
+   * this, leaving every bone at its rest (identity) transform. */
+  onBonesReady?: (bones: THREE.Bone[]) => void;
 }
 
 /** Eyestalk sway — independent per stalk (its own phase offset) so the pair
@@ -141,6 +149,7 @@ export function SnailModel({
   still = false,
   tuckProgress = 0,
   tuckMode = 'sleep',
+  onBonesReady,
 }: SnailModelProps) {
   const footGroupRef = useRef<THREE.Group>(null);
   const footMeshRef = useRef<THREE.SkinnedMesh>(null);
@@ -233,6 +242,16 @@ export function SnailModel({
     footBones[0]!.updateWorldMatrix(true, true);
     footMeshRef.current?.bind(footSkeleton);
   }, [footBones, footSkeleton]);
+
+  useEffect(() => {
+    onBonesReady?.(footBones);
+    // Deliberately excludes `onBonesReady` itself: a real controller
+    // (`Snail.tsx`) passes a fresh inline function every render, and
+    // `footBones` only ever changes once (mount) — re-invoking on every
+    // caller re-render would hand out the same array repeatedly for no
+    // reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [footBones]);
 
   const footMaterial = useMemo(
     () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65 }),
