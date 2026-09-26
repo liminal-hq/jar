@@ -42,7 +42,9 @@ export function ToastLayer() {
         case 'born': {
           const parentA = critters[event.parentA]?.name ?? 'Someone';
           const parentB = critters[event.parentB]?.name ?? 'someone';
-          text = `${parentA} & ${parentB} had a fry: ${event.child.name}`;
+          // SPEC.md §5: "a fry" for fish, "a hatchling" for gecko/snail.
+          const noun = event.child.species === 'Fish' ? 'fry' : 'hatchling';
+          text = `${parentA} & ${parentB} had a ${noun}: ${event.child.name}`;
           break;
         }
         case 'passed': {

@@ -5,8 +5,9 @@
 // model without needing a real asset pipeline or a bone rig — the body and
 // tail flex via a per-vertex travelling wave instead (`swimWave.ts`), not a
 // skeleton. Implements hue-via-material-color and the belly gradient
-// (§6.4), life-stage scale (§6.3), spot toggles, sex dimorphism (§6.7), and
-// the `fin` gene actually changing which tail mesh a fish gets.
+// (§6.4), life-stage scale (§6.3), the `pattern` gene (Spotted/Banded/Solid),
+// sex dimorphism (§6.7), and the `fin` gene actually changing which tail
+// mesh a fish gets.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -22,6 +23,7 @@ import { burstOverdrive } from '../steering/chaseParams';
 import type { FishMotionMode } from '../steering/motionState';
 import { animationMulFor, maxSpeedFor } from '../steering/steeringParams';
 import {
+  BAND_GEOMETRIES,
   BODY_DEPTH,
   createBodyGeometry,
   createDorsalGeometry,
@@ -96,8 +98,8 @@ interface FishModelProps {
    * `maxSpeedFor(critter.energy)` when absent, so the critter-card preview
    * (which has no burst state) is unaffected. */
   getSpeedCeiling?: () => number;
-  /** Called once per frame with this fish's animation state, for the fish
-   * monitor window (`domain/fishDebug.ts`) and — via `phase` —
+  /** Called once per frame with this fish's animation state, for the Tank
+   * monitor window (`domain/critterDebug.ts`) and — via `phase` —
    * `Fish.tsx`'s `getThrustEnvelope` (`thrustEnvelope.ts`), which gates the
    * physics impulse to the same tail beat this animates. A callback rather
    * than an imperative handle since `Fish.tsx` just wants to stash the
@@ -288,7 +290,7 @@ export function FishModel({
   // comment for the blend, and `isRestingRef` below for why it's forced
   // to 0 at rest rather than just left to decay on its own schedule.
   const bendRef = useRef(0);
-  // Peak-hold for `onDebugFrame`'s reported turn rate — the fish monitor
+  // Peak-hold for `onDebugFrame`'s reported turn rate — the Tank monitor
   // window only samples a few times a second, so a genuine one/two-frame
   // spike (e.g. right at a night settle/wake mode flip) would otherwise be
   // invisible between polls. Decays fast enough to read as "just happened"
@@ -323,6 +325,13 @@ export function FishModel({
   );
   const finColour = useMemo(
     () => new THREE.Color().setHSL(critter.hue / 360, saturation, 0.48),
+    [critter.hue, saturation],
+  );
+  // `Banded` pattern gene — a darker tint of the fish's own hue (unlike
+  // spots' flat, hue-independent dark grey), reading as a real marking
+  // rather than a dirt smudge.
+  const bandColour = useMemo(
+    () => new THREE.Color().setHSL(critter.hue / 360, saturation, 0.32),
     [critter.hue, saturation],
   );
 
@@ -427,6 +436,27 @@ export function FishModel({
     [tailSwimParams, tailSwimUniforms],
   );
 
+  // `Banded` pattern decals (`fish-svg/body.svg`'s `band-*` paths) span a
+  // range of body x — unlike spots' fixed points, they can't get away with
+  // a per-point rotation trick, so each needs the same real swim-wave
+  // material/depth-material pair the body/dorsal/tail already use. One
+  // shared material for all 3 bands (and both mirrored faces): same colour,
+  // same `swimParamsBase` (bands sit within the body zone, `spaceOffsetX`
+  // 0, same as body/dorsal) for every one of them on this fish.
+  const bandMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({ color: bandColour, roughness: 0.7, side: THREE.DoubleSide }),
+    [bandColour],
+  );
+  const bandSwimUniforms = useMemo(
+    () => attachSwimWaveVertexShader(bandMaterial, swimParamsBase),
+    [bandMaterial, swimParamsBase],
+  );
+  const bandDepthMaterial = useMemo(
+    () => attachSwimWaveDepthMaterial(swimParamsBase, bandSwimUniforms),
+    [swimParamsBase, bandSwimUniforms],
+  );
+
   // Each spot's own (u, env) at its fixed rest x — spots don't move
   // relative to the body, so this is a one-time lookup, not a per-frame
   // table scan.
@@ -490,6 +520,8 @@ export function FishModel({
       tailDepthMaterial.dispose();
       pectoralMaterial.dispose();
       mouthMaterial.dispose();
+      bandMaterial.dispose();
+      bandDepthMaterial.dispose();
     };
   }, [
     bodyGeometry,
@@ -503,6 +535,8 @@ export function FishModel({
     tailDepthMaterial,
     pectoralMaterial,
     mouthMaterial,
+    bandMaterial,
+    bandDepthMaterial,
   ]);
 
   useFrame((state, delta) => {
@@ -683,6 +717,7 @@ export function FishModel({
     setSwimWaveUniforms(bodySwimUniforms, phase, amplitude, bend);
     setSwimWaveUniforms(dorsalSwimUniforms, phase, amplitude, bend);
     setSwimWaveUniforms(tailSwimUniforms, phase, amplitude, bend);
+    setSwimWaveUniforms(bandSwimUniforms, phase, amplitude, bend);
 
     // Spots ride the same wave (bend included) at their own fixed
     // body-space x — a group rotation about the (untranslated) root's own
@@ -777,7 +812,27 @@ export function FishModel({
         <meshStandardMaterial color="#22222a" roughness={0.4} />
       </mesh>
 
-      {critter.spots &&
+      {critter.pattern === 'Banded' &&
+        BAND_GEOMETRIES.map((geometry, i) => (
+          <group key={i}>
+            <mesh
+              geometry={geometry}
+              material={bandMaterial}
+              customDepthMaterial={bandDepthMaterial}
+              position={[0, 0, BODY_DEPTH / 2 + 0.3]}
+              castShadow
+            />
+            <mesh
+              geometry={geometry}
+              material={bandMaterial}
+              customDepthMaterial={bandDepthMaterial}
+              position={[0, 0, -(BODY_DEPTH / 2 + 0.3)]}
+              castShadow
+            />
+          </group>
+        ))}
+
+      {critter.pattern === 'Spotted' &&
         SPOTS.map((spot, i) => (
           <group
             key={i}

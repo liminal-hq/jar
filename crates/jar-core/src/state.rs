@@ -5,7 +5,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use jar_protocol::{Critter, CritterId, JarSettings};
+use jar_protocol::{Critter, CritterId, Habitat, JarSettings, Species};
 
 use crate::clock::JarClock;
 
@@ -59,15 +59,33 @@ impl JarState {
     }
 }
 
-/// SPEC.md §5's hard population cap ("10 fish + 4 gecko, ever" — not just
-/// via breeding), one source of truth for every caller that needs to check
-/// it: `tick.rs`'s `try_breed` and `tauri-plugin-jar`'s `add_critter`
-/// command each enforce it independently, since a critter can enter the
-/// population through either path.
+/// SPEC.md §5's hard population cap ("10 fish + 4 gecko + 5 snail, ever" —
+/// not just via breeding), one source of truth for every caller that needs
+/// to check it: `tick.rs`'s `try_breed` and `tauri-plugin-jar`'s
+/// `add_critter` command each enforce it independently, since a critter can
+/// enter the population through either path. Each species' cap is its own
+/// separate pool — a snail never competes with a fish for a population
+/// slot, even though both can live in the same (aquarium) habitat.
 pub fn population_cap(species: jar_protocol::Species) -> usize {
     match species {
         jar_protocol::Species::Fish => 10,
         jar_protocol::Species::Gecko => 4,
+        jar_protocol::Species::Snail => 5,
+    }
+}
+
+/// Whether `species` is one `habitat` can hold — mirrors
+/// `apps/jar/src/domain/habitat.ts`'s `speciesOfHabitat`, the frontend's own
+/// curated add-critter menu/Setup buttons. `tauri-plugin-jar`'s `add_critter`
+/// command checks this too, since it's the one path that isn't scoped by
+/// that curated UI — without it, a caller that bypasses the menu (a stale
+/// build, a test, a future automation surface) could create a species
+/// `CrittersLayer.tsx` never renders for the current habitat, leaving it
+/// alive, ageing, and breeding-eligible but permanently invisible.
+pub fn species_belongs_to_habitat(species: jar_protocol::Species, habitat: Habitat) -> bool {
+    match habitat {
+        Habitat::Aquarium => matches!(species, Species::Fish | Species::Snail),
+        Habitat::Terrarium => matches!(species, Species::Gecko),
     }
 }
 
@@ -75,12 +93,40 @@ pub fn population_cap(species: jar_protocol::Species) -> usize {
 mod tests {
     use super::*;
 
-    /// Pins the exact values SPEC.md §5 documents ("10 fish + 4 gecko") —
-    /// both `try_breed` and `add_critter` trust this function for the real
-    /// cap, so a typo here would silently move the cap for both at once.
+    /// Pins the exact values SPEC.md §5 documents ("10 fish + 4 gecko + 5
+    /// snail") — both `try_breed` and `add_critter` trust this function for
+    /// the real cap, so a typo here would silently move the cap for both at
+    /// once.
     #[test]
     fn population_cap_matches_documented_values() {
         assert_eq!(population_cap(jar_protocol::Species::Fish), 10);
         assert_eq!(population_cap(jar_protocol::Species::Gecko), 4);
+        assert_eq!(population_cap(jar_protocol::Species::Snail), 5);
+    }
+
+    #[test]
+    fn species_belongs_to_habitat_matches_the_frontends_curated_menu() {
+        assert!(species_belongs_to_habitat(Species::Fish, Habitat::Aquarium));
+        assert!(species_belongs_to_habitat(
+            Species::Snail,
+            Habitat::Aquarium
+        ));
+        assert!(!species_belongs_to_habitat(
+            Species::Gecko,
+            Habitat::Aquarium
+        ));
+
+        assert!(species_belongs_to_habitat(
+            Species::Gecko,
+            Habitat::Terrarium
+        ));
+        assert!(!species_belongs_to_habitat(
+            Species::Fish,
+            Habitat::Terrarium
+        ));
+        assert!(!species_belongs_to_habitat(
+            Species::Snail,
+            Habitat::Terrarium
+        ));
     }
 }

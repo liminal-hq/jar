@@ -25,7 +25,7 @@ const KNOWN_LABELS = [
   'family-tree',
   'setup',
   'dev-settings',
-  'fish-monitor',
+  'tank-monitor',
   'fish-eye',
 ];
 

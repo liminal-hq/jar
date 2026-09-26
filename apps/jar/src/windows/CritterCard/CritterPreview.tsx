@@ -18,6 +18,7 @@ import * as YUKA from 'yuka';
 
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { FishModel } from '../../render/models/FishModel';
+import { SnailModel } from '../../render/models/SnailModel';
 import { useRenderLoopPolicy } from '../../render/tank/useRenderLoopPolicy';
 
 interface CritterPreviewProps {
@@ -30,9 +31,13 @@ interface CritterPreviewProps {
   passed?: boolean;
 }
 
-/** Gecko/terrarium rendering isn't built yet (`NEXT_STEPS.md`) — `FishModel`
- * is fish-only, so this panel only ever mounts for `critter.species ===
- * 'Fish'` (checked by the caller); nothing here needs a species branch. */
+/** Gecko/terrarium rendering isn't built yet (`NEXT_STEPS.md`) — this panel
+ * only ever mounts for `critter.species === 'Fish' | 'Snail'` (checked by
+ * the caller); the species branch below is the one place that dispatch
+ * happens. `SnailModel` has no steering vehicle of its own to read a speed
+ * from (unlike `FishModel`), so it needs no `idleVehicle` — it always
+ * animates its idle crawl ripple off the clock, the same way a stationary
+ * `idleVehicle` makes `FishModel` read as "gently swimming in place." */
 export function CritterPreview({ critter, passed = false }: CritterPreviewProps) {
   // A stationary vehicle, not a real steering actor — never registered
   // with `entityManager`/`SteeringSystem`, so it never moves and never
@@ -73,7 +78,11 @@ export function CritterPreview({ critter, passed = false }: CritterPreviewProps)
             swapping which critter is selected). A fresh key forces a clean
             remount instead of carrying over the previous critter's tail
             geometry or a frozen mid-swim pose. */}
-        <FishModel key={critter.id} critter={critter} vehicle={idleVehicle} still={passed} />
+        {critter.species === 'Snail' ? (
+          <SnailModel key={critter.id} critter={critter} still={passed} />
+        ) : (
+          <FishModel key={critter.id} critter={critter} vehicle={idleVehicle} still={passed} />
+        )}
         <OrbitControls
           enablePan={false}
           enableZoom={false}

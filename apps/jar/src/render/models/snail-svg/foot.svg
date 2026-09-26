@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Jar snail foot. Faces +X, sole dead-flat on y=70, toe at (96,70), tail tip (-125,70). Head crown ~(100,-8); foot top plateau y=34 is the shell seat. Placeholder fills. -->
+  <path id="foot" fill="#b3a08c" d="M -125 70 C -118 60, -106 50, -88 44 C -60 36, -28 33, 6 34 C 36 35, 56 30, 68 20 C 76 13, 82 4, 90 -3 C 98 -10, 108 -5, 108 8 C 108 26, 105 46, 99 59 C 96 67, 91 70, 83 70 Z"/>
+  <path id="foot-sole" fill="#d8c9b4" d="M 96 64 C 60 57, 0 55, -62 53 C -88 52, -106 58, -118 66 C -120 68, -118 70, -114 70 C -50 70, 20 70, 83 70 C 90 70, 94 68, 96 64 Z"/>
+</svg>

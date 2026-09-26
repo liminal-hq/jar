@@ -8,7 +8,8 @@
 
 use chrono::Timelike;
 use jar_protocol::{
-    Critter, CritterId, DialogTheme, JarSettings, LightColour, SimEvent, Species, TankFrame,
+    Critter, CritterId, DialogTheme, Habitat, JarSettings, LightColour, SimEvent, Species,
+    TankFrame,
 };
 use serde::Deserialize;
 use tauri::ipc::Channel;
@@ -68,9 +69,9 @@ pub fn set_speed(plugin: State<'_, JarPlugin>, speed: u8) -> Result<()> {
 }
 
 #[command]
-pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
+pub fn set_habitat(plugin: State<'_, JarPlugin>, habitat: Habitat) -> Result<()> {
     let settings = with_jar(&plugin, |jar| {
-        jar.settings.mode = mode;
+        jar.settings.habitat = habitat;
         Ok(jar.settings.clone())
     })?;
     push_event(&plugin, SimEvent::SettingsChanged { settings });
@@ -84,6 +85,13 @@ pub fn set_mode(plugin: State<'_, JarPlugin>, mode: Species) -> Result<()> {
 #[command]
 pub fn add_critter(plugin: State<'_, JarPlugin>, species: Species) -> Result<Critter> {
     let critter = with_jar_mut(&plugin, |jar, rng| {
+        // The frontend's own curated menu/Setup buttons never offer a
+        // species the current habitat can't hold (`domain/habitat.ts`'s
+        // `speciesOfHabitat`) — checked here too, since this command is the
+        // one path that isn't scoped by that UI.
+        if !jar_core::state::species_belongs_to_habitat(species, jar.settings.habitat) {
+            return Err(Error::SpeciesNotInHabitat);
+        }
         // `try_breed` (jar-core's tick.rs) already enforces this cap on the
         // breeding path — this is the same cap, checked here too, since an
         // original critter enters the population through this command
@@ -397,7 +405,7 @@ mod tests {
     #[test]
     fn reset_to_defaults_restores_every_field() {
         let mut settings = JarSettings {
-            mode: Species::Gecko,
+            habitat: Habitat::Terrarium,
             frame: TankFrame::NeonCrt,
             dialog_theme: DialogTheme::NeonTerminal,
             theme_variants: BTreeMap::new(),

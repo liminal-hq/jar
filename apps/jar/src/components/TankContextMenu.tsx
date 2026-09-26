@@ -14,7 +14,7 @@ import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 
 import { setDayNightOverride, useDayNightOverride } from '../domain/devSettings';
 import { jar, useJarStore } from '../domain/jarClient';
-import type { JarSettings } from '../domain/protocol/generated/JarSettings';
+import type { Species } from '../domain/protocol/generated/Species';
 import { buildTankMenuModel } from '../domain/tankMenuModel';
 import { pushToast } from '../domain/toastBus';
 import { openSatelliteWindow } from '../domain/windows';
@@ -36,7 +36,7 @@ async function takeScreenshot(): Promise<void> {
   }
 }
 
-async function addCritter(species: JarSettings['mode']): Promise<void> {
+async function addCritter(species: Species): Promise<void> {
   try {
     await jar.addCritter(species);
   } catch (e) {
@@ -63,16 +63,18 @@ export function TankContextMenu({ position, onClose, autoFocusFirstItem }: TankC
     toggleLight: () => void jar.setToggle('light', !settings.light_on),
     toggleAmbient: () => void jar.setToggle('ambientParticles', !settings.ambient_particles_on),
     toggleSound: () => void jar.setToggle('sound', !settings.sound_on),
-    switchMode: () => void jar.setMode(settings.mode === 'Fish' ? 'Gecko' : 'Fish'),
+    switchMode: () =>
+      void jar.setHabitat(settings.habitat === 'Aquarium' ? 'Terrarium' : 'Aquarium'),
     captureScreenshot: () => void takeScreenshot(),
-    addCritter: () => void addCritter(settings.mode),
+    addCritter: (species) => void addCritter(species),
     openFamilyTree: () => void openSatelliteWindow('family-tree'),
-    openFishMonitor: () => void openSatelliteWindow('fish-monitor'),
+    openTankMonitor: () => void openSatelliteWindow('tank-monitor'),
     openFishEye: () => void openSatelliteWindow('fish-eye'),
     toggleAlwaysOnTop: () => void jar.setToggle('alwaysOnTop', !settings.always_on_top),
     setDayNightAuto: () => setDayNightOverride('auto'),
     setDayNightDay: () => setDayNightOverride('day'),
     setDayNightNight: () => setDayNightOverride('night'),
+    setDayNightActive: () => setDayNightOverride('active'),
     openSetup: () => void openSatelliteWindow('setup'),
     openDevSettings: () => void openSatelliteWindow('dev-settings'),
     // The shutdown autosave flush (rust-core.md §5.3) fires from the

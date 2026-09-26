@@ -6,7 +6,7 @@ permissions = [
     "allow-start",
     "allow-stop",
     "allow-set-speed",
-    "allow-set-mode",
+    "allow-set-habitat",
     "allow-add-critter",
     "allow-rename-critter",
     "allow-set-toggle",

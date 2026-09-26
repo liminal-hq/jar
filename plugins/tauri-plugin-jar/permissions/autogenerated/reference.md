@@ -7,7 +7,7 @@ Default permissions for the jar simulation plugin. Grants every command the app 
 - `allow-start`
 - `allow-stop`
 - `allow-set-speed`
-- `allow-set-mode`
+- `allow-set-habitat`
 - `allow-add-critter`
 - `allow-rename-critter`
 - `allow-set-toggle`
@@ -241,6 +241,32 @@ Denies the set_frame command without any pre-configured scope.
 <tr>
 <td>
 
+`jar:allow-set-habitat`
+
+</td>
+<td>
+
+Enables the set_habitat command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`jar:deny-set-habitat`
+
+</td>
+<td>
+
+Denies the set_habitat command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `jar:allow-set-light-colour`
 
 </td>
@@ -286,32 +312,6 @@ Enables the set_light_intensity command without any pre-configured scope.
 <td>
 
 Denies the set_light_intensity command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`jar:allow-set-mode`
-
-</td>
-<td>
-
-Enables the set_mode command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`jar:deny-set-mode`
-
-</td>
-<td>
-
-Denies the set_mode command without any pre-configured scope.
 
 </td>
 </tr>

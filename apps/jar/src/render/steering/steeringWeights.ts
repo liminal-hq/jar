@@ -39,9 +39,9 @@ export const MODE_WEIGHTS: Record<FishMotionMode, ModeWeights> = {
  * the instant night falls or lifts. A sudden full-strength redirect like
  * that fed directly into `FishModel.tsx`'s turn-boosted tail amplitude was
  * the live cause traced for fish visibly "shaking" for a moment right at
- * every settle/wake transition — confirmed via the fish monitor window's
+ * every settle/wake transition — confirmed via the Tank monitor window's
  * peak turn-rate readout spiking exactly then
- * (`windows/FishMonitor/FishMonitorWindow.tsx`). */
+ * (`windows/TankMonitor/TankMonitorWindow.tsx`). */
 export const BEHAVIOUR_WEIGHT_RAMP_RATE = 2;
 
 /** Moves `current` a framerate-independent step toward `target` — the same

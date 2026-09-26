@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import * as YUKA from 'yuka';
 
 import { useDayNightOverride } from '../../domain/devSettings';
+import { isAsleep } from '../../domain/dayNight';
 import { useJarStore } from '../../domain/jarClient';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import type { CritterId } from '../../domain/protocol/generated/CritterId';
@@ -171,12 +172,12 @@ export function Fish({ critter, livingPopulation }: FishProps) {
   // Authoritative — pushed by the sim core on every `TickUpdate`
   // (`jarClient.ts`'s `isNight` store field) rather than re-derived here.
   const simNight = useJarStore((s) => s.isNight);
-  // Dev-only override (`windows/FishMonitor/FishMonitorWindow.tsx`) to pin
-  // day or night on demand rather than wait out a real day/night cycle —
-  // `'auto'` (the real jar clock) in production builds, where the toggle
-  // can't be set.
+  // Dev-only override (`windows/TankMonitor/TankMonitorWindow.tsx`) to pin
+  // day, night, or "always active" on demand rather than wait out a real
+  // day/night cycle — `'auto'` (the real jar clock) in production builds,
+  // where the toggle can't be set.
   const dayNightOverride = useDayNightOverride();
-  const night = dayNightOverride === 'auto' ? simNight : dayNightOverride === 'night';
+  const night = isAsleep('Fish', dayNightOverride, simNight);
   const nightRef = useRef(night);
   const debugAnimRef = useRef<FishDebugAnim | null>(null);
   useEffect(() => {
@@ -456,6 +457,12 @@ export function Fish({ critter, livingPopulation }: FishProps) {
       colliders={false}
       gravityScale={0}
       linearDamping={2.5}
+      // The first `userData` tag in the codebase (`Snail.tsx`'s own
+      // `RigidBody` carries the `snail` counterpart) — lets the snail's
+      // `onCollisionEnter` tell a fish contact apart from anything else it
+      // might touch, for the fish-knocks-a-snail-loose mechanic
+      // (`snailBehaviour.ts`'s `detached` state).
+      userData={{ kind: 'fish', critterId: critter.id }}
       // Rotation is exclusively script-authored (`SteeringSystem.tsx`'s
       // `setRotation` every frame) — locking all three axes here stops
       // wall/fish collisions from injecting spin between those writes.

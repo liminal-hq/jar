@@ -6,9 +6,11 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-import type { MenuModel } from '../components/ContextMenu/types';
+import type { MenuItem, MenuModel } from '../components/ContextMenu/types';
 import type { DayNightOverride } from './devSettings';
+import { defaultSpeciesFor, speciesOfHabitat } from './habitat';
 import type { JarSettings } from './protocol/generated/JarSettings';
+import type { Species } from './protocol/generated/Species';
 
 export interface TankMenuActions {
   toggleLight: () => void;
@@ -16,14 +18,15 @@ export interface TankMenuActions {
   toggleSound: () => void;
   switchMode: () => void;
   captureScreenshot: () => void;
-  addCritter: () => void;
+  addCritter: (species: Species) => void;
   openFamilyTree: () => void;
-  openFishMonitor: () => void;
+  openTankMonitor: () => void;
   openFishEye: () => void;
   toggleAlwaysOnTop: () => void;
   setDayNightAuto: () => void;
   setDayNightDay: () => void;
   setDayNightNight: () => void;
+  setDayNightActive: () => void;
   openSetup: () => void;
   openDevSettings: () => void;
   exit: () => void;
@@ -34,7 +37,28 @@ export function buildTankMenuModel(
   dayNightOverride: DayNightOverride,
   actions: TankMenuActions,
 ): MenuModel {
-  const otherMode = settings.mode === 'Fish' ? 'gecko' : 'fish';
+  const otherMode = settings.habitat === 'Aquarium' ? 'gecko' : 'fish';
+
+  // A flyout only where a habitat actually holds more than one species
+  // (the aquarium — Fish + Snail); the terrarium's single-species Gecko
+  // stays a flat action, matching how it behaved before the snail existed.
+  const habitatSpecies = speciesOfHabitat(settings.habitat);
+  const addCritterItem: MenuItem =
+    habitatSpecies.length > 1
+      ? {
+          id: 'add-critter',
+          label: 'Add a critter',
+          children: habitatSpecies.map((species) => ({
+            id: `add-critter-${species.toLowerCase()}`,
+            label: species,
+            action: () => actions.addCritter(species),
+          })),
+        }
+      : {
+          id: 'add-critter',
+          label: 'Add a critter',
+          action: () => actions.addCritter(defaultSpeciesFor(settings.habitat)),
+        };
 
   return {
     sections: [
@@ -43,7 +67,7 @@ export function buildTankMenuModel(
           { id: 'light', label: 'Light', checked: settings.light_on, action: actions.toggleLight },
           {
             id: 'ambient',
-            label: settings.mode === 'Fish' ? 'Bubbles' : 'Mist',
+            label: settings.habitat === 'Aquarium' ? 'Bubbles' : 'Mist',
             checked: settings.ambient_particles_on,
             action: actions.toggleAmbient,
           },
@@ -75,6 +99,12 @@ export function buildTankMenuModel(
                 checked: dayNightOverride === 'night',
                 action: actions.setDayNightNight,
               },
+              {
+                id: 'day-night-active',
+                label: 'Always active',
+                checked: dayNightOverride === 'active',
+                action: actions.setDayNightActive,
+              },
             ],
           },
         ],
@@ -90,9 +120,9 @@ export function buildTankMenuModel(
         // windows that show you them — not app configuration or tooling,
         // which live in the App section below.
         items: [
-          { id: 'add-critter', label: 'Add a critter', action: actions.addCritter },
+          addCritterItem,
           { id: 'family-tree', label: 'Tree', action: actions.openFamilyTree },
-          { id: 'fish-monitor', label: 'Fish monitor', action: actions.openFishMonitor },
+          { id: 'tank-monitor', label: 'Tank monitor', action: actions.openTankMonitor },
           { id: 'fish-eye', label: 'Fish eye', action: actions.openFishEye },
         ],
       },

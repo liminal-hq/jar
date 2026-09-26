@@ -1,6 +1,6 @@
 // Shared by any window besides the tank that wants to drive the manual
-// fish pilot from its own keyboard — the Fish monitor window
-// (`windows/FishMonitor/FishMonitorWindow.tsx`) and the fish-eye window
+// fish pilot from its own keyboard — the Tank monitor window
+// (`windows/TankMonitor/TankMonitorWindow.tsx`) and the fish-eye window
 // (`windows/FishEye/FishEyeWindow.tsx`) both use this. Forwards key
 // transitions to the tank window (`windows/Tank/PilotCaptureBridge.tsx`)
 // over `domain/pilotInput.ts` rather than mutating

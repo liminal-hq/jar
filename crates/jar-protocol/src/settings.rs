@@ -10,7 +10,17 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::Species;
+/// The tank's habitat kind — distinct from `Species` (`crates/jar-protocol/
+/// src/critter.rs`) since a single habitat can hold more than one species
+/// (the aquarium holds fish and snails; see issue #98). `mode: Species` used
+/// to conflate the two under the assumption that each habitat only ever held
+/// exactly one species — a snail in the aquarium breaks that.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum Habitat {
+    Aquarium,
+    Terrarium,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -57,7 +67,7 @@ pub enum LightColour {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct JarSettings {
-    pub mode: Species, // Fish = aquarium, Gecko = terrarium (SPEC.md §3 W4)
+    pub habitat: Habitat, // Aquarium = fish (+ snail); Terrarium = gecko (SPEC.md §3 W4)
     pub frame: TankFrame,
     pub dialog_theme: DialogTheme,
     /// One remembered variant name per theme (SPEC.md §4's "Variants" table
@@ -139,7 +149,7 @@ pub fn default_theme_variants() -> BTreeMap<DialogTheme, String> {
 impl Default for JarSettings {
     fn default() -> Self {
         Self {
-            mode: Species::Fish,
+            habitat: Habitat::Aquarium,
             frame: TankFrame::Bevelled98,
             dialog_theme: DialogTheme::Modern,
             theme_variants: default_theme_variants(),
@@ -162,7 +172,7 @@ mod tests {
     #[test]
     fn default_settings_match_documented_values() {
         let settings = JarSettings::default();
-        assert_eq!(settings.mode, Species::Fish);
+        assert_eq!(settings.habitat, Habitat::Aquarium);
         assert_eq!(settings.frame, TankFrame::Bevelled98);
         assert_eq!(settings.dialog_theme, DialogTheme::Modern);
         assert_eq!(
@@ -218,7 +228,7 @@ mod tests {
 
         let round_tripped: JarSettings =
             serde_json::from_str(&json).expect("the fixture we just wrote deserializes");
-        assert_eq!(round_tripped.mode, settings.mode);
+        assert_eq!(round_tripped.habitat, settings.habitat);
         assert_eq!(round_tripped.simulation_speed, settings.simulation_speed);
     }
 }

@@ -16,12 +16,13 @@ function makeActions(): TankMenuActions {
     captureScreenshot: vi.fn(),
     addCritter: vi.fn(),
     openFamilyTree: vi.fn(),
-    openFishMonitor: vi.fn(),
+    openTankMonitor: vi.fn(),
     openFishEye: vi.fn(),
     toggleAlwaysOnTop: vi.fn(),
     setDayNightAuto: vi.fn(),
     setDayNightDay: vi.fn(),
     setDayNightNight: vi.fn(),
+    setDayNightActive: vi.fn(),
     openSetup: vi.fn(),
     openDevSettings: vi.fn(),
     exit: vi.fn(),
@@ -55,7 +56,7 @@ describe('buildTankMenuModel', () => {
     expect(items(critters!).map((i) => i.id)).toEqual([
       'add-critter',
       'family-tree',
-      'fish-monitor',
+      'tank-monitor',
       'fish-eye',
     ]);
     expect(items(app!).map((i) => i.id)).toEqual([
@@ -86,14 +87,14 @@ describe('buildTankMenuModel', () => {
 
   it('labels the ambient toggle Bubbles in Fish mode, Mist in Gecko mode', () => {
     const fishModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Fish' },
+      { ...DEFAULT_SETTINGS, habitat: 'Aquarium' },
       'auto',
       makeActions(),
     );
     expect(itemById(fishModel, 'ambient').label).toBe('Bubbles');
 
     const geckoModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Gecko' },
+      { ...DEFAULT_SETTINGS, habitat: 'Terrarium' },
       'auto',
       makeActions(),
     );
@@ -102,14 +103,14 @@ describe('buildTankMenuModel', () => {
 
   it('names the other mode on the mode-switch row', () => {
     const fishModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Fish' },
+      { ...DEFAULT_SETTINGS, habitat: 'Aquarium' },
       'auto',
       makeActions(),
     );
     expect(itemById(fishModel, 'mode').label).toBe('Switch to gecko');
 
     const geckoModel = buildTankMenuModel(
-      { ...DEFAULT_SETTINGS, mode: 'Gecko' },
+      { ...DEFAULT_SETTINGS, habitat: 'Terrarium' },
       'auto',
       makeActions(),
     );
@@ -124,7 +125,7 @@ describe('buildTankMenuModel', () => {
 
     expect(actions.openFishEye).toHaveBeenCalledOnce();
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
-    expect(actions.openFishMonitor).not.toHaveBeenCalled();
+    expect(actions.openTankMonitor).not.toHaveBeenCalled();
     expect(actions.openSetup).not.toHaveBeenCalled();
     expect(actions.openDevSettings).not.toHaveBeenCalled();
     expect(actions.exit).not.toHaveBeenCalled();
@@ -161,17 +162,46 @@ describe('buildTankMenuModel', () => {
     expect(actions.exit).not.toHaveBeenCalled();
   });
 
-  it('wires Add a critter to addCritter and nothing else', () => {
+  it('Add a critter is a Fish/Snail flyout in the aquarium (more than one species)', () => {
     const actions = makeActions();
-    const model = buildTankMenuModel(DEFAULT_SETTINGS, 'auto', actions);
+    const model = buildTankMenuModel({ ...DEFAULT_SETTINGS, habitat: 'Aquarium' }, 'auto', actions);
     const addCritterItem = itemById(model, 'add-critter');
 
     expect(addCritterItem.label).toBe('Add a critter');
+    expect(addCritterItem.action).toBeUndefined();
+    expect(addCritterItem.children?.map((c) => (c as MenuItem).id)).toEqual([
+      'add-critter-fish',
+      'add-critter-snail',
+    ]);
+
+    childById(addCritterItem, 'add-critter-snail').action?.();
+    expect(actions.addCritter).toHaveBeenCalledTimes(1);
+    expect(actions.addCritter).toHaveBeenCalledWith('Snail');
+
+    childById(addCritterItem, 'add-critter-fish').action?.();
+    expect(actions.addCritter).toHaveBeenCalledTimes(2);
+    expect(actions.addCritter).toHaveBeenCalledWith('Fish');
+    expect(actions.openFamilyTree).not.toHaveBeenCalled();
+    expect(actions.captureScreenshot).not.toHaveBeenCalled();
+  });
+
+  it('Add a critter is a flat Gecko action in the terrarium (one species)', () => {
+    const actions = makeActions();
+    const model = buildTankMenuModel(
+      { ...DEFAULT_SETTINGS, habitat: 'Terrarium' },
+      'auto',
+      actions,
+    );
+    const addCritterItem = itemById(model, 'add-critter');
+
+    expect(addCritterItem.label).toBe('Add a critter');
+    expect(addCritterItem.children).toBeUndefined();
     expect(addCritterItem.checked).toBeUndefined();
 
     addCritterItem.action?.();
 
-    expect(actions.addCritter).toHaveBeenCalledOnce();
+    expect(actions.addCritter).toHaveBeenCalledTimes(1);
+    expect(actions.addCritter).toHaveBeenCalledWith('Gecko');
     expect(actions.openFamilyTree).not.toHaveBeenCalled();
     expect(actions.captureScreenshot).not.toHaveBeenCalled();
   });
@@ -187,6 +217,7 @@ describe('buildTankMenuModel', () => {
       'day-night-auto',
       'day-night-day',
       'day-night-night',
+      'day-night-active',
     ]);
   });
 
@@ -196,12 +227,21 @@ describe('buildTankMenuModel', () => {
     expect(childById(autoItem, 'day-night-auto').checked).toBe(true);
     expect(childById(autoItem, 'day-night-day').checked).toBe(false);
     expect(childById(autoItem, 'day-night-night').checked).toBe(false);
+    expect(childById(autoItem, 'day-night-active').checked).toBe(false);
 
     const nightModel = buildTankMenuModel(DEFAULT_SETTINGS, 'night', makeActions());
     const nightItem = itemById(nightModel, 'day-night');
     expect(childById(nightItem, 'day-night-auto').checked).toBe(false);
     expect(childById(nightItem, 'day-night-day').checked).toBe(false);
     expect(childById(nightItem, 'day-night-night').checked).toBe(true);
+    expect(childById(nightItem, 'day-night-active').checked).toBe(false);
+
+    const activeModel = buildTankMenuModel(DEFAULT_SETTINGS, 'active', makeActions());
+    const activeItem = itemById(activeModel, 'day-night');
+    expect(childById(activeItem, 'day-night-auto').checked).toBe(false);
+    expect(childById(activeItem, 'day-night-day').checked).toBe(false);
+    expect(childById(activeItem, 'day-night-night').checked).toBe(false);
+    expect(childById(activeItem, 'day-night-active').checked).toBe(true);
   });
 
   it('wires each Day/night submenu item to its own action and nothing else', () => {
@@ -214,5 +254,9 @@ describe('buildTankMenuModel', () => {
     expect(actions.setDayNightNight).toHaveBeenCalledOnce();
     expect(actions.setDayNightAuto).not.toHaveBeenCalled();
     expect(actions.setDayNightDay).not.toHaveBeenCalled();
+    expect(actions.setDayNightActive).not.toHaveBeenCalled();
+
+    childById(dayNightItem, 'day-night-active').action?.();
+    expect(actions.setDayNightActive).toHaveBeenCalledOnce();
   });
 });

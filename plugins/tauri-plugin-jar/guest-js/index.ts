@@ -28,8 +28,8 @@ export function setSpeed(speed: number): Promise<void> {
   return invoke(`${COMMAND_PREFIX}set_speed`, { speed });
 }
 
-export function setMode(mode: unknown): Promise<void> {
-  return invoke(`${COMMAND_PREFIX}set_mode`, { mode });
+export function setHabitat(habitat: unknown): Promise<void> {
+  return invoke(`${COMMAND_PREFIX}set_habitat`, { habitat });
 }
 
 export function addCritter(species: unknown): Promise<unknown> {

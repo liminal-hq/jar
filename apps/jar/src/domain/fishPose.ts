@@ -1,10 +1,10 @@
 // Cross-window live pose bridge for the fish-eye window
 // (`windows/FishEye/FishEyeWindow.tsx`) — the tank window publishes every
 // fish's world-space position and rendered heading at a much higher rate
-// than `fishDebug.ts`'s 5Hz telemetry (smooth enough to drive a camera,
+// than `critterDebug.ts`'s 5Hz telemetry (smooth enough to drive a camera,
 // too much to also drive a table/map nobody needs updated that often), and
 // the fish-eye window subscribes to render its own scene from it. Plain
-// Tauri app events, same pattern as `fishDebug.ts` — this is debugging/
+// Tauri app events, same pattern as `critterDebug.ts` — this is debugging/
 // tooling state, not simulation state, so it doesn't belong in
 // `jarClient`'s store.
 //

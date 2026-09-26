@@ -167,7 +167,7 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             commands::start,
             commands::stop,
             commands::set_speed,
-            commands::set_mode,
+            commands::set_habitat,
             commands::add_critter,
             commands::rename_critter,
             commands::set_toggle,

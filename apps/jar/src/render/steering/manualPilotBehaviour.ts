@@ -1,5 +1,5 @@
-// Manual keyboard override for one fish's steering, armed from the Fish
-// monitor window (`windows/FishMonitor/FishMonitorWindow.tsx`) — built to
+// Manual keyboard override for one fish's steering, armed from the Tank
+// monitor window (`windows/TankMonitor/TankMonitorWindow.tsx`) — built to
 // force the exact geometry `tankContainmentBehaviour.ts`'s square-on wall
 // stall needs to reproduce on demand, and kept afterward as a small,
 // permanent debug tool in its own right.

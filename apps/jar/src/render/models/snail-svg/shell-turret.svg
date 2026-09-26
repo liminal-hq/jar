@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-170 -110 340 220">
+  <!-- Turret shell: tall curved cone tilted back, rounded tip at (-99,-77) via
+       shell-tip; always shown, the way body-belly rides on body.svg.
+       shell-band-*/shell-spot-* are the Pattern-gene decal paths, gene-toggled
+       by id at load time: Banded shows shell-band-1..4 (one band per whorl),
+       Spotted shows shell-spot-1..4, Solid shows neither. Base on y=40 from
+       x=6 to x=-50. Sealed pose (issue #98): shell drops 30 units so its base
+       (y=40) rests on the contact line (y=70); aperture fit c(3,25) r 7x12
+       rot -12deg; operculum extrudes at shell depth - 6. Placeholder fills. -->
+  <path id="shell" fill="#c97b4a" d="M 12 40 C 17 30, 18 22, 14 14 C 11 8, 3 0, -4 -4 C 1 -7, 2 -13, 0 -18 C -3 -26, -11 -32, -18 -36 C -14 -39, -14 -45, -17 -50 C -20 -56, -27 -60, -33 -62 C -31 -64, -32 -68, -35 -72 C -40 -78, -49 -83, -55 -80 C -61 -77, -61 -70, -57 -65 C -53 -52, -55 -36, -58 -20 C -60 -4, -61 20, -59 40 Z"/>
+  <path id="shell-tip" fill="#8a4a28" d="M -35 -72 C -40 -78, -49 -83, -55 -80 C -61 -77, -61 -70, -57 -65 C -54 -60, -50 -58, -46 -60 C -39 -63, -35 -67, -35 -72 Z"/>
+  <!-- Banded treatment: one thin band per whorl step, crossing the tube at each
+       leading-edge bulge; reconstructed (not verbatim issue source; see PR
+       notes), back-edge x interpolated from the shell silhouette's own back
+       edge vertices. -->
+  <path id="shell-band-1" fill="#7a3f22" d="M 14 10 L -60.8 10 L -60.8 18 L 14 18 Z"/>
+  <path id="shell-band-2" fill="#7a3f22" d="M -4 -8 L -60.0 -8 L -60.0 0 L -4 0 Z"/>
+  <path id="shell-band-3" fill="#7a3f22" d="M 0 -22 L -58.2 -22 L -58.2 -14 L 0 -14 Z"/>
+  <path id="shell-band-4" fill="#7a3f22" d="M -18 -40 L -55.0 -40 L -55.0 -32 L -18 -32 Z"/>
+  <!-- Spotted treatment: dots along the tube midline between whorl steps;
+       reconstructed. -->
+  <circle id="shell-spot-1" fill="#5a3018" cx="-23.7" cy="24" r="5"/>
+  <circle id="shell-spot-2" fill="#5a3018" cx="-30.6" cy="-11" r="5"/>
+  <circle id="shell-spot-3" fill="#5a3018" cx="-32.8" cy="-27" r="5"/>
+  <circle id="shell-spot-4" fill="#5a3018" cx="-39.0" cy="-47" r="5"/>
+  <!-- Sleep/seal: operculum trapdoor over the turret's narrow upright oval mouth. -->
+  <path id="operculum" fill="#8f7a66" d="M 9.8 23.5 C 11.2 30, 9.3 35.9, 5.5 36.7 C 1.7 37.5, -2.5 32.9, -3.8 26.5 C -5.2 20, -3.3 14.1, 0.5 13.3 C 4.3 12.5, 8.5 17.1, 9.8 23.5 Z"/>
+  <path id="operculum-nucleus" fill="#6f5b47" d="M 7.4 29.3 C 8.1 32.5, 7.1 35.5, 5.2 35.9 C 3.4 36.3, 1.3 34, 0.6 30.7 C -0.1 27.5, 0.9 24.5, 2.8 24.1 C 4.6 23.7, 6.7 26, 7.4 29.3 Z"/>
+</svg>

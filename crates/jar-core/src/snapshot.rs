@@ -11,7 +11,8 @@ use std::collections::BTreeMap;
 
 use jar_protocol::{
     default_theme_variants, known_theme_variant_names, Critter, CritterId, DialogTheme,
-    FavouriteSpot, FinType, JarSettings, LightColour, Personality, Sex, Species, TankFrame,
+    FavouriteSpot, FinType, Habitat, JarSettings, LifeStage, LightColour, Pattern, Personality,
+    Sex, ShellType, Species, TankFrame,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -23,7 +24,7 @@ const MAGIC: [u8; 4] = *b"JAR\0";
 
 /// Bump this and add a dated comment below explaining what changed and why,
 /// every time the current snapshot body changes shape.
-const CURRENT_VERSION: u16 = 6;
+const CURRENT_VERSION: u16 = 9;
 
 // v1 (initial): critters + clock + settings, as specified in
 // `docs/architecture/rust-core.md` §3-4. No prior versions to migrate from
@@ -72,6 +73,32 @@ const CURRENT_VERSION: u16 = 6;
 // `SnapshotV5` below are now the frozen pre-v6 shape; `migrate_v5`
 // defaults `bubble_intensity` to `100` for anything saved before this
 // field existed.
+//
+// v7 (2026-09-26): `JarSettings.mode: Species` became `habitat: Habitat`
+// (issue #98) — a tank's habitat and the species living in it stopped being
+// the same thing the moment a second aquarium species (the snail) was
+// planned, so `mode` could no longer name both at once. `SettingsV6`/
+// `SnapshotV6` below are now the frozen pre-v7 shape; `migrate_v6` maps
+// `Species::Fish -> Habitat::Aquarium`, `Species::Gecko -> Habitat::Terrarium`
+// (exhaustive — `Species::Snail` doesn't exist yet at this version).
+//
+// v8 (2026-09-26): `Critter` gained `shell: Option<ShellType>` and
+// `pattern: Option<Pattern>` (issue #98's snail — a snail always has a
+// shell/pattern, fish/gecko keep `None` for now, mirroring `fin`).
+// `CritterV7` above is `Critter`'s shape as it stood from v3 through v7
+// (unchanged across those versions); `migrate_v7` backfills `shell: None,
+// pattern: None` — no pre-v8 critter is a snail, since the species didn't
+// exist yet.
+//
+// v9 (2026-09-26): `Critter.pattern` went from `Option<Pattern>` to a plain
+// `pattern: Pattern`, and `spots: bool` was removed entirely — issue #98's
+// follow-up retired fish's separate boolean gene for the snail's own
+// species-neutral `Pattern` gene, now rolled (species-weighted) for every
+// species. `CritterV8` below is `Critter`'s shape as it stood at v8 (with
+// both `spots` and the optional `pattern`); `migrate_v8` maps fish/gecko
+// `spots: true -> Spotted`, `false -> Solid`, and unwraps a snail's own
+// `pattern` (falling back to `Solid`, never panicking, on the
+// hand-edited-snapshot edge case where it's somehow missing).
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotHeader {
@@ -152,9 +179,36 @@ struct SnapshotV2 {
     settings: SettingsV3,
 }
 
+/// `Critter`'s shape as it stood from v3 (which introduced `life_stage`)
+/// through v7 — see the v8 comment below for why it's frozen now. Not the
+/// live `jar_protocol::Critter`, which has already moved on (gained
+/// `shell`/`pattern`).
+#[derive(Serialize, Deserialize)]
+struct CritterV7 {
+    id: CritterId,
+    species: Species,
+    name: String,
+    hue: u16,
+    fin: Option<FinType>,
+    spots: bool,
+    sex: Sex,
+    personality: Personality,
+    mood: f32,
+    energy: f32,
+    age_sec: f32,
+    life_stage: LifeStage,
+    life: f32,
+    gen: u32,
+    parents: Option<[CritterId; 2]>,
+    alive: bool,
+    born: f64,
+    died: Option<f64>,
+    favourite_spot: FavouriteSpot,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV3 {
-    critters: Vec<Critter>,
+    critters: Vec<CritterV7>,
     sim_seconds: f64,
     speed: u8,
     settings: SettingsV3,
@@ -178,7 +232,7 @@ struct SettingsV4 {
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotV4 {
-    critters: Vec<Critter>,
+    critters: Vec<CritterV7>,
     sim_seconds: f64,
     speed: u8,
     settings: SettingsV4,
@@ -203,14 +257,85 @@ struct SettingsV5 {
 
 #[derive(Serialize, Deserialize)]
 struct SnapshotV5 {
-    critters: Vec<Critter>,
+    critters: Vec<CritterV7>,
     sim_seconds: f64,
     speed: u8,
     settings: SettingsV5,
 }
 
+/// The pre-v7 `JarSettings` shape — see the v7 comment above. Not the live
+/// `jar_protocol::JarSettings`, which has already moved on.
+#[derive(Serialize, Deserialize)]
+struct SettingsV6 {
+    mode: Species,
+    frame: TankFrame,
+    dialog_theme: DialogTheme,
+    theme_variants: BTreeMap<DialogTheme, String>,
+    light_on: bool,
+    light_colour: LightColour,
+    light_intensity: u8,
+    ambient_particles_on: bool,
+    bubble_intensity: u8,
+    sound_on: bool,
+    simulation_speed: u8,
+    always_on_top: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 struct SnapshotV6 {
+    critters: Vec<CritterV7>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: SettingsV6,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV7 {
+    critters: Vec<CritterV7>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: JarSettings,
+}
+
+/// `Critter`'s shape as it stood at v8 (`shell`/`pattern` both just added,
+/// `pattern` still `Option` and `spots` not yet retired) — see the v9
+/// comment above for why it's frozen now. Not the live `jar_protocol::Critter`,
+/// which has already moved on (`spots` removed, `pattern` no longer optional).
+#[derive(Serialize, Deserialize)]
+struct CritterV8 {
+    id: CritterId,
+    species: Species,
+    name: String,
+    hue: u16,
+    fin: Option<FinType>,
+    spots: bool,
+    shell: Option<ShellType>,
+    pattern: Option<Pattern>,
+    sex: Sex,
+    personality: Personality,
+    mood: f32,
+    energy: f32,
+    age_sec: f32,
+    life_stage: LifeStage,
+    life: f32,
+    gen: u32,
+    parents: Option<[CritterId; 2]>,
+    alive: bool,
+    born: f64,
+    died: Option<f64>,
+    favourite_spot: FavouriteSpot,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV8 {
+    critters: Vec<CritterV8>,
+    sim_seconds: f64,
+    speed: u8,
+    settings: JarSettings,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SnapshotV9 {
     critters: Vec<Critter>,
     sim_seconds: f64,
     speed: u8,
@@ -234,7 +359,7 @@ pub fn encode(state: &JarState) -> Result<Vec<u8>, SnapshotError> {
         magic: MAGIC,
         version: CURRENT_VERSION,
     };
-    let body = SnapshotV6 {
+    let body = SnapshotV9 {
         critters: state.critters.clone(),
         sim_seconds: state.clock.sim_seconds,
         speed: state.clock.speed,
@@ -293,7 +418,7 @@ fn migrate_v2(v2: SnapshotV2) -> SnapshotV3 {
         critters: v2
             .critters
             .into_iter()
-            .map(|c| Critter {
+            .map(|c| CritterV7 {
                 id: c.id,
                 species: c.species,
                 name: c.name,
@@ -305,7 +430,7 @@ fn migrate_v2(v2: SnapshotV2) -> SnapshotV3 {
                 mood: c.mood,
                 energy: c.energy,
                 age_sec: c.age_sec,
-                life_stage: crate::tick::life_stage(c.age_sec),
+                life_stage: crate::tick::life_stage(c.species, c.age_sec),
                 life: c.life,
                 gen: c.gen,
                 parents: c.parents,
@@ -375,7 +500,7 @@ fn migrate_v5(v5: SnapshotV5) -> SnapshotV6 {
         critters: v5.critters,
         sim_seconds: v5.sim_seconds,
         speed: v5.speed,
-        settings: JarSettings {
+        settings: SettingsV6 {
             mode: v5.settings.mode,
             frame: v5.settings.frame,
             dialog_theme: v5.settings.dialog_theme,
@@ -392,6 +517,123 @@ fn migrate_v5(v5: SnapshotV5) -> SnapshotV6 {
     }
 }
 
+/// Maps `Species::Fish -> Habitat::Aquarium`, `Species::Gecko ->
+/// Habitat::Terrarium` — no real v6 snapshot's `mode` is ever
+/// `Species::Snail` (that variant didn't exist yet when v6 was current), but
+/// the live `Species` type now has three variants, so the match must still
+/// cover it; a snail's own habitat is the aquarium, so it maps there too.
+fn migrate_v6(v6: SnapshotV6) -> SnapshotV7 {
+    SnapshotV7 {
+        critters: v6.critters,
+        sim_seconds: v6.sim_seconds,
+        speed: v6.speed,
+        settings: JarSettings {
+            habitat: match v6.settings.mode {
+                Species::Fish => Habitat::Aquarium,
+                Species::Gecko => Habitat::Terrarium,
+                Species::Snail => Habitat::Aquarium,
+            },
+            frame: v6.settings.frame,
+            dialog_theme: v6.settings.dialog_theme,
+            theme_variants: v6.settings.theme_variants,
+            light_on: v6.settings.light_on,
+            light_colour: v6.settings.light_colour,
+            light_intensity: v6.settings.light_intensity,
+            ambient_particles_on: v6.settings.ambient_particles_on,
+            bubble_intensity: v6.settings.bubble_intensity,
+            sound_on: v6.settings.sound_on,
+            simulation_speed: v6.settings.simulation_speed,
+            always_on_top: v6.settings.always_on_top,
+        },
+    }
+}
+
+/// Backfills `shell: None, pattern: None` on every critter — no pre-v8
+/// critter is a snail (the species didn't exist yet at this snapshot
+/// version), so both are honestly `None` here.
+fn migrate_v7(v7: SnapshotV7) -> SnapshotV8 {
+    SnapshotV8 {
+        critters: v7
+            .critters
+            .into_iter()
+            .map(|c| CritterV8 {
+                id: c.id,
+                species: c.species,
+                name: c.name,
+                hue: c.hue,
+                fin: c.fin,
+                spots: c.spots,
+                shell: None,
+                pattern: None,
+                sex: c.sex,
+                personality: c.personality,
+                mood: c.mood,
+                energy: c.energy,
+                age_sec: c.age_sec,
+                life_stage: c.life_stage,
+                life: c.life,
+                gen: c.gen,
+                parents: c.parents,
+                alive: c.alive,
+                born: c.born,
+                died: c.died,
+                favourite_spot: c.favourite_spot,
+            })
+            .collect(),
+        sim_seconds: v7.sim_seconds,
+        speed: v7.speed,
+        settings: v7.settings,
+    }
+}
+
+/// Maps fish/gecko's retired boolean `spots` onto the shared `Pattern` gene
+/// (`true -> Spotted`, `false -> Solid`) and unwraps a snail's own `pattern`
+/// — falling back to `Solid` rather than panicking on the hand-edited/
+/// corrupt-snapshot edge case where a v8 snail somehow lacks one (every real
+/// v8 snail always had `Some`, per `genetics::roll_original`/`roll_child`).
+fn migrate_v8(v8: SnapshotV8) -> SnapshotV9 {
+    SnapshotV9 {
+        critters: v8
+            .critters
+            .into_iter()
+            .map(|c| Critter {
+                id: c.id,
+                species: c.species,
+                name: c.name,
+                hue: c.hue,
+                fin: c.fin,
+                shell: c.shell,
+                pattern: match c.species {
+                    Species::Snail => c.pattern.unwrap_or(Pattern::Solid),
+                    Species::Fish | Species::Gecko => {
+                        if c.spots {
+                            Pattern::Spotted
+                        } else {
+                            Pattern::Solid
+                        }
+                    }
+                },
+                sex: c.sex,
+                personality: c.personality,
+                mood: c.mood,
+                energy: c.energy,
+                age_sec: c.age_sec,
+                life_stage: c.life_stage,
+                life: c.life,
+                gen: c.gen,
+                parents: c.parents,
+                alive: c.alive,
+                born: c.born,
+                died: c.died,
+                favourite_spot: c.favourite_spot,
+            })
+            .collect(),
+        sim_seconds: v8.sim_seconds,
+        speed: v8.speed,
+        settings: v8.settings,
+    }
+}
+
 pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
     let (header, rest): (SnapshotHeader, &[u8]) =
         postcard::take_from_bytes(bytes).map_err(SnapshotError::Decode)?;
@@ -399,28 +641,46 @@ pub fn decode(bytes: &[u8]) -> Result<JarState, SnapshotError> {
         return Err(SnapshotError::BadMagic);
     }
 
-    let body: SnapshotV6 = match header.version {
+    let body: SnapshotV9 = match header.version {
         1 => {
             let v1: SnapshotV1 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(migrate_v3(migrate_v2(migrate_v1(v1)))))
+            migrate_v8(migrate_v7(migrate_v6(migrate_v5(migrate_v4(migrate_v3(
+                migrate_v2(migrate_v1(v1)),
+            ))))))
         }
         2 => {
             let v2: SnapshotV2 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(migrate_v3(migrate_v2(v2))))
+            migrate_v8(migrate_v7(migrate_v6(migrate_v5(migrate_v4(migrate_v3(
+                migrate_v2(v2),
+            ))))))
         }
         3 => {
             let v3: SnapshotV3 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(migrate_v3(v3)))
+            migrate_v8(migrate_v7(migrate_v6(migrate_v5(migrate_v4(migrate_v3(
+                v3,
+            ))))))
         }
         4 => {
             let v4: SnapshotV4 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(migrate_v4(v4))
+            migrate_v8(migrate_v7(migrate_v6(migrate_v5(migrate_v4(v4)))))
         }
         5 => {
             let v5: SnapshotV5 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
-            migrate_v5(v5)
+            migrate_v8(migrate_v7(migrate_v6(migrate_v5(v5))))
         }
-        6 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
+        6 => {
+            let v6: SnapshotV6 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v8(migrate_v7(migrate_v6(v6)))
+        }
+        7 => {
+            let v7: SnapshotV7 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v8(migrate_v7(v7))
+        }
+        8 => {
+            let v8: SnapshotV8 = postcard::from_bytes(rest).map_err(SnapshotError::Decode)?;
+            migrate_v8(v8)
+        }
+        9 => postcard::from_bytes(rest).map_err(SnapshotError::Decode)?,
         other => return Err(SnapshotError::UnsupportedVersion(other)),
     };
 
@@ -665,7 +925,7 @@ mod tests {
         assert_eq!(restored.settings.light_colour, LightColour::Daylight);
         assert_eq!(restored.settings.light_intensity, 100);
         // The rest of v2's settings and the clock carry over too.
-        assert_eq!(restored.settings.mode, Species::Gecko);
+        assert_eq!(restored.settings.habitat, Habitat::Terrarium);
         assert_eq!(restored.settings.frame, TankFrame::RoundedGlass);
         assert_eq!(restored.settings.simulation_speed, 10);
         assert_eq!(restored.clock.sim_seconds, 7.0);
@@ -746,5 +1006,216 @@ mod tests {
         assert_eq!(restored.settings.simulation_speed, 30);
         assert_eq!(restored.clock.sim_seconds, 8.0);
         assert_eq!(restored.clock.speed, 6);
+    }
+
+    #[test]
+    fn decode_migrates_a_v7_snapshot_through_shell_pattern_and_spots_retirement() {
+        // A v7 critter has no `shell`/`pattern` fields at all (the snail
+        // species — the only one that ever has them — didn't exist yet), and
+        // still carries the boolean `spots` (not yet retired) — decode chains
+        // all the way to the current version, so this exercises both the v8
+        // backfill (`shell: None, pattern: None`) and the v9 retirement
+        // (`spots: true -> pattern: Spotted`) in one pass.
+        let fish = CritterV7 {
+            id: CritterId(1),
+            species: Species::Fish,
+            name: "Pickle".to_string(),
+            hue: 200,
+            fin: Some(FinType::Veil),
+            spots: true,
+            sex: Sex::Male,
+            personality: Personality::Bold,
+            mood: 70.0,
+            energy: 80.0,
+            age_sec: 700.0,
+            life_stage: jar_protocol::LifeStage::Adult,
+            life: 3000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 50.0,
+                y: 50.0,
+                z: 50.0,
+            },
+        };
+        let v7 = SnapshotV7 {
+            critters: vec![fish],
+            sim_seconds: 700.0,
+            speed: 1,
+            settings: JarSettings::default(),
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 7,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v7).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        assert_eq!(restored.critters.len(), 1);
+        assert_eq!(restored.critters[0].shell, None);
+        assert_eq!(restored.critters[0].pattern, Pattern::Spotted);
+        // Everything else carried across untouched.
+        assert_eq!(restored.critters[0].name, "Pickle");
+        assert_eq!(
+            restored.critters[0].life_stage,
+            jar_protocol::LifeStage::Adult
+        );
+    }
+
+    #[test]
+    fn decode_migrates_a_v8_snapshot_mapping_spots_onto_pattern() {
+        let spotted_fish = CritterV8 {
+            id: CritterId(1),
+            species: Species::Fish,
+            name: "Pickle".to_string(),
+            hue: 200,
+            fin: Some(FinType::Veil),
+            spots: true,
+            shell: None,
+            pattern: None,
+            sex: Sex::Male,
+            personality: Personality::Bold,
+            mood: 70.0,
+            energy: 80.0,
+            age_sec: 700.0,
+            life_stage: jar_protocol::LifeStage::Adult,
+            life: 3000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 50.0,
+                y: 50.0,
+                z: 50.0,
+            },
+        };
+        let plain_gecko = CritterV8 {
+            id: CritterId(2),
+            species: Species::Gecko,
+            name: "Sprocket".to_string(),
+            hue: 42,
+            fin: None,
+            spots: false,
+            shell: None,
+            pattern: None,
+            sex: Sex::Female,
+            personality: Personality::Shy,
+            mood: 60.0,
+            energy: 90.0,
+            age_sec: 500.0,
+            life_stage: jar_protocol::LifeStage::Adult,
+            life: 3000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 10.0,
+                y: 10.0,
+                z: 10.0,
+            },
+        };
+        // A snail's own `pattern` (already `Some` in every real v8 save)
+        // carries straight through, unaffected by the `spots` mapping.
+        let banded_snail = CritterV8 {
+            id: CritterId(3),
+            species: Species::Snail,
+            name: "Gary".to_string(),
+            hue: 90,
+            fin: None,
+            spots: false,
+            shell: Some(jar_protocol::ShellType::Turret),
+            pattern: Some(Pattern::Banded),
+            sex: Sex::Male,
+            personality: Personality::Curious,
+            mood: 66.0,
+            energy: 100.0,
+            age_sec: 100.0,
+            life_stage: jar_protocol::LifeStage::Juvenile,
+            life: 6000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 5.0,
+                y: 5.0,
+                z: 5.0,
+            },
+        };
+        let v8 = SnapshotV8 {
+            critters: vec![spotted_fish, plain_gecko, banded_snail],
+            sim_seconds: 700.0,
+            speed: 1,
+            settings: JarSettings::default(),
+        };
+        let header = SnapshotHeader {
+            magic: MAGIC,
+            version: 8,
+        };
+        let mut bytes = postcard::to_allocvec(&header).unwrap();
+        bytes.extend(postcard::to_allocvec(&v8).unwrap());
+
+        let restored = decode(&bytes).unwrap();
+
+        assert_eq!(restored.critters.len(), 3);
+        assert_eq!(restored.critters[0].pattern, Pattern::Spotted);
+        assert_eq!(restored.critters[1].pattern, Pattern::Solid);
+        assert_eq!(restored.critters[2].pattern, Pattern::Banded);
+        assert_eq!(
+            restored.critters[2].shell,
+            Some(jar_protocol::ShellType::Turret)
+        );
+    }
+
+    #[test]
+    fn migrate_v8_falls_back_to_solid_for_a_snail_with_no_pattern() {
+        // Every real v8 snail always has `Some` here — this only covers the
+        // hand-edited/corrupt-snapshot edge case, which must fall back
+        // honestly rather than panic.
+        let snail_with_no_pattern = CritterV8 {
+            id: CritterId(1),
+            species: Species::Snail,
+            name: "Gary".to_string(),
+            hue: 90,
+            fin: None,
+            spots: false,
+            shell: Some(jar_protocol::ShellType::Coil),
+            pattern: None,
+            sex: Sex::Male,
+            personality: Personality::Curious,
+            mood: 66.0,
+            energy: 100.0,
+            age_sec: 100.0,
+            life_stage: jar_protocol::LifeStage::Juvenile,
+            life: 6000.0,
+            gen: 1,
+            parents: None,
+            alive: true,
+            born: 0.0,
+            died: None,
+            favourite_spot: FavouriteSpot {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        };
+        let v9 = migrate_v8(SnapshotV8 {
+            critters: vec![snail_with_no_pattern],
+            sim_seconds: 0.0,
+            speed: 1,
+            settings: JarSettings::default(),
+        });
+
+        assert_eq!(v9.critters[0].pattern, Pattern::Solid);
     }
 }

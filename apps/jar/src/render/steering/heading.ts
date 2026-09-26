@@ -28,7 +28,7 @@ import * as THREE from 'three';
  * around a single boundary for a while rather than crossing it once
  * cleanly. With one threshold, every crossing re-commits a fresh (and, at
  * that speed, essentially noise-dominated) yaw — this is what live testing
- * against the fish monitor (`windows/FishMonitor/FishMonitorWindow.tsx`)
+ * against the Tank monitor (`windows/TankMonitor/TankMonitorWindow.tsx`)
  * confirmed reads as fish visibly stuttering right around night
  * settle/wake, the two transitions where a whole tank's worth of fish pass
  * through this exact low-speed band together. Requiring a climb back above
