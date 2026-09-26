@@ -73,6 +73,29 @@ interface SnailModelProps {
    * transform itself. `CritterPreview.tsx`'s undriven usage simply omits
    * this, leaving every bone at its rest (identity) transform. */
   onBonesReady?: (bones: THREE.Bone[]) => void;
+  /** A live, mutated-every-frame handoff of the crawl gait — a real ref
+   * object, not a value, for the same reason `onBonesReady` uses one: a
+   * controller (`Snail.tsx`) updates this every frame without triggering a
+   * React re-render, and this component reads `.current` fresh inside its
+   * own `useFrame` rather than relying on a prop value that would only ever
+   * update on this component's own (rare) re-renders. `phase` couples the
+   * foot ripple to the same clock driving the crawl's own speed pulse and
+   * the spine's arc-length sampling, so all three read as one gait rather
+   * than independent animations; `stretch` drives the whole foot assembly's
+   * squash-and-stretch. Omitted (or its `.current` left at the default) for
+   * `CritterPreview.tsx`'s undriven usage, which has no real gait to share —
+   * the ripple falls back to a plain wall-clock oscillation and the body
+   * stays unstretched. */
+  gaitRef?: { current: SnailGait };
+}
+
+/** `phase` in the same units `footRippleShader.ts`'s own phase argument
+ * expects (radians, growing over time/distance); `stretch` a signed
+ * fraction (`0` = neutral, positive = stretched along the direction of
+ * travel, negative = squashed). */
+export interface SnailGait {
+  phase: number;
+  stretch: number;
 }
 
 /** Eyestalk sway — independent per stalk (its own phase offset) so the pair
@@ -150,6 +173,7 @@ export function SnailModel({
   tuckProgress = 0,
   tuckMode = 'sleep',
   onBonesReady,
+  gaitRef,
 }: SnailModelProps) {
   const footGroupRef = useRef<THREE.Group>(null);
   const footMeshRef = useRef<THREE.SkinnedMesh>(null);
@@ -395,16 +419,39 @@ export function SnailModel({
     }
 
     if (footGroupRef.current) {
-      footGroupRef.current.scale.setScalar(1 - pose.footWithdraw * FOOT_WITHDRAW_SCALE);
+      const withdrawScale = 1 - pose.footWithdraw * FOOT_WITHDRAW_SCALE;
+      // Squash-and-stretch (issue #112) rides this same group, on top of
+      // the existing withdrawal scale, rather than any individual bone —
+      // every bone in the chain is a *child* of the previous one, so a
+      // per-bone scale would compound down the chain (bone 3 ending up
+      // stretched by `stretch^3`); this group is a single ancestor of the
+      // whole assembly, so its scale only ever applies once. The model is
+      // authored facing local `+X` (this group has no rotation of its own
+      // to remap that), so `+X` is the stretch axis; `y`/`z` take the full
+      // inverse (not the physically-correct square root) for an
+      // exaggerated "plump" rather than a subtle one, matching this
+      // project's stated preference for exaggeration over accuracy.
+      const stretchFactor = 1 + (gaitRef?.current.stretch ?? 0);
+      footGroupRef.current.scale.set(
+        withdrawScale * stretchFactor,
+        withdrawScale / stretchFactor,
+        withdrawScale / stretchFactor,
+      );
     }
 
     if (shellGroupRef.current) {
       shellGroupRef.current.position.y = -SHELL_SEALED_DROP * pose.shellSettle;
     }
 
+    // `gaitRef`'s own phase already only advances while genuinely crawling
+    // (`Snail.tsx` owns that gate) — falling back to a plain wall-clock
+    // oscillation when undriven (`CritterPreview.tsx`) keeps that panel's
+    // idle "gently crawling in place" read, the same role a stationary
+    // Yuka vehicle plays for `FishModel`'s own idle swim.
+    const ripplePhase = (gaitRef ? gaitRef.current.phase : t * FOOT_RIPPLE_SPEED) + phaseSeed;
     setFootRippleUniforms(
       rippleUniforms,
-      t * FOOT_RIPPLE_SPEED + phaseSeed,
+      ripplePhase,
       FOOT_RIPPLE_AMPLITUDE * (1 - pose.footWithdraw),
     );
 
