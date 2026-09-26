@@ -39,7 +39,9 @@ import { lifeStageScale } from '../../domain/simConstants';
 import {
   advance,
   dropToFloor,
+  FILLET_RADIUS,
   poseToWorld,
+  poseToWorldRounded,
   randomFloorPose,
   turn,
   type CrawlFrame,
@@ -72,20 +74,6 @@ const CRAWL_SPEED = 0.12;
  * Yuka-free stand-in for a fish's wander-circle behaviour. Tune by eye. */
 const HEADING_BIAS_JITTER = 0.6;
 const MAX_HEADING_BIAS = 0.8;
-
-/** Framerate-independent slerp rate toward the crawl pose's own
- * orientation — `SteeringSystem.tsx`'s fish-heading pattern
- * (`1 - Math.exp(-rate * delta)`) at a snail's pace. A ~0.4s time constant,
- * so crossing a fold in `crawlSurfaces.ts` (floor onto a wall, wall onto a
- * castle face) bends over about a second instead of flipping in one frame.
- * Deliberately far below the fish's `6`: pitching a whole body onto a new
- * surface is a much larger event than a fish trimming its heading
- * mid-swim, and the project's exaggeration bias wants that visibly gooey.
- * The lower bound on the rate is ordinary wandering, where the smoothing
- * lags a sustained heading drift by roughly `MAX_HEADING_BIAS / rate`
- * radians — much slower than this and a wandering snail stops reading as
- * bending into its turns and starts reading as crabbing sideways. */
-const ORIENTATION_SLERP_RATE = 2.5;
 
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
@@ -162,7 +150,7 @@ export function Snail({ critter }: SnailProps) {
   // lives in a ref rather than React state (same rationale as `Fish.tsx`'s
   // `currentHeadingRef`).
   const poseRef = useRef<CrawlPose>(randomFloorPose(Math.random));
-  const initialFrame = poseToWorld(poseRef.current);
+  const initialFrame = poseToWorldRounded(poseRef.current, FILLET_RADIUS);
   const positionRef = useRef<THREE.Vector3>(rootPositionFromFrame(initialFrame, scale));
   const quaternionRef = useRef<THREE.Quaternion>(quaternionFromFrame(initialFrame));
 
@@ -248,23 +236,21 @@ export function Snail({ critter }: SnailProps) {
         );
       }
 
-      // Orientation eases toward the pose rather than snapping onto it, so
-      // a fold crossing bends instead of blipping. Position deliberately
-      // does not: it's always lifted along the *current face's own* up
-      // (`rootPositionFromFrame`'s `frame.up`), never the still-easing
-      // quaternion's — lifting along a lagging orientation was tried first
-      // and looks worse than either alternative: right after crossing a
-      // fold, the eased "up" is still pointing along the *previous* face's
-      // normal, so the lift barely clears the new surface at all, and the
-      // root sinks toward (or through) it until the slow rotation catches
-      // up. Anchoring position to the true, always-correct normal instead
-      // means the root never leaves the surface it's actually standing on;
-      // the body just visibly swings around that fixed anchor as its own
-      // rotation eases in, which reads as the bend, not the floor clipping
-      // through the model.
-      const frame = poseToWorld(poseRef.current);
-      const slerpFactor = 1 - Math.exp(-ORIENTATION_SLERP_RATE * delta);
-      quaternionRef.current.slerp(quaternionFromFrame(frame), slerpFactor);
+      // Both position and orientation come from the same continuous,
+      // `FILLET_RADIUS`-rounded frame (`poseToWorldRounded`) now, rather
+      // than the mismatched pair this used to derive them from (the exact
+      // per-face normal for position, a time-eased quaternion for
+      // orientation) — that mismatch, not the easing rate, was the real
+      // cause of a fold crossing either blipping or (when position was
+      // eased instead) sinking into the new surface right after a
+      // crossing. `poseToWorldRounded` keeps `position` exactly on the
+      // true, sharp-cornered surface (rounding only ever applies to the
+      // frame's `up`/`forward`/`right`), so there's nothing left to ease
+      // over time — the bend now happens continuously over the crawler's
+      // own travel distance near a crease, matching whatever `FILLET_RADIUS`
+      // says a crease's rounding should span.
+      const frame = poseToWorldRounded(poseRef.current, FILLET_RADIUS);
+      quaternionRef.current.copy(quaternionFromFrame(frame));
       positionRef.current.copy(rootPositionFromFrame(frame, scale));
     }
 

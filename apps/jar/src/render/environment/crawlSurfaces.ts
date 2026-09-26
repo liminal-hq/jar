@@ -38,6 +38,16 @@
 // reaching a side face's left/right edge bounces rather than wrapping
 // around the box) — out of scope for v1, per the plan.
 //
+// `roundedNormalAt`/`poseToWorldRounded` give a *continuous* frame near a
+// crease, on top of the instantaneous-fold model above: a face's normal
+// blends toward a linked neighbour's within `FILLET_RADIUS` of the shared
+// edge (exact everywhere else), so a caller deriving both position and
+// orientation from the same rounded frame gets a fold that visibly bends
+// rather than snapping — see those functions' own doc comments for the
+// exact blend and its continuity properties. `advance()`/`poseToWorld()`
+// above are untouched and still describe the crawler's true, sharp-cornered
+// position; only the *frame* used to orient a rendered body is rounded.
+//
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
@@ -464,21 +474,52 @@ interface BoundaryCandidate {
   v2: number;
   axis: 'u' | 'v';
   link: FaceLink | null;
+  /** The neighbouring face's own normal, for a linked candidate — cached
+   * here (rather than re-resolved per lookup) since `roundedNormalAt` reads
+   * it on every call. `null` for an unlinked boundary (a wall's top, or a
+   * castle side's un-linked left/right edge), which is exactly what tells
+   * `roundedNormalAt` there's nothing to blend toward there. */
+  neighborNormal: Vec3 | null;
 }
 
 function buildBoundaries(face: CrawlFace): BoundaryCandidate[] {
   const candidates: BoundaryCandidate[] = [
-    { u1: 0, v1: 0, u2: face.uLength, v2: 0, axis: 'v', link: null },
-    { u1: 0, v1: face.vLength, u2: face.uLength, v2: face.vLength, axis: 'v', link: null },
-    { u1: 0, v1: 0, u2: 0, v2: face.vLength, axis: 'u', link: null },
-    { u1: face.uLength, v1: 0, u2: face.uLength, v2: face.vLength, axis: 'u', link: null },
+    { u1: 0, v1: 0, u2: face.uLength, v2: 0, axis: 'v', link: null, neighborNormal: null },
+    {
+      u1: 0,
+      v1: face.vLength,
+      u2: face.uLength,
+      v2: face.vLength,
+      axis: 'v',
+      link: null,
+      neighborNormal: null,
+    },
+    { u1: 0, v1: 0, u2: 0, v2: face.vLength, axis: 'u', link: null, neighborNormal: null },
+    {
+      u1: face.uLength,
+      v1: 0,
+      u2: face.uLength,
+      v2: face.vLength,
+      axis: 'u',
+      link: null,
+      neighborNormal: null,
+    },
   ];
   for (const link of CRAWL_LINKS) {
     if (link.faceA !== face.id && link.faceB !== face.id) continue;
     const p1 = projectPointToFace(face, link.edgeStart);
     const p2 = projectPointToFace(face, link.edgeEnd);
     const isVertical = Math.abs(p1.u - p2.u) < 1e-6;
-    candidates.push({ u1: p1.u, v1: p1.v, u2: p2.u, v2: p2.v, axis: isVertical ? 'u' : 'v', link });
+    const neighborId = link.faceA === face.id ? link.faceB : link.faceA;
+    candidates.push({
+      u1: p1.u,
+      v1: p1.v,
+      u2: p2.u,
+      v2: p2.v,
+      axis: isVertical ? 'u' : 'v',
+      link,
+      neighborNormal: FACE_MAP.get(neighborId)?.normal ?? null,
+    });
   }
   return candidates;
 }
@@ -682,6 +723,105 @@ export function poseToWorld(pose: CrawlPose): CrawlFrame {
   );
   const up = face.normal;
   const right = normalize(cross(forward, up));
+  return { position, forward, up, right };
+}
+
+// --- Continuous (rounded) frame near a crease --------------------------------
+
+/** World-space distance a crease's rounding reaches on either side — the
+ * frame blends fully to the bisector at the crease itself and is exactly
+ * the face's own normal by `FILLET_RADIUS` away from it. One module-level
+ * constant, not per-face/per-consumer: every crease in this tank is the
+ * same kind of fold (two flat faces at a fixed dihedral angle), so there's
+ * no reason yet for one to round differently from another. Tune by eye —
+ * this needs to be small enough that ordinary floor/wall crawling reads as
+ * "on a flat surface" almost everywhere, and large enough that a fold
+ * crossing takes a visually legible fraction of a second at crawl speed to
+ * complete. */
+export const FILLET_RADIUS = 0.08;
+
+/** Cubic smoothstep on `[0, 1]`, clamping first — `THREE.MathUtils
+ * .smoothstep`'s own curve, reimplemented here since this module stays
+ * three.js-free (see header). Zero slope at both ends is what makes
+ * `roundedNormalAt`'s blend weight meet `0` at `d = FILLET_RADIUS` with no
+ * kink, not just no jump. */
+function smoothstep01(t: number): number {
+  const c = clamp(t, 0, 1);
+  return c * c * (3 - 2 * c);
+}
+
+/** Shortest distance from `(u, v)` to `seg`, treating it as a genuine
+ * segment (clamped to its own span) rather than an infinite line — this is
+ * what keeps a castle side's floor-base strip from rounding a point well
+ * past where that strip actually ends. */
+function pointToSegmentDistance(u: number, v: number, seg: BoundaryCandidate): number {
+  if (seg.axis === 'u') {
+    const vClamped = clamp(v, Math.min(seg.v1, seg.v2), Math.max(seg.v1, seg.v2));
+    return Math.hypot(u - seg.u1, v - vClamped);
+  }
+  const uClamped = clamp(u, Math.min(seg.u1, seg.u2), Math.max(seg.u1, seg.u2));
+  return Math.hypot(u - uClamped, v - seg.v1);
+}
+
+/** The face's normal, blended toward each nearby linked neighbour's within
+ * `filletRadius` of the shared crease, weighted by distance-to-crease and
+ * summed (superposing correctly where two creases are close together, e.g.
+ * a corner where three faces meet). Exactly `face.normal` by `filletRadius`
+ * away from every crease; exactly the bisector `normalize(nFace + nNeighbor)`
+ * at the crease itself (both sides' weight is `0.5` at `d = 0`, so the
+ * face's own contribution cancels to a flat `0.5` mix); continuous *and*
+ * differentiable across the crease (`smoothstep01`'s zero endpoint slope),
+ * so a caller deriving position and orientation from this — not from
+ * `poseToWorld`'s flat per-face normal — gets no jump and no kink crossing
+ * a fold. An unlinked boundary (no `neighborNormal`) contributes nothing,
+ * by construction. */
+export function roundedNormalAt(faceId: string, u: number, v: number, filletRadius: number): Vec3 {
+  const face = requireFace(faceId);
+  if (filletRadius <= 0) return face.normal;
+
+  let blended = face.normal;
+  for (const candidate of BOUNDARIES.get(faceId) ?? []) {
+    if (!candidate.neighborNormal) continue;
+    const d = pointToSegmentDistance(u, v, candidate);
+    if (d >= filletRadius) continue;
+    const weight = 0.5 * (1 - smoothstep01(d / filletRadius));
+    blended = add(blended, scale(sub(candidate.neighborNormal, face.normal), weight));
+  }
+  return normalize(blended);
+}
+
+/** Re-derives (`forward`, `right`) so `forward` stays as close as possible
+ * to `primary` while lying exactly in the plane perpendicular to `up`
+ * (Gram-Schmidt) — what lets `poseToWorldRounded` keep a pose's in-plane
+ * heading direction meaningful once `up` itself has been tilted by
+ * `roundedNormalAt`. Falls back to `primary` unrotated in the (never
+ * expected in this tank's all-axis-aligned geometry) degenerate case where
+ * `primary` is nearly parallel to `up` — better than propagating a
+ * zero-length vector into `quaternionFromFrame`'s own basis construction. */
+function reorthonormalize(primary: Vec3, up: Vec3): { forward: Vec3; right: Vec3 } {
+  const rejected = sub(primary, scale(up, dot(primary, up)));
+  const rejectedLength = length(rejected);
+  const forward = rejectedLength > 1e-6 ? scale(rejected, 1 / rejectedLength) : primary;
+  return { forward, right: normalize(cross(forward, up)) };
+}
+
+/** Like `poseToWorld`, except `up` (and so `forward`/`right`) comes from
+ * `roundedNormalAt` instead of the pose's own face's flat normal —
+ * `position` is deliberately untouched, still the exact, sharp-cornered
+ * point `poseToWorld` would give: rounding *where* a body sits would let it
+ * sink into (or float clear of) a real surface right after a fold crossing,
+ * while rounding only the *frame* it's oriented against means the body
+ * always sits exactly on a real surface and simply swings its orientation
+ * smoothly as that surface's effective normal tilts near a crease. */
+export function poseToWorldRounded(pose: CrawlPose, filletRadius: number): CrawlFrame {
+  const face = requireFace(pose.faceId);
+  const position = facePoint(face, pose.u, pose.v);
+  const up = roundedNormalAt(pose.faceId, pose.u, pose.v, filletRadius);
+  const planarForward = add(
+    scale(face.uAxis, Math.cos(pose.heading)),
+    scale(face.vAxis, Math.sin(pose.heading)),
+  );
+  const { forward, right } = reorthonormalize(planarForward, up);
   return { position, forward, up, right };
 }
 
