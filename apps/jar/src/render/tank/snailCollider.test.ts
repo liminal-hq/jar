@@ -14,9 +14,10 @@ import type { ShellType } from '../../domain/protocol/generated/ShellType';
 import { lifeStageScale } from '../../domain/simConstants';
 import {
   FOOT_DEPTH,
-  FOOT_TAIL_TIP_X,
   SHELL_APEX_HEIGHT_ABOVE_SOLE,
   SHELL_EXTRUSION_DEPTH,
+  SHELL_HALF_LENGTH_ABOUT_SEAT,
+  SHELL_SEAT_X,
   SNAIL_BODY_SCALE,
   SOLE_Y,
   SVG_SCALE,
@@ -56,10 +57,17 @@ function makeCritter(shell: ShellType, lifeStage: LifeStage): Critter {
 const SHELL_TYPES: ShellType[] = ['Coil', 'Ramshorn', 'Turret'];
 
 describe('snailColliderHalfExtentsFor', () => {
-  it('sizes halfLength from the foot tail-tip extent, scaled by SVG_SCALE, for every shell', () => {
+  it('sizes halfLength from the shell`s own half-length about its seat, per shell', () => {
     for (const shell of SHELL_TYPES) {
       const he = snailColliderHalfExtentsFor(makeCritter(shell, 'Adult'));
-      expect(he.z).toBeCloseTo(Math.abs(FOOT_TAIL_TIP_X) * S, 10);
+      expect(he.z).toBeCloseTo(SHELL_HALF_LENGTH_ABOUT_SEAT[shell] * S, 10);
+    }
+  });
+
+  it('centres the box on the shell`s own seat, not the model`s local origin', () => {
+    for (const shell of SHELL_TYPES) {
+      const he = snailColliderHalfExtentsFor(makeCritter(shell, 'Adult'));
+      expect(he.centreOffsetZ).toBeCloseTo(SHELL_SEAT_X * S, 10);
     }
   });
 
@@ -107,6 +115,7 @@ describe('snailColliderHalfExtentsFor', () => {
     expect(fryHe.y).toBeLessThan(adultHe.y);
     expect(fryHe.z).toBeLessThan(adultHe.z);
     expect(fryHe.centreOffsetY - fryHe.y).toBeCloseTo(SOLE_Y * S * lifeStageScale('Fry'), 10);
+    expect(fryHe.centreOffsetZ).toBeCloseTo(SHELL_SEAT_X * S * lifeStageScale('Fry'), 10);
   });
 
   it('falls back to Coil sizing when shell is null', () => {
