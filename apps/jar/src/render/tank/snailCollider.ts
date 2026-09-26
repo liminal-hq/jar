@@ -26,17 +26,18 @@ import type { ShellType } from '../../domain/protocol/generated/ShellType';
 import { lifeStageScale } from '../../domain/simConstants';
 import {
   FOOT_DEPTH,
-  FOOT_TAIL_TIP_X,
   SHELL_APEX_HEIGHT_ABOVE_SOLE,
   SHELL_EXTRUSION_DEPTH,
+  SHELL_HALF_LENGTH_ABOUT_SEAT,
+  SHELL_SEAT_X,
   SNAIL_BODY_SCALE,
   SOLE_Y,
   SVG_SCALE,
 } from '../models/snailGeometry';
 
 /** Half-extents of a snail's collider box, in the RigidBody's own local
- * frame, plus the vertical offset positioning that box relative to the
- * RigidBody's origin. See this module's header for the axis convention. */
+ * frame, plus the offsets positioning that box relative to the RigidBody's
+ * origin. See this module's header for the axis convention. */
 export interface SnailColliderHalfExtents {
   x: number;
   y: number;
@@ -46,6 +47,17 @@ export interface SnailColliderHalfExtents {
    * contact line `crawlSurfaces.ts` places the snail's root position
    * against. */
   centreOffsetY: number;
+  /** Local-frame `z` of the box's own centre (issue #112's PR 7 re-anchor)
+   * — the RigidBody's own origin now sits at the shell's seat's *ground
+   * projection* (`Snail.tsx`'s `rootPositionFromFrame`), not the model's
+   * local origin, but the collider box itself must still be centred on the
+   * shell's own footprint in the model's *unshifted* local coordinates
+   * (`SHELL_SEAT_X`, mapped straight across to this module's `z` axis —
+   * see this module's header on the axis convention). Without this, the
+   * box would still be centred on the old local-origin point, `SHELL_SEAT_X`
+   * away from where the shell (and its own half-length,
+   * `SHELL_HALF_LENGTH_ABOUT_SEAT`) actually is. */
+  centreOffsetZ: number;
 }
 
 /** Extra half-thickness headroom for the eyestalks, which extend beyond
@@ -58,13 +70,11 @@ const EYESTALK_HEADROOM_SVG = 12;
 
 function halfExtentsAt(shell: ShellType, stageScale: number): SnailColliderHalfExtents {
   const s = SVG_SCALE * SNAIL_BODY_SCALE * stageScale;
-  // Dominates every shell type: the foot's tail tip sits farther from the
-  // model's origin than its toe does (`FOOT_TAIL_TIP_X` vs. `FOOT_TOE_X`,
-  // both in `snailGeometry.ts`), so a symmetric box sized off the tail tip
-  // alone still fully contains the toe end too, the same "one dominant
-  // measured distance, no separate opposite-end term" shape as
-  // `fishCollider.ts`'s own `TAIL_TIP_SVG_DISTANCE`.
-  const halfLength = Math.abs(FOOT_TAIL_TIP_X) * s;
+  // Sized to the shell's own footprint around its seat, not the whole
+  // foot (issue #112's PR 7) — only the shell stays rigid once the foot
+  // itself can bend (a later PR); a box still sized to the whole foot
+  // would stick through whatever surface a bent foot had moved away from.
+  const halfLength = SHELL_HALF_LENGTH_ABOUT_SEAT[shell] * s;
   // Turret is genuinely the tallest (§issue #98's assembly table) — this is
   // exactly half of `SHELL_APEX_HEIGHT_ABOVE_SOLE`, so the box spans from
   // the sole to the apex.
@@ -74,7 +84,8 @@ function halfExtentsAt(shell: ShellType, stageScale: number): SnailColliderHalfE
   // Bottom face (`centreOffsetY - halfHeight`) lands exactly on the sole
   // line (`SOLE_Y * s`) — see this module's header.
   const centreOffsetY = SOLE_Y * s + halfHeight;
-  return { x: halfThickness, y: halfHeight, z: halfLength, centreOffsetY };
+  const centreOffsetZ = SHELL_SEAT_X * s;
+  return { x: halfThickness, y: halfHeight, z: halfLength, centreOffsetY, centreOffsetZ };
 }
 
 /** This snail's *current*, life-stage-scaled collider — feeds the real
