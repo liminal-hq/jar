@@ -212,26 +212,31 @@ function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
   const normal = roundedNormalAt(sample.faceId, sample.u, sample.v, FILLET_RADIUS);
   const up = new THREE.Vector3(normal.x, normal.y, normal.z);
 
+  // `samples` is sorted ascending by offset-behind-head, so `prev` (a
+  // smaller index) is the more head-ward neighbour and `next` (a larger
+  // index) is the more tail-ward one — `forward` (the direction of travel)
+  // points from tail-ward to head-ward, i.e. always `(the more head-ward
+  // point) - (the more tail-ward point)`.
   const prev = samples[index - 1];
   const next = samples[index + 1];
   const tangent = new THREE.Vector3();
   if (prev && next) {
     tangent.set(
-      next.position.x - prev.position.x,
-      next.position.y - prev.position.y,
-      next.position.z - prev.position.z,
+      prev.position.x - next.position.x,
+      prev.position.y - next.position.y,
+      prev.position.z - next.position.z,
     );
   } else if (next) {
     tangent.set(
-      next.position.x - sample.position.x,
-      next.position.y - sample.position.y,
-      next.position.z - sample.position.z,
+      sample.position.x - next.position.x,
+      sample.position.y - next.position.y,
+      sample.position.z - next.position.z,
     );
   } else if (prev) {
     tangent.set(
-      sample.position.x - prev.position.x,
-      sample.position.y - prev.position.y,
-      sample.position.z - prev.position.z,
+      prev.position.x - sample.position.x,
+      prev.position.y - sample.position.y,
+      prev.position.z - sample.position.z,
     );
   }
 
