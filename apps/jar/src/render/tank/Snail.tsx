@@ -47,7 +47,7 @@ import {
   type Vec3,
 } from '../environment/crawlSurfaces';
 import { SnailModel } from '../models/SnailModel';
-import { SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
+import { SNAIL_BODY_SCALE, SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
 import {
   createInitialSnailBehaviour,
   DETACH_SINK_DURATION_SEC,
@@ -154,7 +154,7 @@ function isFishRigidBody(userData: unknown): boolean {
 export function Snail({ critter }: SnailProps) {
   const rigidBodyRef = useRef<RapierRigidBody>(null);
 
-  const scale = lifeStageScale(critter.life_stage) * SVG_SCALE;
+  const scale = lifeStageScale(critter.life_stage) * SVG_SCALE * SNAIL_BODY_SCALE;
   const he = snailColliderHalfExtentsFor(critter);
 
   // Spawn once at mount, mutated in place every frame thereafter — this

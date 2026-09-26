@@ -38,6 +38,7 @@ import {
   SHELL_ASSETS,
   SHELL_EXTRUSION_DEPTH,
   SHELL_SEALED_DROP,
+  SNAIL_BODY_SCALE,
   SOLE_Y,
   SVG_SCALE,
   tuckPoseForMode,
@@ -155,7 +156,7 @@ export function SnailModel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const pattern = useMemo<Pattern>(() => critter.pattern, []);
 
-  const scale = lifeStageScale(critter.life_stage) * SVG_SCALE;
+  const scale = lifeStageScale(critter.life_stage) * SVG_SCALE * SNAIL_BODY_SCALE;
 
   const shellColour = useMemo(
     () => new THREE.Color().setHSL(critter.hue / 360, SHELL_SATURATION, SHELL_LIGHTNESS),

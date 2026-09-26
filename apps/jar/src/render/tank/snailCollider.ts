@@ -29,6 +29,7 @@ import {
   FOOT_TAIL_TIP_X,
   SHELL_APEX_HEIGHT_ABOVE_SOLE,
   SHELL_EXTRUSION_DEPTH,
+  SNAIL_BODY_SCALE,
   SOLE_Y,
   SVG_SCALE,
 } from '../models/snailGeometry';
@@ -56,7 +57,7 @@ export interface SnailColliderHalfExtents {
 const EYESTALK_HEADROOM_SVG = 12;
 
 function halfExtentsAt(shell: ShellType, stageScale: number): SnailColliderHalfExtents {
-  const s = SVG_SCALE * stageScale;
+  const s = SVG_SCALE * SNAIL_BODY_SCALE * stageScale;
   // Dominates every shell type: the foot's tail tip sits farther from the
   // model's origin than its toe does (`FOOT_TAIL_TIP_X` vs. `FOOT_TOE_X`,
   // both in `snailGeometry.ts`), so a symmetric box sized off the tail tip
