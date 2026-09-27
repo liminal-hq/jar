@@ -230,7 +230,17 @@ export function SnailModel({
     // `<primitive object={footBones[0]}>` synchronously during commit, but
     // matrixWorld propagation itself only happens on the next render tick
     // unless forced here, so this must run before `bind()`, not after it.
+    // The mesh's own `matrixWorld` needs the identical treatment: `bind()`'s
+    // default `bindMatrix` argument (used when none is passed explicitly,
+    // as here) is `this.matrixWorld` exactly as it stands at that instant —
+    // still identity, pre-propagation, if left unforced. That desyncs the
+    // mesh's own bind reference from the bones' correctly-forced one, and
+    // every skinned vertex reads the mismatch: normally an invisible
+    // one-frame flicker, but a grossly oversized, mispositioned render for
+    // as long as a render pause lands right after mount (the window losing
+    // focus, most visibly) freezes that bad frame on screen.
     footBones[0]!.updateWorldMatrix(true, true);
+    footMeshRef.current?.updateWorldMatrix(true, false);
     footMeshRef.current?.bind(footSkeleton);
   }, [footBones, footSkeleton]);
 
