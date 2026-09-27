@@ -1,8 +1,11 @@
 // One snail: a self-contained controller, not a generalized `SteeringSystem`
 // participant — no Yuka vehicle, no steering-registry entry
 // (`docs/architecture/3d-engine.md` §4.4's settled architecture: the
-// accepted cost is that fish won't separation-steer around a snail, but the
-// kinematic collider below still keeps them from overlapping one). It owns
+// accepted cost is that fish won't separation-steer around a snail, though
+// the kinematic collider below does stop a *fish* overlapping one — a
+// dynamic-vs-kinematic pair Rapier's solver genuinely resolves. It resolves
+// nothing between two kinematic bodies, so snails keep out of each other's
+// way by steering instead, via `snailRegistry.ts`/`snailSeparation.ts`). It owns
 // a `CrawlSpine` (`crawlSpine.ts`) directly, advances its head in `useFrame`,
 // samples it at the shell seat and every foot bone's own offset, and
 // converts those into a script-authored position/rotation on a
@@ -24,7 +27,7 @@ import {
   type CollisionEnterPayload,
   type RapierRigidBody,
 } from '@react-three/rapier';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 import {
@@ -56,6 +59,7 @@ import {
   unlinkedEdgeAvoidanceBias,
   type CrawlFrame,
   type CrawlPose,
+  type Vec3,
 } from '../environment/crawlSurfaces';
 import { SnailModel, type SnailGait } from '../models/SnailModel';
 import {
@@ -81,6 +85,12 @@ import {
   type SnailBehaviourState,
 } from './snailBehaviour';
 import { snailColliderHalfExtentsFor } from './snailCollider';
+import { forgetSnailPosition, otherSnailPositions, publishSnailPosition } from './snailRegistry';
+import {
+  snailSeparationResponse,
+  SNAIL_SEPARATION_RADIUS,
+  SNAIL_SEPARATION_TURN_RATE,
+} from './snailSeparation';
 
 interface SnailProps {
   critter: Critter;
@@ -381,6 +391,11 @@ export function Snail({ critter }: SnailProps) {
   const fishContactRequestRef = useRef(false);
   const detachAnchorRef = useRef<DetachAnchor | null>(null);
 
+  // Reused every frame rather than reallocated — `otherSnailPositions`
+  // truncates and refills it in place.
+  const neighboursRef = useRef<Vec3[]>([]);
+  useEffect(() => () => forgetSnailPosition(critter.id), [critter.id]);
+
   const [tuckProgress, setTuckProgress] = useState(0);
   const [tuckMode, setTuckMode] = useState<'sleep' | 'startle'>('sleep');
 
@@ -481,6 +496,7 @@ export function Snail({ critter }: SnailProps) {
         gaitRef.current.phase += GAIT_ANGULAR_RATE * delta;
       }
       const pulseMultiplier = 1 + GAIT_PULSE_AMPLITUDE * Math.sin(gaitRef.current.phase);
+      let speedScale = 1;
 
       if (isMoving(mode)) {
         headingBiasRef.current = THREE.MathUtils.clamp(
@@ -492,10 +508,22 @@ export function Snail({ critter }: SnailProps) {
           spineRef.current.headPose,
           EDGE_AVOIDANCE_RADIUS,
         );
+        // Measured at the head (the toe), not the root: it's the leading
+        // end that runs into things, and it's the end steering can still
+        // do something about.
+        const head = poseToWorld(spineRef.current.headPose);
+        const crowding = snailSeparationResponse(
+          head,
+          otherSnailPositions(critter.id, neighboursRef.current),
+          SNAIL_SEPARATION_RADIUS,
+        );
+        speedScale = crowding.speedScale;
         advanceSpine(
           spineRef.current,
-          CRAWL_SPEED * pulseMultiplier * delta,
-          headingBiasRef.current * delta + avoidance * EDGE_AVOIDANCE_TURN_RATE * delta,
+          CRAWL_SPEED * pulseMultiplier * speedScale * delta,
+          headingBiasRef.current * delta +
+            avoidance * EDGE_AVOIDANCE_TURN_RATE * delta +
+            crowding.turn * SNAIL_SEPARATION_TURN_RATE * delta,
         );
       }
 
@@ -504,7 +532,10 @@ export function Snail({ critter }: SnailProps) {
       // chasing a step target already overshoots-then-settles on its own,
       // which is exactly the shape a start/stop stretch/squash wants, with
       // no separate oscillator to tune.
-      const targetSpeed = isMoving(mode) ? CRAWL_SPEED * pulseMultiplier : 0;
+      // `speedScale` included on purpose: a snail easing off because
+      // another is in its way should squash the same way one coming to a
+      // stop of its own accord does.
+      const targetSpeed = isMoving(mode) ? CRAWL_SPEED * pulseMultiplier * speedScale : 0;
       const previousSmoothedSpeed = smoothedSpeedRef.current;
       smoothedSpeedRef.current +=
         (targetSpeed - smoothedSpeedRef.current) * (1 - Math.exp(-SPEED_SMOOTH_RATE * delta));
@@ -546,6 +577,10 @@ export function Snail({ critter }: SnailProps) {
 
     body.setNextKinematicTranslation(positionRef.current);
     body.setNextKinematicRotation(quaternionRef.current);
+
+    // Published every frame regardless of mode — a sealed or falling snail
+    // is still something the others have to crawl around.
+    publishSnailPosition(critter.id, poseToWorld(spineRef.current.headPose).position);
 
     if (
       tuckProgress !== behaviourRef.current.tuckProgress ||
