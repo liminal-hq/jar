@@ -47,6 +47,7 @@ import {
   type SpineSample,
 } from '../environment/crawlSpine';
 import {
+  advance,
   dropToFloor,
   EDGE_AVOIDANCE_RADIUS,
   FILLET_RADIUS,
@@ -58,6 +59,11 @@ import {
   type CrawlPose,
 } from '../environment/crawlSurfaces';
 import { SnailModel } from '../models/SnailModel';
+import {
+  basisQuaternionFromVectors,
+  updateFootBones,
+  type SampledFrame,
+} from '../models/snailFootRig';
 import {
   FOOT_BONE_XS,
   FOOT_TAIL_TIP_X,
@@ -106,16 +112,6 @@ const EDGE_AVOIDANCE_TURN_RATE = 1.5;
  * stages, since a fry's whole body is much shorter than an adult's. */
 const CRUMB_SAMPLES_PER_BODY = 24;
 
-/** The fixed `-90°` yaw `Fish.tsx`'s model group already applies to its own
- * mesh (both models are authored facing `+X`), as a quaternion rather than
- * an Euler — `updateFootBones` needs its *inverse* to undo that yaw when
- * projecting a bone's world-space surface frame back into the model's own
- * (pre-yaw) local space. A module-level constant: the yaw never changes
- * per-snail or per-frame. */
-const MODEL_YAW_QUAT_INV = new THREE.Quaternion()
-  .setFromEuler(new THREE.Euler(0, -Math.PI / 2, 0))
-  .invert();
-
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
  * top of a smoothstep-eased straight-line descent to the landing spot. */
@@ -131,20 +127,6 @@ interface DetachAnchor {
    * the anchor is set, only the lerp/slerp ratio toward them does. */
   targetPosition: THREE.Vector3;
   targetQuaternion: THREE.Quaternion;
-  /** The world-space bend the foot had at the instant of detaching —
-   * frozen here (the spine itself is frozen too; nothing re-samples it
-   * until landing) so the *shape* of the bend stays fixed for the whole
-   * fall. Re-fed through `updateFootBones` every detached frame regardless,
-   * against `quaternionRef`'s own *current* value: the root's orientation
-   * keeps slerping toward `targetQuaternion` throughout the fall, and a
-   * bone's *local* rotation only makes sense relative to the root
-   * orientation it was derived against. Freezing the local rotations
-   * themselves (the bug this fixes) leaves them relative to a root
-   * orientation that no longer exists once the root has slerped away from
-   * it — swinging the chain's toe-most end out by up to a full body length
-   * in whatever direction the stale local rotation now points, reading as
-   * a foot detached from its own shell rather than a snail mid-fall. */
-  boneFrames: SampledFrame[];
 }
 
 // Only the debug-telemetry publisher below needs a raw Euler decomposition
@@ -152,22 +134,6 @@ interface DetachAnchor {
 // extraction, so the Tank monitor's map projections read the same way for
 // a snail row as a fish one.
 const scratchYawEuler = new THREE.Euler();
-
-/** `forward`→local `+Z`, `up`→local `+Y` — the same axis convention
- * `fishCollider.ts` and `Fish.tsx` use, so this component's inner model
- * group needs the identical `-90°` yaw correction `Fish.tsx` applies (both
- * models are authored facing `+X`). `xAxis` (local `+X`) is derived as
- * `up × forward` rather than reusing a face's own `right` directly, since
- * that's the assignment that keeps (`forward`, `up`, `xAxis`) a proper
- * right-handed basis under this module's `(x, y, z)` axis order. Shared by
- * every quaternion this file builds from a surface frame — the root's own
- * (via `quaternionFromFrame`) and every bone's (via `updateFootBones`). */
-function basisQuaternionFromVectors(forward: THREE.Vector3, up: THREE.Vector3): THREE.Quaternion {
-  const xAxis = new THREE.Vector3().crossVectors(up, forward).normalize();
-  return new THREE.Quaternion().setFromRotationMatrix(
-    new THREE.Matrix4().makeBasis(xAxis, up, forward),
-  );
-}
 
 function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
   return basisQuaternionFromVectors(
@@ -200,26 +166,19 @@ function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 
     .addScaledVector(forward, -SHELL_SEAT_X * scale);
 }
 
-/** A world-space position plus the surface frame (`up`/`forward`) at one
- * point along the spine — `up` from `roundedNormalAt` (the continuous,
- * crease-aware field, exactly as the rigid-body root already used), but
- * `forward` from a *central difference* of neighbouring spine samples'
- * positions rather than any single sample's own stored heading: a chord
- * direction along the body's actual travelled path is what makes adjacent
- * segments bend to follow a turn, not just a fold (`docs/architecture/
- * 3d-engine.md` §4.4's own note on why a spine beats back-tracing alone).
- * Re-orthonormalized against `up` (Gram-Schmidt, the same idea
- * `crawlSurfaces.ts`'s own `poseToWorldRounded` used before the spine
- * existed) since a raw chord isn't generally perpendicular to a *rounded*
- * up near a fold. */
-interface SampledFrame {
-  position: THREE.Vector3;
-  up: THREE.Vector3;
-  forward: THREE.Vector3;
-}
-
 const FALLBACK_TANGENTS = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)];
 
+/** One spine sample's own `SampledFrame` (`snailFootRig.ts`): `up` from
+ * `roundedNormalAt` (the continuous, crease-aware field, exactly as the
+ * rigid-body root already used), but `forward` from a *central difference*
+ * of neighbouring spine samples' positions rather than any single sample's
+ * own stored heading — a chord direction along the body's actual travelled
+ * path is what makes adjacent segments bend to follow a turn, not just a
+ * fold (`docs/architecture/3d-engine.md` §4.4's own note on why a spine
+ * beats back-tracing alone). Re-orthonormalized against `up` (Gram-Schmidt,
+ * the same idea `crawlSurfaces.ts`'s own `poseToWorldRounded` used before
+ * the spine existed) since a raw chord isn't generally perpendicular to a
+ * *rounded* up near a fold. */
 function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
   const sample = samples[index]!;
   const position = new THREE.Vector3(sample.position.x, sample.position.y, sample.position.z);
@@ -268,51 +227,23 @@ function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
   return { position, up, forward: rejected.normalize() };
 }
 
-/** Drives `bones` (tail-most first, matching `snailGeometry.ts`'s
- * `FOOT_BONE_XS` order) toward `frames` (one per bone, same order) —
- * each bone's own rotation is *parent-relative*, so a world-space desired
- * orientation has to be divided out one link at a time down the chain.
- * Rather than juggling that division in true world space (which would also
- * need to account for the fixed model yaw and the RigidBody's own current
- * orientation), every frame is first projected into the model's own
- * pre-yaw local space via `rootQuatInv`/`MODEL_YAW_QUAT_INV` — once there,
- * bone 0's local rotation *is* its projected orientation directly (its
- * parent, `footGroupRef`, carries no rotation of its own), and each
- * following bone's local rotation is simply the previous bone's projected
- * orientation "divided out" of its own. */
-function updateFootBones(
-  bones: THREE.Bone[],
-  frames: SampledFrame[],
-  rootQuatInv: THREE.Quaternion,
-): void {
-  let previousLocal: THREE.Quaternion | null = null;
-  for (let i = 0; i < bones.length; i++) {
-    const frame = frames[i]!;
-    const localForward = frame.forward
-      .clone()
-      .applyQuaternion(rootQuatInv)
-      .applyQuaternion(MODEL_YAW_QUAT_INV);
-    const localUp = frame.up
-      .clone()
-      .applyQuaternion(rootQuatInv)
-      .applyQuaternion(MODEL_YAW_QUAT_INV);
-    const local = basisQuaternionFromVectors(localForward, localUp);
-    if (previousLocal) {
-      bones[i]!.quaternion.copy(previousLocal).invert().multiply(local);
-    } else {
-      bones[i]!.quaternion.copy(local);
-    }
-    previousLocal = local;
-  }
-}
-
-/** The rigid root's own world position: `frame.position` (already the
- * *exact* on-surface point, whether it came from a single rounded pose or
- * — now — a spine sample) lifted along `frame.up` by `-SOLE_Y * scale`, so
- * the foot's sole (not the model's local origin) is what actually touches
- * the surface. */
+/** The rigid root's own world position, given the spine sample taken at the
+ * *seat's* own arc-length offset: that sample is the on-surface point the
+ * shell's seat has to sit over, so the model's local origin — which is
+ * `SHELL_SEAT_X` (a negative number) *behind* that seat along the authored
+ * toe-tail axis — goes `-SHELL_SEAT_X * scale` forward of it, and
+ * `-SOLE_Y * scale` up from it so the foot's sole (not the origin) is what
+ * touches the surface. The two offsets are exactly the ones
+ * `rootPositionFromFrame` applies for the detach animation's own target
+ * pose; omitting the `forward` one here (the bug this fixes) left the whole
+ * body a fixed `SHELL_SEAT_X * scale` behind where the spine said it was,
+ * *and* disagreed with the detach path by that same amount, so a snail
+ * jumped on landing. */
 function liftedRootPosition(frame: SampledFrame, scale: number): THREE.Vector3 {
-  return frame.position.clone().addScaledVector(frame.up, -SOLE_Y * scale);
+  return frame.position
+    .clone()
+    .addScaledVector(frame.up, -SOLE_Y * scale)
+    .addScaledVector(frame.forward, -SHELL_SEAT_X * scale);
 }
 
 interface RootAndBoneFrames {
@@ -399,16 +330,6 @@ export function Snail({ critter }: SnailProps) {
     basisQuaternionFromVectors(initialFrames.rootFrame.forward, initialFrames.rootFrame.up),
   );
 
-  // The most recent *world-space* bone frames the spine actually produced —
-  // stashed every frame while crawling so a fresh detach (below) can carry
-  // them into its own anchor. World-space, not root-relative: the frames
-  // themselves don't depend on the root's orientation at all, only
-  // `updateFootBones`'s own conversion of them does, which is exactly what
-  // lets the detached branch re-derive correct *local* bone rotations
-  // every frame against the root's *current*, still-changing orientation
-  // (see `detachAnchorRef`'s own doc comment on why this matters).
-  const lastBoneFramesRef = useRef<SampledFrame[]>(initialFrames.boneFrames);
-
   const behaviourRef = useRef<SnailBehaviourState>(createInitialSnailBehaviour());
   const headingBiasRef = useRef(0);
   const startleRequestRef = useRef(false);
@@ -458,7 +379,6 @@ export function Snail({ critter }: SnailProps) {
           landed,
           targetPosition: rootPositionFromFrame(targetFrame, scale),
           targetQuaternion: quaternionFromFrame(targetFrame),
-          boneFrames: lastBoneFramesRef.current,
         };
       }
       const anchor = detachAnchorRef.current;
@@ -475,23 +395,29 @@ export function Snail({ critter }: SnailProps) {
         DETACH_SWAY_AMPLITUDE * Math.sin(ratio * Math.PI * DETACH_SWAY_CYCLES) * (1 - ratio);
       quaternionRef.current.copy(anchor.quaternion).slerp(anchor.targetQuaternion, eased);
 
-      // Re-derive every bone's *local* rotation against the root's own
-      // current (still-slerping) orientation every frame, from the same
-      // frozen world-space bend the whole time — see `DetachAnchor.
-      // boneFrames`'s own doc comment for why re-deriving, not just
-      // holding the bones still, is what keeps the foot rigidly attached
-      // to the shell throughout the fall.
-      const fallingBones = footBonesRef.current;
-      if (fallingBones) {
-        updateFootBones(fallingBones, anchor.boneFrames, quaternionRef.current.clone().invert());
-      }
+      // Nothing touches the bones for the whole fall, deliberately: a bone's
+      // *local* transform is exactly the body's own shape relative to the
+      // root, so leaving the chain alone is what makes a falling snail one
+      // rigid object — foot and shell travelling and rotating together by
+      // construction, however far the root lerps and slerps on the way down.
+      // Re-deriving the chain against the root's changing orientation
+      // instead would pin the bend to *world* space while the root turned
+      // underneath it, which is precisely a foot coming off its own shell.
     } else {
       if (prevMode === 'detached' && detachAnchorRef.current) {
         // Re-seeds the whole spine around the landing spot rather than
         // carrying breadcrumbs over from wherever the snail detached —
         // `resetSpine`'s own back-trace lays the body out correctly around
         // `landed` immediately, with no warm-up pop.
-        resetSpine(spineRef.current, detachAnchorRef.current.landed);
+        //
+        // `landed` is where the *seat* lands (that's what
+        // `rootPositionFromFrame` placed the root against above), but a
+        // spine's head is the **toe**, `seatOffset` further along the body —
+        // so the head pose to re-seed from is `landed` advanced by exactly
+        // that much. Seeding the head at `landed` itself instead put the toe
+        // where the seat was meant to be, teleporting the whole snail a
+        // `seatOffset` backwards on the first frame after touchdown.
+        resetSpine(spineRef.current, advance(detachAnchorRef.current.landed, seatOffset));
         detachAnchorRef.current = null;
       }
 
@@ -523,11 +449,15 @@ export function Snail({ critter }: SnailProps) {
       );
       quaternionRef.current.copy(basisQuaternionFromVectors(rootFrame.forward, rootFrame.up));
       positionRef.current.copy(liftedRootPosition(rootFrame, scale));
-      lastBoneFramesRef.current = boneFrames;
 
+      // Both halves of the body come out of the *same* `computeRootAndBone
+      // Frames` call, so the shell (rigidly riding the root derived from the
+      // seat sample) and the foot (every bone placed on its own sample) are
+      // always the one animal — see `snailFootRig.ts` on why the bones need
+      // their positions driven, not just their rotations.
       const bones = footBonesRef.current;
       if (bones) {
-        updateFootBones(bones, boneFrames, quaternionRef.current.clone().invert());
+        updateFootBones(bones, boneFrames, positionRef.current, quaternionRef.current, scale);
       }
     }
 
