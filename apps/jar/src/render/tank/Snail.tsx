@@ -131,6 +131,20 @@ interface DetachAnchor {
    * the anchor is set, only the lerp/slerp ratio toward them does. */
   targetPosition: THREE.Vector3;
   targetQuaternion: THREE.Quaternion;
+  /** The world-space bend the foot had at the instant of detaching —
+   * frozen here (the spine itself is frozen too; nothing re-samples it
+   * until landing) so the *shape* of the bend stays fixed for the whole
+   * fall. Re-fed through `updateFootBones` every detached frame regardless,
+   * against `quaternionRef`'s own *current* value: the root's orientation
+   * keeps slerping toward `targetQuaternion` throughout the fall, and a
+   * bone's *local* rotation only makes sense relative to the root
+   * orientation it was derived against. Freezing the local rotations
+   * themselves (the bug this fixes) leaves them relative to a root
+   * orientation that no longer exists once the root has slerped away from
+   * it — swinging the chain's toe-most end out by up to a full body length
+   * in whatever direction the stale local rotation now points, reading as
+   * a foot detached from its own shell rather than a snail mid-fall. */
+  boneFrames: SampledFrame[];
 }
 
 // Only the debug-telemetry publisher below needs a raw Euler decomposition
@@ -385,6 +399,16 @@ export function Snail({ critter }: SnailProps) {
     basisQuaternionFromVectors(initialFrames.rootFrame.forward, initialFrames.rootFrame.up),
   );
 
+  // The most recent *world-space* bone frames the spine actually produced —
+  // stashed every frame while crawling so a fresh detach (below) can carry
+  // them into its own anchor. World-space, not root-relative: the frames
+  // themselves don't depend on the root's orientation at all, only
+  // `updateFootBones`'s own conversion of them does, which is exactly what
+  // lets the detached branch re-derive correct *local* bone rotations
+  // every frame against the root's *current*, still-changing orientation
+  // (see `detachAnchorRef`'s own doc comment on why this matters).
+  const lastBoneFramesRef = useRef<SampledFrame[]>(initialFrames.boneFrames);
+
   const behaviourRef = useRef<SnailBehaviourState>(createInitialSnailBehaviour());
   const headingBiasRef = useRef(0);
   const startleRequestRef = useRef(false);
@@ -434,6 +458,7 @@ export function Snail({ critter }: SnailProps) {
           landed,
           targetPosition: rootPositionFromFrame(targetFrame, scale),
           targetQuaternion: quaternionFromFrame(targetFrame),
+          boneFrames: lastBoneFramesRef.current,
         };
       }
       const anchor = detachAnchorRef.current;
@@ -449,6 +474,17 @@ export function Snail({ critter }: SnailProps) {
       positionRef.current.x +=
         DETACH_SWAY_AMPLITUDE * Math.sin(ratio * Math.PI * DETACH_SWAY_CYCLES) * (1 - ratio);
       quaternionRef.current.copy(anchor.quaternion).slerp(anchor.targetQuaternion, eased);
+
+      // Re-derive every bone's *local* rotation against the root's own
+      // current (still-slerping) orientation every frame, from the same
+      // frozen world-space bend the whole time — see `DetachAnchor.
+      // boneFrames`'s own doc comment for why re-deriving, not just
+      // holding the bones still, is what keeps the foot rigidly attached
+      // to the shell throughout the fall.
+      const fallingBones = footBonesRef.current;
+      if (fallingBones) {
+        updateFootBones(fallingBones, anchor.boneFrames, quaternionRef.current.clone().invert());
+      }
     } else {
       if (prevMode === 'detached' && detachAnchorRef.current) {
         // Re-seeds the whole spine around the landing spot rather than
@@ -487,6 +523,7 @@ export function Snail({ critter }: SnailProps) {
       );
       quaternionRef.current.copy(basisQuaternionFromVectors(rootFrame.forward, rootFrame.up));
       positionRef.current.copy(liftedRootPosition(rootFrame, scale));
+      lastBoneFramesRef.current = boneFrames;
 
       const bones = footBonesRef.current;
       if (bones) {
