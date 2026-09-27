@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { advanceSpine, createSpine, resetSpine, sampleSpine } from './crawlSpine';
+import { advanceSpine, createSpine, resetSpine, resizeSpine, sampleSpine } from './crawlSpine';
 import { CRAWL_FACES, type CrawlPose, type Vec3 } from './crawlSurfaces';
 
 function faceById(id: string) {
@@ -124,6 +124,55 @@ describe('resetSpine', () => {
     expect(spine.crumbs[spine.crumbs.length - 1]!.position).toEqual(
       fresh.crumbs[fresh.crumbs.length - 1]!.position,
     );
+  });
+});
+
+describe('resizeSpine', () => {
+  const floorHead = (): CrawlPose => {
+    const floor = faceById('floor');
+    return { faceId: 'floor', u: floor.uLength / 2, v: floor.vLength / 2, heading: 0 };
+  };
+
+  it('extends the trail so a grown body still reaches its own tail', () => {
+    const spine = createSpine(floorHead(), BODY_LENGTH, CRUMB_SPACING);
+    for (let i = 0; i < 200; i++) advanceSpine(spine, CRUMB_SPACING / 4, 0);
+
+    const grown = BODY_LENGTH * 2.2;
+    resizeSpine(spine, grown, CRUMB_SPACING * 2.2);
+
+    expect(spine.bodyLength).toBe(grown);
+    expect(spine.crumbs[0]!.arcLength).toBeLessThanOrEqual(spine.headArcLength - grown);
+    // The tail sample is a real, distinct point on the trail rather than the
+    // clamped-to-the-oldest-crumb duplicate a too-short trail produces.
+    const [tail, nearTail] = sampleSpine(spine, [grown, grown - CRUMB_SPACING * 2.2]);
+    expect(distance(tail!.position, nearTail!.position)).toBeGreaterThan(CRUMB_SPACING);
+  });
+
+  it('leaves everything already travelled exactly where it was', () => {
+    const spine = createSpine(floorHead(), BODY_LENGTH, CRUMB_SPACING);
+    for (let i = 0; i < 200; i++) advanceSpine(spine, CRUMB_SPACING / 4, 0);
+    const before = spine.crumbs.map((c) => ({ arcLength: c.arcLength, position: c.position }));
+
+    resizeSpine(spine, BODY_LENGTH * 2.2, CRUMB_SPACING * 2.2);
+
+    const kept = spine.crumbs.slice(spine.crumbs.length - before.length);
+    expect(kept).toHaveLength(before.length);
+    kept.forEach((crumb, i) => {
+      expect(crumb.arcLength).toBeCloseTo(before[i]!.arcLength, 10);
+      expect(distance(crumb.position, before[i]!.position)).toBeCloseTo(0, 10);
+    });
+  });
+
+  it('does nothing at all when the dimensions have not changed', () => {
+    const spine = createSpine(floorHead(), BODY_LENGTH, CRUMB_SPACING);
+    for (let i = 0; i < 40; i++) advanceSpine(spine, CRUMB_SPACING / 4, 0);
+    const crumbs = spine.crumbs;
+    const count = crumbs.length;
+
+    resizeSpine(spine, BODY_LENGTH, CRUMB_SPACING);
+
+    expect(spine.crumbs).toBe(crumbs);
+    expect(spine.crumbs).toHaveLength(count);
   });
 });
 

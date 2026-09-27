@@ -42,6 +42,7 @@ import {
   advanceSpine,
   createSpine,
   resetSpine,
+  resizeSpine,
   sampleSpine,
   type CrawlSpine,
   type SpineSample,
@@ -324,6 +325,13 @@ export function Snail({ critter }: SnailProps) {
   useFrame((_, delta) => {
     const body = rigidBodyRef.current;
     if (!body) return;
+
+    // A snail grows through its life stages, so the body sampling this spine
+    // gets longer while the spine itself was sized at spawn — and a trail
+    // shorter than the body collapses every bone past its end onto one point
+    // (see `resizeSpine`). Checked here rather than in an effect because
+    // `scale` is a plain per-render derivation, not state anything reacts to.
+    resizeSpine(spineRef.current, bodyLength, crumbSpacing);
 
     const asleep = isAsleep('Snail', dayNightOverride, simNight);
     const onFloor = spineRef.current.headPose.faceId === 'floor';

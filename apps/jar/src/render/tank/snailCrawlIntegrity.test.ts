@@ -32,11 +32,13 @@ import { describe, expect, it } from 'vitest';
 import {
   advanceSpine,
   createSpine,
+  resizeSpine,
   sampleSpine,
   type CrawlSpine,
   type SpineSample,
 } from '../environment/crawlSpine';
 import { CRAWL_FACES, type CrawlPose } from '../environment/crawlSurfaces';
+import { lifeStageScale } from '../../domain/simConstants';
 import { rootTransformFromFoot, type SampledFrame } from '../models/snailFootRig';
 import {
   FOOT_BONE_XS,
@@ -101,13 +103,13 @@ function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
   return { position, up, forward: rejected.normalize() };
 }
 
-function boneFramesOf(spine: CrawlSpine): SampledFrame[] {
-  const order = BONE_OFFSETS.map((_, i) => i).sort((a, b) => BONE_OFFSETS[a]! - BONE_OFFSETS[b]!);
+function boneFramesOf(spine: CrawlSpine, offsets: number[] = BONE_OFFSETS): SampledFrame[] {
+  const order = offsets.map((_, i) => i).sort((a, b) => offsets[a]! - offsets[b]!);
   const samples = sampleSpine(
     spine,
-    order.map((i) => BONE_OFFSETS[i]!),
+    order.map((i) => offsets[i]!),
   );
-  const frames: SampledFrame[] = new Array(BONE_OFFSETS.length);
+  const frames: SampledFrame[] = new Array(offsets.length);
   order.forEach((original, sorted) => {
     frames[original] = sampledFrameAt(samples, sorted);
   });
@@ -236,5 +238,124 @@ describe('a snail crawling the real tank', () => {
     // most of a second, so no single frame has any business turning the
     // body more than a few degrees.
     expect(result.worstSwingDeg).toBeLessThan(10);
+  });
+});
+
+/** Every life stage a snail passes through, smallest first — the spine is
+ * created once at spawn, so a snail that lives a full life samples it at
+ * each of these in turn. */
+const LIFE_STAGE_SCALES = [
+  lifeStageScale('Fry'),
+  lifeStageScale('Juvenile'),
+  lifeStageScale('Adult'),
+];
+
+interface GrowthResult {
+  /** The bone chain's own end-to-end span, as a fraction of the body it is
+   * supposed to be. Chords cut corners, so even a perfect chain reads a few
+   * percent short wherever the body folds over a castle edge — which is why
+   * this is compared against a never-grown control rather than against 1. */
+  shortestFootSpan: number;
+  worstSwingDeg: number;
+  worstStepPerFrame: number;
+}
+
+/** Crawls one snail through the given run of life stages, growing it a stage
+ * at a time, measuring whether the body it renders is still its own full
+ * length and whether crawling jolts it.
+ *
+ * The frame a stage changes on is excluded from the jolt figures on purpose:
+ * the shell's seat sits a fixed distance back along a body that just got
+ * longer, so it genuinely does shift back along the trail at that instant.
+ * What must not jolt is every *other* frame. */
+function crawlThroughGrowth(resize: boolean, stages: number[] = LIFE_STAGE_SCALES): GrowthResult {
+  const result: GrowthResult = {
+    shortestFootSpan: Infinity,
+    worstSwingDeg: 0,
+    worstStepPerFrame: 0,
+  };
+  const bodyAt = (stageScale: number) =>
+    (FOOT_TOE_X - FOOT_TAIL_TIP_X) * SVG_SCALE * SNAIL_BODY_SCALE * stageScale;
+
+  for (const face of CRAWL_FACES) {
+    for (const heading of [0, Math.PI / 3, -Math.PI / 4]) {
+      const start: CrawlPose = {
+        faceId: face.id,
+        u: face.uLength * 0.5,
+        v: face.vLength * 0.5,
+        heading,
+      };
+      const spine = createSpine(start, bodyAt(stages[0]!), bodyAt(stages[0]!) / 24);
+      let previous: THREE.Quaternion | null = null;
+      let previousPosition: THREE.Vector3 | null = null;
+
+      for (const stageScale of stages) {
+        const scale = SVG_SCALE * SNAIL_BODY_SCALE * stageScale;
+        const bodyLength = bodyAt(stageScale);
+        const offsets = FOOT_BONE_XS.map((x) => (FOOT_TOE_X - x) * scale);
+        if (resize) resizeSpine(spine, bodyLength, bodyLength / 24);
+        previous = null;
+        previousPosition = null;
+
+        for (let step = 0; step < 120; step++) {
+          advanceSpine(spine, STEP * stageScale, 0);
+          const frames = boneFramesOf(spine, offsets);
+          const root = rootTransformFromFoot(frames, FOOT_BONE_XS, SHELL_SEAT_X, SOLE_Y, scale);
+
+          // Measured on the chain itself rather than on the root, because
+          // this is exactly what collapses: bones whose offset runs off the
+          // end of a too-short trail all clamp to its oldest crumb.
+          let span = 0;
+          for (let i = 1; i < frames.length; i++) {
+            span += frames[i]!.position.distanceTo(frames[i - 1]!.position);
+          }
+          result.shortestFootSpan = Math.min(result.shortestFootSpan, span / bodyLength);
+
+          if (previous) {
+            result.worstSwingDeg = Math.max(
+              result.worstSwingDeg,
+              (previous.angleTo(root.quaternion) * 180) / Math.PI,
+            );
+          }
+          if (previousPosition) {
+            result.worstStepPerFrame = Math.max(
+              result.worstStepPerFrame,
+              root.position.distanceTo(previousPosition) / bodyLength,
+            );
+          }
+          previous = root.quaternion.clone();
+          previousPosition = root.position.clone();
+        }
+      }
+    }
+  }
+  return result;
+}
+
+describe('a snail that grows up', () => {
+  /** The same crawl, by a snail that was already full-grown when its spine
+   * was seeded — the standard every grown snail has to match. */
+  const neverGrew = crawlThroughGrowth(true, [lifeStageScale('Adult')]);
+
+  it('keeps its whole body on the spine as it grows', () => {
+    // A spine still carrying its hatchling `bodyLength` trims its trail to
+    // that length, and `sampleSpine` clamps everything past the oldest
+    // surviving crumb onto it — so a grown snail's tail bones all pile onto
+    // one point and the foot renders at the hatchling's length, bunched up
+    // ahead of the shell that is still correctly seated on it.
+    expect(crawlThroughGrowth(false).shortestFootSpan).toBeLessThan(0.6);
+    expect(crawlThroughGrowth(true).shortestFootSpan).toBeGreaterThanOrEqual(
+      neverGrew.shortestFootSpan - 0.01,
+    );
+  });
+
+  it('does not jolt as it grows', () => {
+    // The point every collapsed bone shares is the oldest crumb itself,
+    // which jumps a whole crumb spacing forward the moment the trail is
+    // trimmed — stepping the body, and the shell riding it, in one frame.
+    const grown = crawlThroughGrowth(true);
+    expect(grown.worstSwingDeg).toBeLessThan(10);
+    expect(grown.worstStepPerFrame).toBeLessThan(0.05);
+    expect(crawlThroughGrowth(false).worstSwingDeg).toBeGreaterThan(10);
   });
 });

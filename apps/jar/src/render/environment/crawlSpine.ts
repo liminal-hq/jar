@@ -129,29 +129,28 @@ function normalAt(pose: CrawlPose): Vec3 {
  * all: an ordinary fold crossing during back-tracing is expected and fine
  * (the tail crossing back over a wall/floor seam it just came from), only
  * a genuine reflection needs this clamp. */
-export function createSpine(
-  headPose: CrawlPose,
-  bodyLength: number,
-  crumbSpacing: number,
-): CrawlSpine {
-  const crumbCount = Math.max(2, Math.ceil(bodyLength / crumbSpacing) + 1);
+function backTrace(
+  fromPose: CrawlPose,
+  count: number,
+  spacing: number,
+  fromArcLength: number,
+): Breadcrumb[] {
   const crumbs: Breadcrumb[] = [];
-  let tracePose = headPose;
+  let tracePose = fromPose;
   let bounced = false;
 
-  for (let i = crumbCount - 1; i >= 0; i--) {
-    const arcLength = i * crumbSpacing;
+  for (let i = 0; i < count; i++) {
     const frame = poseToWorld(tracePose);
     crumbs.unshift({
       pose: tracePose,
       position: frame.position,
       normal: normalAt(tracePose),
-      arcLength,
+      arcLength: fromArcLength - i * spacing,
     });
-    if (i === 0 || bounced) continue;
+    if (i === count - 1 || bounced) continue;
 
     const reversed = turn(tracePose, Math.PI);
-    const { pose: steppedReversed, bounced: hitBounce } = advanceTracking(reversed, crumbSpacing);
+    const { pose: steppedReversed, bounced: hitBounce } = advanceTracking(reversed, spacing);
     if (hitBounce) {
       bounced = true;
       continue;
@@ -159,14 +158,73 @@ export function createSpine(
     tracePose = turn(steppedReversed, Math.PI);
   }
 
+  return crumbs;
+}
+
+function crumbCountFor(bodyLength: number, crumbSpacing: number): number {
+  return Math.max(2, Math.ceil(bodyLength / crumbSpacing) + 1);
+}
+
+export function createSpine(
+  headPose: CrawlPose,
+  bodyLength: number,
+  crumbSpacing: number,
+): CrawlSpine {
+  const crumbCount = crumbCountFor(bodyLength, crumbSpacing);
+  const headArcLength = (crumbCount - 1) * crumbSpacing;
+
   return {
-    crumbs,
+    crumbs: backTrace(headPose, crumbCount, crumbSpacing, headArcLength),
     headPose,
-    headArcLength: (crumbCount - 1) * crumbSpacing,
+    headArcLength,
     distanceSinceLastCrumb: 0,
     bodyLength,
     crumbSpacing,
   };
+}
+
+/** Re-dimensions `spine` in place for a body that has changed length — a
+ * crawler that has grown a life stage.
+ *
+ * `bodyLength` is not decoration: `advanceSpine` trims the trail to it, and
+ * `sampleSpine` clamps any query past the oldest surviving crumb to that
+ * crumb. A spine still carrying its hatchling dimensions while a grown body
+ * samples it therefore doesn't merely lose a little resolution — every
+ * sampling point beyond the old trail collapses onto one shared point, so a
+ * multi-point body (a snail's bone chain) folds its whole tail into a single
+ * spot and renders at the *old* stage's length, bunched up against whichever
+ * end still has trail under it. That shared point is also the oldest crumb
+ * itself, which jumps a whole `crumbSpacing` forward each time the trail is
+ * trimmed, stepping the body sideways in one frame.
+ *
+ * Growing extends the recorded trail backward from its own oldest crumb
+ * rather than re-seeding the whole thing: everything the crawler has actually
+ * travelled stays exactly where it was, and only the newly-needed tail is
+ * synthesized, so a growth spurt doesn't straighten a body that happens to be
+ * mid-turn or folded over an edge. The crumbs already on record keep their old
+ * spacing — `sampleAt` interpolates by arc length and never assumes a uniform
+ * step — and the trail returns to an even spacing on its own as the crawler
+ * moves. */
+export function resizeSpine(spine: CrawlSpine, bodyLength: number, crumbSpacing: number): void {
+  if (spine.bodyLength === bodyLength && spine.crumbSpacing === crumbSpacing) return;
+
+  spine.bodyLength = bodyLength;
+  spine.crumbSpacing = crumbSpacing;
+  // `advanceSpine` reads this as "distance still to go before the next crumb
+  // is due," which a *shrinking* spacing could leave already past.
+  if (spine.distanceSinceLastCrumb >= crumbSpacing) spine.distanceSinceLastCrumb = 0;
+
+  const oldest = spine.crumbs[0];
+  if (!oldest) return;
+  const wanted = spine.headArcLength - bodyLength;
+  const missing = Math.ceil((oldest.arcLength - wanted) / crumbSpacing);
+  if (missing <= 0) return;
+
+  // `backTrace`'s own first crumb repeats `oldest` (it starts *at* the pose
+  // it is handed), so ask for one extra and drop it.
+  spine.crumbs.unshift(
+    ...backTrace(oldest.pose, missing + 1, crumbSpacing, oldest.arcLength).slice(0, -1),
+  );
 }
 
 /** Re-seeds `spine` in place from a fresh `headPose` — the same back-trace
