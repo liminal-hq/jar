@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addFootSkinAttributes,
   createFootBones,
+  EYESTALK_HINGE,
   FOOT_BONE_XS,
   FOOT_TAIL_TIP_X,
   FOOT_TOE_X,
@@ -30,6 +31,7 @@ import {
   basisQuaternionFromVectors,
   boneOrientationFromVectors,
   footBoneLocalTransforms,
+  headMountTransform,
   updateFootBones,
   type SampledFrame,
 } from './snailFootRig';
@@ -284,4 +286,50 @@ describe('the foot and the shell are one animal', () => {
       expect(seatGap).toBeLessThan(EXACT);
     });
   }
+});
+
+describe('headMountTransform', () => {
+  it('is the identity while the chain is at its rest pose', () => {
+    const bones = createFootBones();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    headMountTransform(bones, new THREE.Vector3(FOOT_TOE_X, SOLE_Y, 0), position, quaternion);
+    expect(position.length()).toBeLessThan(1e-6);
+    expect(quaternion.angleTo(new THREE.Quaternion())).toBeLessThan(1e-6);
+  });
+
+  it('carries the eyestalks onto the head bone once the foot bends', () => {
+    // The stalks' own hinge, authored in rest model space, has to end up
+    // exactly where the head bone carries that same material point — that
+    // is what stops a cornering snail leaving its own stalks behind.
+    const rig = buildRig();
+    const { rootFrame, boneFrames } = sampleShape(fold(BODY_LENGTH * 0.25));
+    const rootPosition = rootPositionFor(rootFrame);
+    const rootQuaternion = basisQuaternionFromVectors(rootFrame.forward, rootFrame.up);
+    rig.root.position.copy(rootPosition);
+    rig.root.quaternion.copy(rootQuaternion);
+    updateFootBones(rig.bones, boneFrames, rootPosition, rootQuaternion, SCALE);
+    rig.scene.updateMatrixWorld(true);
+
+    const headRest = new THREE.Vector3(FOOT_TOE_X, SOLE_Y, 0);
+    const mount = new THREE.Group();
+    headMountTransform(rig.bones, headRest, mount.position, mount.quaternion);
+    rig.modelGroup.add(mount);
+    rig.scene.updateMatrixWorld(true);
+
+    const hinge = new THREE.Vector3(EYESTALK_HINGE.x, EYESTALK_HINGE.y, 0);
+    const mounted = hinge.clone().applyMatrix4(mount.matrixWorld);
+    const head = rig.bones[rig.bones.length - 1]!;
+    const expected = hinge
+      .clone()
+      .sub(headRest)
+      .applyMatrix4(new THREE.Matrix4().extractRotation(head.matrixWorld));
+    expected.multiplyScalar(SCALE).add(new THREE.Vector3().setFromMatrixPosition(head.matrixWorld));
+    expect(mounted.distanceTo(expected)).toBeLessThan(EXACT);
+
+    // And it genuinely moved: a rigid mount would have left them where a
+    // straight body's head would be.
+    const rigid = hinge.clone().applyMatrix4(rig.modelGroup.matrixWorld);
+    expect(rigid.distanceTo(mounted) / BODY_LENGTH).toBeGreaterThan(0.05);
+  });
 });

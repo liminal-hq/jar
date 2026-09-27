@@ -179,3 +179,38 @@ export function updateFootBones(
     bones[i]!.quaternion.copy(local.quaternion);
   }
 }
+
+const scratchOffset = new THREE.Vector3();
+
+/** The transform that carries anything authored in the foot's *rest* model
+ * space onto the foot's *current* head — the head bone's own accumulated
+ * transform, pre-composed with the inverse of its rest position so a child
+ * keeps its authored coordinates instead of having to be re-expressed
+ * relative to the bone.
+ *
+ * The eyestalks need this. They're head parts, but they mount as rigid
+ * siblings under the model group, which the RigidBody anchors at the
+ * *shell's seat* — so once the foot could bend, a snail rounding a corner
+ * left its own stalks hovering where a straight body's head would have
+ * been, by as much as a fifth of a body length. Riding the head bone
+ * instead puts them back on the head they belong to, at any bend.
+ *
+ * Composed from the chain's own *local* transforms rather than read off
+ * `matrixWorld`, so it's correct in the same frame the bones were driven:
+ * three only propagates world matrices at render time, well after the
+ * `useFrame` that writes them. Writes into `outPosition`/`outQuaternion`
+ * rather than allocating, since this runs per snail per frame. */
+export function headMountTransform(
+  bones: THREE.Bone[],
+  headRestPosition: THREE.Vector3,
+  outPosition: THREE.Vector3,
+  outQuaternion: THREE.Quaternion,
+): void {
+  outPosition.set(0, 0, 0);
+  outQuaternion.identity();
+  for (const bone of bones) {
+    outPosition.add(scratchOffset.copy(bone.position).applyQuaternion(outQuaternion));
+    outQuaternion.multiply(bone.quaternion);
+  }
+  outPosition.sub(scratchOffset.copy(headRestPosition).applyQuaternion(outQuaternion));
+}
