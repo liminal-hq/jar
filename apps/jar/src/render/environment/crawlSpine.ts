@@ -19,7 +19,9 @@
 import {
   advance,
   advanceTracking,
+  FILLET_RADIUS,
   poseToWorld,
+  roundedNormalAt,
   turn,
   type CrawlPose,
   type Vec3,
@@ -33,6 +35,11 @@ import {
 export interface Breadcrumb {
   pose: CrawlPose;
   position: Vec3;
+  /** `roundedNormalAt` evaluated here, once, when this crumb is recorded —
+   * see `SpineSample.normal` for why a sample's normal has to come from
+   * interpolating these rather than from re-evaluating the field at
+   * whichever crumb a query happened to land nearest. */
+  normal: Vec3;
   arcLength: number;
 }
 
@@ -57,17 +64,53 @@ export interface CrawlSpine {
 
 export interface SpineSample {
   position: Vec3;
+  /** The surface normal here — interpolated between the two bracketing
+   * crumbs' own, exactly as `position` is, then renormalized.
+   *
+   * `faceId`/`u`/`v` below can't be interpolated (see `sampleAt`), so a
+   * caller that derived its own normal by re-evaluating `roundedNormalAt`
+   * at those got a value that stayed pinned to one crumb and then jumped to
+   * the next — piecewise-constant along the body, with the step size set by
+   * how fast the normal field turns. Near a crease that's tens of degrees
+   * per step, and two queries a fraction of a crumb apart (the shell's seat
+   * and its neighbouring bone, say) routinely snapped to *different* crumbs
+   * and so disagreed by that much about which way is up. Interpolating here
+   * makes the normal a continuous function of arc length like every other
+   * sampled quantity, and costs less than the old re-evaluation did, since
+   * each crumb's own normal is computed once when it's recorded. */
+  normal: Vec3;
   faceId: string;
   u: number;
   v: number;
 }
 
 function toSample(crumb: Breadcrumb): SpineSample {
-  return { position: crumb.position, faceId: crumb.pose.faceId, u: crumb.pose.u, v: crumb.pose.v };
+  return {
+    position: crumb.position,
+    normal: crumb.normal,
+    faceId: crumb.pose.faceId,
+    u: crumb.pose.u,
+    v: crumb.pose.v,
+  };
 }
 
 function lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+}
+
+/** Straight-line blend of two unit vectors, renormalized — the cheap slerp.
+ * Exact at either end, and the two normals it ever blends are at most one
+ * fold's dihedral apart, so the (mild) non-constant angular rate in between
+ * is invisible. */
+function lerpNormal(a: Vec3, b: Vec3, t: number): Vec3 {
+  const blended = lerpVec3(a, b, t);
+  const length = Math.hypot(blended.x, blended.y, blended.z);
+  if (length < 1e-9) return a;
+  return { x: blended.x / length, y: blended.y / length, z: blended.z / length };
+}
+
+function normalAt(pose: CrawlPose): Vec3 {
+  return roundedNormalAt(pose.faceId, pose.u, pose.v, FILLET_RADIUS);
 }
 
 /** Seeds a spine by tracing backward from `headPose` — `turn(pose, π)` then
@@ -99,7 +142,12 @@ export function createSpine(
   for (let i = crumbCount - 1; i >= 0; i--) {
     const arcLength = i * crumbSpacing;
     const frame = poseToWorld(tracePose);
-    crumbs.unshift({ pose: tracePose, position: frame.position, arcLength });
+    crumbs.unshift({
+      pose: tracePose,
+      position: frame.position,
+      normal: normalAt(tracePose),
+      arcLength,
+    });
     if (i === 0 || bounced) continue;
 
     const reversed = turn(tracePose, Math.PI);
@@ -175,7 +223,12 @@ export function advanceSpine(spine: CrawlSpine, distance: number, turnDelta: num
     if (spine.distanceSinceLastCrumb >= spine.crumbSpacing - 1e-9) {
       spine.distanceSinceLastCrumb = 0;
       const frame = poseToWorld(pose);
-      spine.crumbs.push({ pose, position: frame.position, arcLength: spine.headArcLength });
+      spine.crumbs.push({
+        pose,
+        position: frame.position,
+        normal: normalAt(pose),
+        arcLength: spine.headArcLength,
+      });
     }
   }
 
@@ -189,7 +242,12 @@ export function advanceSpine(spine: CrawlSpine, distance: number, turnDelta: num
     spine.headArcLength += remaining;
     spine.distanceSinceLastCrumb = 0;
     const frame = poseToWorld(pose);
-    spine.crumbs.push({ pose, position: frame.position, arcLength: spine.headArcLength });
+    spine.crumbs.push({
+      pose,
+      position: frame.position,
+      normal: normalAt(pose),
+      arcLength: spine.headArcLength,
+    });
   }
 
   spine.headPose = pose;
@@ -208,7 +266,11 @@ export function advanceSpine(spine: CrawlSpine, distance: number, turnDelta: num
  * than being interpolated themselves: two adjacent points either side of a
  * fold live in different faces' own local coordinates, so their `u`/`v`
  * values aren't meaningfully lerpable, only their shared world-space
- * `position` is. */
+ * `position` — and, now, `normal` — are. Anything a caller wants as a
+ * *continuous* function of arc length therefore has to be carried here, in
+ * world space, rather than re-derived from the snapped `faceId`/`u`/`v`;
+ * `SpineSample.normal` is exactly that, and exists because deriving it
+ * outside was the bug. */
 function sampleAt(spine: CrawlSpine, targetArcLength: number): SpineSample {
   const lastCrumb = spine.crumbs[spine.crumbs.length - 1];
   if (!lastCrumb) throw new Error('crawlSpine: cannot sample an empty spine');
@@ -220,6 +282,7 @@ function sampleAt(spine: CrawlSpine, targetArcLength: number): SpineSample {
         {
           pose: spine.headPose,
           position: poseToWorld(spine.headPose).position,
+          normal: normalAt(spine.headPose),
           arcLength: spine.headArcLength,
         },
       ]
@@ -238,6 +301,7 @@ function sampleAt(spine: CrawlSpine, targetArcLength: number): SpineSample {
     const nearer = targetArcLength - a.arcLength <= b.arcLength - targetArcLength ? a : b;
     return {
       position: lerpVec3(a.position, b.position, t),
+      normal: lerpNormal(a.normal, b.normal, t),
       faceId: nearer.pose.faceId,
       u: nearer.pose.u,
       v: nearer.pose.v,

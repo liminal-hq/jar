@@ -50,10 +50,8 @@ import {
   advance,
   dropToFloor,
   EDGE_AVOIDANCE_RADIUS,
-  FILLET_RADIUS,
   poseToWorld,
   randomFloorPose,
-  roundedNormalAt,
   unlinkedEdgeAvoidanceBias,
   type CrawlFrame,
   type CrawlPose,
@@ -61,6 +59,7 @@ import {
 import { SnailModel } from '../models/SnailModel';
 import {
   basisQuaternionFromVectors,
+  rootTransformFromFoot,
   updateFootBones,
   type SampledFrame,
 } from '../models/snailFootRig';
@@ -147,10 +146,12 @@ function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
  * convention), and offset by `-SHELL_SEAT_X * scale` along `forward` — an
  * approximation of "where the shell's seat would be," good enough for the
  * detach/float-down animation's own target pose (a single instantaneous
- * `CrawlPose`, not the spine). The main crawl loop no longer uses this: once
- * a real spine exists, the seat's true position comes from sampling it
- * directly (the `seatOffset`-based `sampleSpine` call in the main
- * `useFrame` below) rather than approximating it off a single pose.
+ * `CrawlPose`, not the spine). The main crawl loop no longer uses this: it
+ * takes the seat off the foot's own bones instead
+ * (`rootTransformFromFoot`), which is the only way the two can be
+ * guaranteed to agree. A single detached pose has no foot to read, so the
+ * approximation is exactly right here — and the landing reseed below lines
+ * the spine up with it, so the two never disagree at the handover.
  * `forward`, not `xAxis`: `SHELL_SEAT_X` is a distance along the model's own
  * authored toe-tail axis, and the fixed `-90°` yaw the inner model group
  * applies (`quaternionFromFrame`'s own doc comment) is exactly what maps
@@ -168,9 +169,13 @@ function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 
 
 const FALLBACK_TANGENTS = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0)];
 
-/** One spine sample's own `SampledFrame` (`snailFootRig.ts`): `up` from
- * `roundedNormalAt` (the continuous, crease-aware field, exactly as the
- * rigid-body root already used), but `forward` from a *central difference*
+/** One spine sample's own `SampledFrame` (`snailFootRig.ts`): `up` straight
+ * from the sample's own `normal` (`crawlSpine.ts` interpolates the
+ * crease-rounded field along the trail, rather than this re-evaluating it
+ * at the snapped `faceId`/`u`/`v` — see `SpineSample.normal` for why that
+ * distinction is the difference between a continuous body and one that
+ * disagrees with itself about which way is up), and `forward` from a
+ * *central difference*
  * of neighbouring spine samples' positions rather than any single sample's
  * own stored heading — a chord direction along the body's actual travelled
  * path is what makes adjacent segments bend to follow a turn, not just a
@@ -182,8 +187,7 @@ const FALLBACK_TANGENTS = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0
 function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
   const sample = samples[index]!;
   const position = new THREE.Vector3(sample.position.x, sample.position.y, sample.position.z);
-  const normal = roundedNormalAt(sample.faceId, sample.u, sample.v, FILLET_RADIUS);
-  const up = new THREE.Vector3(normal.x, normal.y, normal.z);
+  const up = new THREE.Vector3(sample.normal.x, sample.normal.y, sample.normal.z);
 
   // `samples` is sorted ascending by offset-behind-head, so `prev` (a
   // smaller index) is the more head-ward neighbour and `next` (a larger
@@ -227,60 +231,27 @@ function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
   return { position, up, forward: rejected.normalize() };
 }
 
-/** The rigid root's own world position, given the spine sample taken at the
- * *seat's* own arc-length offset: that sample is the on-surface point the
- * shell's seat has to sit over, so the model's local origin — which is
- * `SHELL_SEAT_X` (a negative number) *behind* that seat along the authored
- * toe-tail axis — goes `-SHELL_SEAT_X * scale` forward of it, and
- * `-SOLE_Y * scale` up from it so the foot's sole (not the origin) is what
- * touches the surface. The two offsets are exactly the ones
- * `rootPositionFromFrame` applies for the detach animation's own target
- * pose; omitting the `forward` one here (the bug this fixes) left the whole
- * body a fixed `SHELL_SEAT_X * scale` behind where the spine said it was,
- * *and* disagreed with the detach path by that same amount, so a snail
- * jumped on landing. */
-function liftedRootPosition(frame: SampledFrame, scale: number): THREE.Vector3 {
-  return frame.position
-    .clone()
-    .addScaledVector(frame.up, -SOLE_Y * scale)
-    .addScaledVector(frame.forward, -SHELL_SEAT_X * scale);
-}
-
-interface RootAndBoneFrames {
-  rootFrame: SampledFrame;
-  boneFrames: SampledFrame[];
-}
-
-/** Samples the spine once for the seat (the RigidBody's own root) and every
- * bone offset together, sorted into one combined arc-length query — so each
- * point's `sampledFrameAt` tangent comes from its own true neighbours along
- * the body, not just whichever *other* point happens to share its fixed
- * role. `boneOffsets`/`seatOffset` are arc-length distances behind the
- * spine's head (the toe/head bone), all non-negative by construction —
- * `FOOT_TOE_X` is itself the head bone's own offset, exactly `0`. */
-function computeRootAndBoneFrames(
-  spine: CrawlSpine,
-  boneOffsets: number[],
-  seatOffset: number,
-): RootAndBoneFrames {
-  const roles: Array<'seat' | number> = ['seat', ...boneOffsets.map((_, i) => i)];
-  const offsets = [seatOffset, ...boneOffsets];
-  const order = roles.map((_, i) => i).sort((a, b) => offsets[a]! - offsets[b]!);
-
+/** Samples the spine at every bone offset in one combined arc-length query
+ * — so each point's `sampledFrameAt` tangent comes from its own true
+ * neighbours along the body. `boneOffsets` are arc-length distances behind
+ * the spine's head (the toe/head bone), all non-negative by construction —
+ * `FOOT_TOE_X` is itself the head bone's own offset, exactly `0`.
+ *
+ * The shell's seat is deliberately *not* among them any more: it rides the
+ * foot's own bones instead (`rootTransformFromFoot`), which is what stops
+ * the shell and the foot reading the surface independently and disagreeing
+ * about it. */
+function computeBoneFrames(spine: CrawlSpine, boneOffsets: number[]): SampledFrame[] {
+  const order = boneOffsets.map((_, i) => i).sort((a, b) => boneOffsets[a]! - boneOffsets[b]!);
   const samples = sampleSpine(
     spine,
-    order.map((i) => offsets[i]!),
+    order.map((i) => boneOffsets[i]!),
   );
-  const framesByOrder = samples.map((_, sortedIndex) => sampledFrameAt(samples, sortedIndex));
-
-  let rootFrame: SampledFrame | null = null;
   const boneFrames: SampledFrame[] = new Array(boneOffsets.length);
   order.forEach((originalIndex, sortedIndex) => {
-    const role = roles[originalIndex]!;
-    if (role === 'seat') rootFrame = framesByOrder[sortedIndex]!;
-    else boneFrames[role] = framesByOrder[sortedIndex]!;
+    boneFrames[originalIndex] = sampledFrameAt(samples, sortedIndex);
   });
-  return { rootFrame: rootFrame!, boneFrames };
+  return boneFrames;
 }
 
 function isFishRigidBody(userData: unknown): boolean {
@@ -317,18 +288,23 @@ export function Snail({ critter }: SnailProps) {
   // chain), not a render, so it lives in a ref rather than React state
   // (same rationale as `Fish.tsx`'s `currentHeadingRef`). The spine's own
   // head tracks the crawler's *leading* point (the toe), not the shell
-  // seat — the seat, and every bone, are obtained by sampling the spine at
-  // their own fixed offset behind that head (`computeRootAndBoneFrames`),
-  // so every one of them is a real point the spine has actually recorded
-  // reaching, never an extrapolation ahead of it.
+  // seat — every bone is obtained by sampling the spine at its own fixed
+  // offset behind that head (`computeBoneFrames`), so each one is a real
+  // point the spine has actually recorded reaching, never an extrapolation
+  // ahead of it; the seat then rides those bones rather than sampling for
+  // itself (`rootTransformFromFoot`).
   const spineRef = useRef<CrawlSpine>(
     createSpine(randomFloorPose(Math.random), bodyLength, crumbSpacing),
   );
-  const initialFrames = computeRootAndBoneFrames(spineRef.current, boneOffsets, seatOffset);
-  const positionRef = useRef<THREE.Vector3>(liftedRootPosition(initialFrames.rootFrame, scale));
-  const quaternionRef = useRef<THREE.Quaternion>(
-    basisQuaternionFromVectors(initialFrames.rootFrame.forward, initialFrames.rootFrame.up),
+  const initialRoot = rootTransformFromFoot(
+    computeBoneFrames(spineRef.current, boneOffsets),
+    FOOT_BONE_XS,
+    SHELL_SEAT_X,
+    SOLE_Y,
+    scale,
   );
+  const positionRef = useRef<THREE.Vector3>(initialRoot.position);
+  const quaternionRef = useRef<THREE.Quaternion>(initialRoot.quaternion);
 
   const behaviourRef = useRef<SnailBehaviourState>(createInitialSnailBehaviour());
   const headingBiasRef = useRef(0);
@@ -442,19 +418,18 @@ export function Snail({ critter }: SnailProps) {
       // already had, but skipping it would mean a special-cased "first
       // frame after a mode change" resync that isn't worth the complexity
       // at this population scale.
-      const { rootFrame, boneFrames } = computeRootAndBoneFrames(
-        spineRef.current,
-        boneOffsets,
-        seatOffset,
-      );
-      quaternionRef.current.copy(basisQuaternionFromVectors(rootFrame.forward, rootFrame.up));
-      positionRef.current.copy(liftedRootPosition(rootFrame, scale));
+      const boneFrames = computeBoneFrames(spineRef.current, boneOffsets);
 
-      // Both halves of the body come out of the *same* `computeRootAndBone
-      // Frames` call, so the shell (rigidly riding the root derived from the
-      // seat sample) and the foot (every bone placed on its own sample) are
-      // always the one animal — see `snailFootRig.ts` on why the bones need
-      // their positions driven, not just their rotations.
+      // One derivation, one source: every bone sits on its own spine sample,
+      // and the root — and so the rigid shell bolted to it — is the *foot's*
+      // own frame at the seat, blended from the same two bones the skinned
+      // mesh blends for a vertex there (`rootTransformFromFoot`). Neither
+      // half reads the surface on its own account, so neither can disagree
+      // with the other about it.
+      const root = rootTransformFromFoot(boneFrames, FOOT_BONE_XS, SHELL_SEAT_X, SOLE_Y, scale);
+      positionRef.current.copy(root.position);
+      quaternionRef.current.copy(root.quaternion);
+
       const bones = footBonesRef.current;
       if (bones) {
         updateFootBones(bones, boneFrames, positionRef.current, quaternionRef.current, scale);

@@ -214,3 +214,66 @@ export function headMountTransform(
   }
   outPosition.sub(scratchOffset.copy(headRestPosition).applyQuaternion(outQuaternion));
 }
+
+/** The RigidBody root's own world transform, read off the **foot** rather
+ * than off a surface sample of its own.
+ *
+ * The shell is a rigid mesh bolted to the root, and the root's whole job is
+ * to be the shell's seat — a single material point on the foot's back, at
+ * `seatX` along the authored toe-tail axis. Sampling the spine separately
+ * at that point's arc length gives a frame that is *nearly* the foot's, and
+ * "nearly" is the whole problem: the seat's offset falls between two bones'
+ * offsets, so the two land in different places along the trail and read the
+ * surface independently. Where the surface turns quickly — a castle box's
+ * top edge, a corner where three faces meet — those independent reads
+ * disagree by tens of degrees, and since the shell stands ~`-soleY` tall
+ * above the sole, a few tens of degrees at the seat throws its apex most of
+ * a body length clear of the foot it is supposed to be sitting on. The seat
+ * *point* stays glued the whole time, which is what makes this so easy to
+ * miss: it's the shell's body that leaves, by rotating about a contact that
+ * never breaks.
+ *
+ * Blending the two bones that bracket `seatX` — the same two, with the same
+ * weights, that the skinned mesh itself blends for a vertex there — removes
+ * the independent read entirely. The shell then rides the foot the way a
+ * vertex does, so no amount of disagreement in the surface field can
+ * separate them: whatever the bones do, the shell does too.
+ *
+ * Returns the model group's own origin (not the seat): `seatX`/`soleY` are
+ * where the seat sits in the model's authored space, so the origin is that
+ * far forward of, and above, the seat. */
+export function rootTransformFromFoot(
+  boneFrames: SampledFrame[],
+  boneXs: number[],
+  seatX: number,
+  soleY: number,
+  scale: number,
+): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+  let index = 0;
+  while (index < boneXs.length - 2 && boneXs[index + 1]! < seatX) index++;
+  const xa = boneXs[index]!;
+  const xb = boneXs[index + 1]!;
+  const t = xb > xa ? THREE.MathUtils.clamp((seatX - xa) / (xb - xa), 0, 1) : 0;
+
+  // Each bone carries the seat forward along its own axis: bone and seat
+  // share the sole line, so the offset between them is purely along
+  // `forward` (the model's authored `+X`, which is what the chain runs
+  // along). Lerping the two carried points is linear-blend skinning of the
+  // seat, vertex for vertex.
+  const carried = (i: number) =>
+    boneFrames[i]!.position.clone().addScaledVector(
+      boneFrames[i]!.forward,
+      (seatX - boneXs[i]!) * scale,
+    );
+  const position = carried(index).lerp(carried(index + 1), t);
+
+  const quaternion = basisQuaternionFromVectors(
+    boneFrames[index]!.forward,
+    boneFrames[index]!.up,
+  ).slerp(basisQuaternionFromVectors(boneFrames[index + 1]!.forward, boneFrames[index + 1]!.up), t);
+
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion);
+  position.addScaledVector(up, -soleY * scale).addScaledVector(forward, -seatX * scale);
+  return { position, quaternion };
+}

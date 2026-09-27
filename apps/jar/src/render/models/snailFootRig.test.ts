@@ -32,6 +32,7 @@ import {
   boneOrientationFromVectors,
   footBoneLocalTransforms,
   headMountTransform,
+  rootTransformFromFoot,
   updateFootBones,
   type SampledFrame,
 } from './snailFootRig';
@@ -331,5 +332,39 @@ describe('headMountTransform', () => {
     // straight body's head would be.
     const rigid = hinge.clone().applyMatrix4(rig.modelGroup.matrixWorld);
     expect(rigid.distanceTo(mounted) / BODY_LENGTH).toBeGreaterThan(0.05);
+  });
+});
+
+describe('rootTransformFromFoot', () => {
+  it('puts the model origin exactly where the rest pose wants it', () => {
+    const { boneFrames } = sampleShape(straight);
+    const root = rootTransformFromFoot(boneFrames, FOOT_BONE_XS, SHELL_SEAT_X, SOLE_Y, SCALE);
+    // A straight body's seat sample is at the origin's own authored offset,
+    // so this has to agree with the frame-based derivation to the micron.
+    const { rootFrame } = sampleShape(straight);
+    expect(root.position.distanceTo(rootPositionFor(rootFrame))).toBeLessThan(1e-9);
+    expect(
+      root.quaternion.angleTo(basisQuaternionFromVectors(rootFrame.forward, rootFrame.up)),
+    ).toBeLessThan(1e-9);
+  });
+
+  it('keeps the shell riding the foot through a fold that a seat sample would miss', () => {
+    // The two bones bracketing the seat are deliberately given *different*
+    // surface frames — the situation a crease produces, and the one a
+    // separately-sampled seat frame reads independently and gets wrong.
+    const { boneFrames } = sampleShape(fold(BODY_LENGTH * 0.6));
+    const root = rootTransformFromFoot(boneFrames, FOOT_BONE_XS, SHELL_SEAT_X, SOLE_Y, SCALE);
+
+    let b = 0;
+    while (b < FOOT_BONE_XS.length - 2 && FOOT_BONE_XS[b + 1]! < SHELL_SEAT_X) b++;
+    const t = (SHELL_SEAT_X - FOOT_BONE_XS[b]!) / (FOOT_BONE_XS[b + 1]! - FOOT_BONE_XS[b]!);
+
+    // The root's own frame has to be the blend of those two bones, not a
+    // third opinion: its `up` must sit between theirs, never outside.
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(root.quaternion);
+    const spread = boneFrames[b]!.up.angleTo(boneFrames[b + 1]!.up);
+    expect(up.angleTo(boneFrames[b]!.up)).toBeLessThanOrEqual(spread + 1e-6);
+    expect(up.angleTo(boneFrames[b + 1]!.up)).toBeLessThanOrEqual(spread + 1e-6);
+    expect(t).toBeGreaterThan(0);
   });
 });
