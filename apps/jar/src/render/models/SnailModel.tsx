@@ -21,6 +21,7 @@ import type { Critter } from '../../domain/protocol/generated/Critter';
 import type { Pattern } from '../../domain/protocol/generated/Pattern';
 import type { ShellType } from '../../domain/protocol/generated/ShellType';
 import { lifeStageScale } from '../../domain/simConstants';
+import { footDeformation } from './footDeformation';
 import {
   attachFootRippleDepthMaterial,
   attachFootRippleVertexShader,
@@ -171,11 +172,6 @@ const EYESTALK_RETRACT_START = 0.45;
  * Far below a pixel at any plausible camera distance. */
 const EYESTALK_RETRACT_MIN_SCALE = 0.001;
 
-/** Foot doesn't fully vanish on withdrawal — it shrinks toward the shell,
- * which is what actually hides most of it as the shell settles over the
- * same window (`snailGeometry.ts`'s `tuckPose`). */
-const FOOT_WITHDRAW_SCALE = 0.85;
-
 /** Crawl-ripple tuning, exaggerated for legibility rather than biologically
  * literal (project convention) — a slow, clearly-visible travelling bump
  * rather than a subtle one. Tune by eye. */
@@ -220,7 +216,6 @@ export function SnailModel({
   onBonesReady,
   gaitRef,
 }: SnailModelProps) {
-  const footGroupRef = useRef<THREE.Group>(null);
   const footMeshRef = useRef<THREE.SkinnedMesh>(null);
   const eyestalkMountRef = useRef<THREE.Group>(null);
   const eyestalkPivotRef = useRef<THREE.Group>(null);
@@ -300,12 +295,11 @@ export function SnailModel({
     paintSoleGradient(footGeometry, footColour, soleColour);
   }, [footGeometry, footColour, soleColour]);
 
-  // The bone chain the foot mesh skins to — at rest here (issue #112's PR 6
-  // scope; nothing yet drives a per-frame bend), so binding renders
-  // pixel-identical to the plain rigid mesh it replaces. `bones[0]` (the
-  // root) mounts as a *sibling* of `footGroupRef` below, not a child of it
-  // — see that JSX's own comment for why a skinned mesh's bone chain must
-  // not share a changing-scale ancestor with the mesh itself.
+  // The bone chain the foot mesh skins to — created at rest, so an undriven
+  // instance (`CritterPreview.tsx`) renders pixel-identical to the plain rigid
+  // mesh it replaced; `Snail.tsx` drives it per frame off the crawl spine.
+  // `bones[0]` (the root) mounts as a *sibling* of the mesh below — see that
+  // JSX's own comment for what has to stay true of both their ancestors.
   const footBones = useMemo(() => createFootBones(), []);
   const footSkeleton = useMemo(() => new THREE.Skeleton(footBones), [footBones]);
   useLayoutEffect(() => {
@@ -347,6 +341,7 @@ export function SnailModel({
       soleY: SOLE_Y,
       envelopeHeight: FOOT_SOLE_GRADIENT_HEIGHT,
       wavelength: FOOT_RIPPLE_WAVELENGTH,
+      stretchAnchorX: FOOT_TOE_X,
     }),
     [],
   );
@@ -502,27 +497,6 @@ export function SnailModel({
       eyestalkFarPivotRef.current.scale.setScalar(eyestalkScale);
     }
 
-    if (footGroupRef.current) {
-      const withdrawScale = 1 - pose.footWithdraw * FOOT_WITHDRAW_SCALE;
-      // Squash-and-stretch (issue #112) rides this same group, on top of
-      // the existing withdrawal scale, rather than any individual bone —
-      // every bone in the chain is a *child* of the previous one, so a
-      // per-bone scale would compound down the chain (bone 3 ending up
-      // stretched by `stretch^3`); this group is a single ancestor of the
-      // whole assembly, so its scale only ever applies once. The model is
-      // authored facing local `+X` (this group has no rotation of its own
-      // to remap that), so `+X` is the stretch axis; `y`/`z` take the full
-      // inverse (not the physically-correct square root) for an
-      // exaggerated "plump" rather than a subtle one, matching this
-      // project's stated preference for exaggeration over accuracy.
-      const stretchFactor = 1 + (gaitRef?.current.stretch ?? 0);
-      footGroupRef.current.scale.set(
-        withdrawScale * stretchFactor,
-        withdrawScale / stretchFactor,
-        withdrawScale / stretchFactor,
-      );
-    }
-
     if (shellGroupRef.current) {
       shellGroupRef.current.position.y = -SHELL_SEALED_DROP * pose.shellSettle;
       // Secondary motion (issue #112): the spring's own position becomes a
@@ -540,10 +514,16 @@ export function SnailModel({
     // idle "gently crawling in place" read, the same role a stationary
     // Yuka vehicle plays for `FishModel`'s own idle swim.
     const ripplePhase = (gaitRef ? gaitRef.current.phase : t * FOOT_RIPPLE_SPEED) + phaseSeed;
+    // Withdrawal and squash-and-stretch reach the foot as uniforms, not as a
+    // transform on any node above the mesh: the foot is a `SkinnedMesh`, and
+    // three's default `AttachedBindMode` divides the mesh's own world matrix
+    // straight back out of the skinning result, so an ancestor scale is
+    // cancelled before it can move a single vertex (`footDeformation.ts`).
     setFootRippleUniforms(
       rippleUniforms,
       ripplePhase,
       FOOT_RIPPLE_AMPLITUDE * (1 - pose.footWithdraw),
+      footDeformation(pose.footWithdraw, gaitRef?.current.stretch ?? 0),
     );
 
     operculumMaterial.opacity = pose.operculumSeal;
@@ -555,37 +535,38 @@ export function SnailModel({
 
   return (
     <group scale={scale}>
-      {/* The bone chain is deliberately *not* inside `footGroupRef` — a
-          `SkinnedMesh`'s skinning math already bakes in the *change* in
-          every shared ancestor's transform between bind time and now (that's
-          how a bone's own rotation reaches the mesh at all), so if
-          `footGroupRef`'s own scale (withdrawal, and later squash-and-
-          stretch) were a shared ancestor of *both* the mesh and this chain,
-          that scale would be applied twice: once normally, via the mesh's
-          own `matrixWorld`, and a second time via the bone-transform ratio
-          picking up the very same change. Sitting here, as a sibling of
-          `footGroupRef` under the same static outer group, means the bones'
-          own `matrixWorld` never reflects `footGroupRef`'s scale at all —
-          the mesh alone carries it, exactly once, through the ordinary
-          (non-skinning) transform pipeline. */}
+      {/* The bone chain mounts as a *sibling* of the foot mesh, both directly
+          under this one static outer group, and nothing between either of
+          them and the scene root ever carries a per-frame transform.
+
+          That's not just tidiness. A bone's own `matrixWorld` is what the
+          skinning maths measures against its bind pose, and this outer
+          group's uniform life-stage scale is the only thing the rig
+          (`snailFootRig.ts`) divides back out when it projects world-space
+          spine samples into bone-local space — so any further transform
+          above the chain would put the whole foot somewhere other than on
+          the crawl surface the spine sampled. The mesh side is the mirror
+          image: an `AttachedBindMode` `SkinnedMesh` cancels its own
+          `matrixWorld` out of the skinning result entirely, so a transform
+          placed above the mesh alone does nothing at all. Deformation of the
+          foot therefore belongs in neither place — it happens inside the
+          vertex shader, ahead of skinning (`footDeformation.ts`,
+          `footRippleShader.ts`). */}
       <primitive object={footBones[0]!} />
-      <group ref={footGroupRef}>
-        <skinnedMesh
-          ref={footMeshRef}
-          geometry={footGeometry}
-          material={footMaterial}
-          customDepthMaterial={footDepthMaterial}
-          castShadow
-          receiveShadow
-          // The rig will actually deform beyond the rest geometry's own
-          // bounding box once something drives a bend (issue #112's later
-          // PRs) — three.js can't know that from a SkinnedMesh's static
-          // geometry bounds, so culling must stay off from the start
-          // rather than being remembered as a fast-follow once bending
-          // makes a snail flicker at the edge of the camera frustum.
-          frustumCulled={false}
-        />
-      </group>
+      <skinnedMesh
+        ref={footMeshRef}
+        geometry={footGeometry}
+        material={footMaterial}
+        customDepthMaterial={footDepthMaterial}
+        castShadow
+        receiveShadow
+        // The rig deforms well beyond the rest geometry's own bounding box —
+        // both the bend and the shader's own displacement — and three.js
+        // can't know that from a SkinnedMesh's static geometry bounds, so
+        // culling stays off rather than letting a snail flicker at the edge
+        // of the camera frustum.
+        frustumCulled={false}
+      />
 
       <group ref={eyestalkMountRef}>
         <primitive object={eyestalkPivot} ref={eyestalkPivotRef}>
