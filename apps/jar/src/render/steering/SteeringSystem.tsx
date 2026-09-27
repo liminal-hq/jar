@@ -37,6 +37,8 @@ import {
 } from '../../domain/critterDebug';
 import { emitFishPoses, type FishPoseEntry } from '../../domain/fishPose';
 import { useJarStore } from '../../domain/jarClient';
+import { WALL_THICKNESS } from '../physics/coordinates';
+import { recoveredTankPosition } from '../physics/tankEscape';
 import { entityManager } from './entityManager';
 import {
   computePilotTargetHeading,
@@ -139,6 +141,11 @@ export function EmptySteeringRegistry({ children }: { children: ReactNode }) {
     </SteeringRegistryContext.Provider>
   );
 }
+
+/** A shared, never-mutated zero for `setLinvel` on a rescued fish
+ * (`tankEscape.ts`) — Rapier copies what it's handed, so one frozen literal
+ * is enough. */
+const ZERO_VELOCITY = { x: 0, y: 0, z: 0 } as const;
 
 const scratchImpulse = new THREE.Vector3();
 const scratchVelocity = new THREE.Vector3();
@@ -260,7 +267,29 @@ export function SteeringSystem({ children }: SteeringSystemProps) {
     for (const [id, fish] of registry.entries()) {
       const body = fish.getBody();
       if (!body) continue;
-      const t = body.translation();
+      const translation = body.translation();
+      // Checked before anything else reads the position, so a rescued fish
+      // steers from inside the tank on this very frame rather than spending
+      // one more frame acting on a position it is no longer at. `tankEscape.ts`
+      // has the whole rationale: no steering force can bring a fish back
+      // through the glass, so without this a fish that ends up outside stays
+      // there, heading frozen, for the rest of the session.
+      const recovered = recoveredTankPosition(
+        translation,
+        WALL_THICKNESS / 2 + fish.getColliderRadius(),
+      );
+      if (recovered) {
+        body.setTranslation(recovered, true);
+        // Both velocities zeroed, not just the body's: Yuka never damps
+        // `vehicle.velocity` on its own (`NON_ACTIVE_VELOCITY_DECAY_RATE`'s
+        // comment), so an escaped fish's desired velocity is pinned at
+        // `maxSpeed` straight at the wall it was stuck against. Left alone,
+        // the impulse below would immediately fire the rescued fish back at
+        // the glass it just came through.
+        body.setLinvel(ZERO_VELOCITY, true);
+        fish.vehicle.velocity.set(0, 0, 0);
+      }
+      const t = recovered ?? translation;
       fish.vehicle.position.set(t.x, t.y, t.z);
       fish.vehicle.maxSpeed = fish.maxSpeed();
       // Widened while a key is genuinely held for this fish, so

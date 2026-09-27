@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SVG_SCALE } from '../models/fishGeometry';
-import { TANK_INNER_BOUNDS, WALL_THICKNESS } from '../physics/coordinates';
+import { simPercentToWorld, TANK_INNER_BOUNDS, WALL_THICKNESS } from '../physics/coordinates';
 import { COLLIDER_HALF_THICKNESS_SVG } from '../tank/fishCollider';
 import {
   CASTLE_COLLIDER_BOXES,
@@ -221,6 +221,59 @@ describe('keepClearOfCastle', () => {
     expect(Math.abs(pushed.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x - margin + 1e-9);
     expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - margin + 1e-9);
     expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - margin + 1e-9);
+  });
+
+  it('stays inside the tank even when no axis can clear the box without leaving it', () => {
+    // The right tower sits close enough to the +x glass, the floor and the
+    // back glass at once that for a female Forked fish's adult-collider
+    // margin, *all three* escape directions from the corner of its expanded
+    // box land outside the tank. With no feasible axis to prefer, the push
+    // falls back to the cheapest one — and unclamped, that put the critter's
+    // spawn point past the +x wall collider entirely, on the wrong side of
+    // the glass, where nothing can ever steer it back in
+    // (`render/physics/tankEscape.ts`).
+    const margin = 0.456;
+    const tower = CASTLE_COLLIDER_BOXES[4]!; // right tower
+    const towerWorld = {
+      x: CASTLE_POSITION.x + tower.position.x,
+      y: CASTLE_POSITION.y + tower.position.y,
+      z: CASTLE_POSITION.z + tower.position.z,
+    };
+    // Offset toward the glass, the floor and the back wall — the one octant
+    // of the expanded box where every escape target is out of bounds.
+    const cornered = { x: towerWorld.x + 0.05, y: towerWorld.y - 0.05, z: towerWorld.z - 0.05 };
+    const pushed = keepClearOfCastle(cornered, margin);
+
+    expect(Math.abs(pushed.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x - margin + 1e-9);
+    expect(Math.abs(pushed.y)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.y - margin + 1e-9);
+    expect(Math.abs(pushed.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z - margin + 1e-9);
+  });
+
+  it('never leaves the tank for any favourite spot a critter can actually roll', () => {
+    // `Fish.tsx` feeds this the output of `simPercentToWorld` for a rolled
+    // `favourite_spot` and mounts the fish's RigidBody at the result, so a
+    // single out-of-bounds point anywhere in that space is a fish spawned
+    // outside the glass. Margins span every fin/sex adult collider length
+    // (`fishCollider.ts`'s `adultColliderHalfExtentsFor(...).z`).
+    // Collected rather than asserted per point: one `expect` over the whole
+    // space names the offending spot if there is one, without paying for a
+    // few million assertions to prove there isn't.
+    const escaped: Array<{ margin: number; percent: number[]; pushed: unknown }> = [];
+    for (const margin of [0.456, 0.508, 0.547, 0.604, 0.61, 0.725]) {
+      const clearance = WALL_THICKNESS / 2 + margin;
+      for (let xPercent = 0; xPercent <= 100; xPercent += 1) {
+        for (let yPercent = 0; yPercent <= 100; yPercent += 1) {
+          for (let zPercent = 0; zPercent <= 100; zPercent += 2) {
+            const spot = simPercentToWorld(xPercent, yPercent, zPercent, clearance);
+            const pushed = keepClearOfCastle(spot, margin);
+            if (!isInsideTank(pushed)) {
+              escaped.push({ margin, percent: [xPercent, yPercent, zPercent], pushed });
+            }
+          }
+        }
+      }
+    }
+    expect(escaped).toEqual([]);
   });
 });
 
