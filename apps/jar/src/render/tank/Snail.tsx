@@ -48,10 +48,9 @@ import {
   unlinkedEdgeAvoidanceBias,
   type CrawlFrame,
   type CrawlPose,
-  type Vec3,
 } from '../environment/crawlSurfaces';
 import { SnailModel } from '../models/SnailModel';
-import { SNAIL_BODY_SCALE, SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
+import { SHELL_SEAT_X, SNAIL_BODY_SCALE, SOLE_Y, SVG_SCALE } from '../models/snailGeometry';
 import {
   createInitialSnailBehaviour,
   DETACH_SINK_DURATION_SEC,
@@ -126,19 +125,24 @@ function quaternionFromFrame(frame: CrawlFrame): THREE.Quaternion {
 
 /** The RigidBody's own root sits above the sole by `-SOLE_Y * scale` along
  * `up` (`SOLE_Y` is negative, in `snailGeometry.ts`'s raw-SVG-derived
- * convention) — the model's local origin isn't the contact point;
- * `snailCollider.ts`'s own `centreOffsetY` is the collider's equivalent
- * correction. */
-function rootPositionFromContact(contact: Vec3, up: THREE.Vector3, scale: number): THREE.Vector3 {
-  return new THREE.Vector3(contact.x, contact.y, contact.z).addScaledVector(up, -SOLE_Y * scale);
-}
-
+ * convention), and offset by `-SHELL_SEAT_X * scale` along `forward` (issue
+ * #112's PR 7 re-anchor) — the crawl-surface contact point tracks wherever
+ * the *shell's own seat* sits, not the model's arbitrary local origin,
+ * since that's what the physics collider (`snailCollider.ts`'s own
+ * `SHELL_HALF_LENGTH_ABOUT_SEAT`) and, later, the spine's own frame
+ * (issue #112's bend-wiring PR) both need to agree on. `forward`, not
+ * `xAxis`: `SHELL_SEAT_X` is a distance along the model's own authored
+ * toe-tail axis, and the fixed `-90°` yaw the inner model group applies
+ * (`quaternionFromFrame`'s own doc comment) is exactly what maps that axis
+ * onto the RigidBody's `forward` (local `+Z`), not onto `xAxis` (local
+ * `+X`, the model's *thickness* axis once yawed) — using `xAxis` here would
+ * shift the root sideways instead of back toward the tail. */
 function rootPositionFromFrame(frame: CrawlFrame, scale: number): THREE.Vector3 {
-  return rootPositionFromContact(
-    frame.position,
-    new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z),
-    scale,
-  );
+  const up = new THREE.Vector3(frame.up.x, frame.up.y, frame.up.z);
+  const forward = new THREE.Vector3(frame.forward.x, frame.forward.y, frame.forward.z);
+  return new THREE.Vector3(frame.position.x, frame.position.y, frame.position.z)
+    .addScaledVector(up, -SOLE_Y * scale)
+    .addScaledVector(forward, -SHELL_SEAT_X * scale);
 }
 
 function isFishRigidBody(userData: unknown): boolean {
@@ -330,7 +334,10 @@ export function Snail({ critter }: SnailProps) {
         }
       }}
     >
-      <CuboidCollider args={[he.x, he.y, he.z]} position={[0, he.centreOffsetY, 0]} />
+      <CuboidCollider
+        args={[he.x, he.y, he.z]}
+        position={[0, he.centreOffsetY, he.centreOffsetZ]}
+      />
       <group
         // Both models are authored facing `+X` (`snailGeometry.ts` mirrors
         // `fishGeometry.ts`'s convention) — see `quaternionFromFrame`'s own

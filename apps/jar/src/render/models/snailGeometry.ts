@@ -88,9 +88,37 @@ export const SHELL_APEX_HEIGHT_ABOVE_SOLE: Record<ShellType, number> = {
   Turret: 83,
 };
 
+/** Where the shell actually sits along the foot's x-axis — the rough
+ * centre of each shell type's own authored footprint (each shell's `shell`
+ * path's control points span roughly x∈[-80,48] for Coil, [-78,30] for
+ * Ramshorn, [-61,18] for Turret; all three converge close to this one
+ * value, matching Coil's own art-comment note that its whorl sits "about
+ * (-20,-13)"). `Snail.tsx`'s PR 7 root re-anchor uses this directly: the
+ * crawl-surface contact point tracks wherever the shell's own seat is,
+ * not the model's arbitrary local origin. One shared constant rather than
+ * a per-shell table, since all three shells agree closely enough that a
+ * per-shell value wouldn't change anything visible. */
+export const SHELL_SEAT_X = -20;
+
+/** Each shell's own half-length *around the seat* (`SHELL_SEAT_X`) —
+ * `max(|min_x - SHELL_SEAT_X|, |max_x - SHELL_SEAT_X|)` off the same
+ * control-point bounding data `SHELL_SEAT_X` itself is measured from, so
+ * it's a mildly conservative bound the same way `SHELL_SEAT_X`'s own
+ * source data is (a Bezier curve's true extent sits inside, never outside,
+ * its own control points' convex hull). `snailCollider.ts`'s PR 7 refit
+ * uses this in place of the old whole-foot span, since only the shell
+ * stays rigid once the foot itself can bend (a later PR) — a collider
+ * still sized to the whole foot would stick through whatever surface a
+ * bent foot had moved away from. */
+export const SHELL_HALF_LENGTH_ABOUT_SEAT: Record<ShellType, number> = {
+  Coil: 68,
+  Ramshorn: 58,
+  Turret: 41,
+};
+
 /** The foot silhouette's raw SVG extremes (`foot.svg`'s own path data) —
- * toe at the front, tail tip at the back; PR 6's `snailCollider.ts` derives
- * its length half-extent from this span, the way `fishCollider.ts` uses
+ * toe at the front, tail tip at the back; `snailGeometry.ts`'s bone chain
+ * (PR 6) spans this same range, the way `fishGeometry.ts` uses
  * `TAIL_TIP_SVG_DISTANCE`. */
 export const FOOT_TOE_X = 96;
 export const FOOT_TAIL_TIP_X = -125;
