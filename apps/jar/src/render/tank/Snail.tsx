@@ -57,7 +57,7 @@ import {
   type CrawlFrame,
   type CrawlPose,
 } from '../environment/crawlSurfaces';
-import { SnailModel } from '../models/SnailModel';
+import { SnailModel, type SnailGait } from '../models/SnailModel';
 import {
   basisQuaternionFromVectors,
   rootTransformFromFoot,
@@ -111,6 +111,45 @@ const EDGE_AVOIDANCE_TURN_RATE = 1.5;
  * spine's resolution (crumbs per body length) consistent across life
  * stages, since a fry's whole body is much shorter than an adult's. */
 const CRUMB_SAMPLES_PER_BODY = 24;
+
+/** The gait's own angular rate (radians/sec while genuinely crawling) —
+ * reuses the exact cadence the foot ripple already shipped with (its own
+ * `FOOT_RIPPLE_SPEED`), so retiring that wall-clock-driven oscillation for
+ * this gated, shared one doesn't change how fast the ripple itself looks,
+ * only *when* it plays (now genuinely tied to crawling, not free-running
+ * — issue #112's own coupling: one clock for the ripple, the speed pulse,
+ * and the spine's own sampling wave, so they read as one gait rather than
+ * three animations that happen to share a rate). */
+const GAIT_ANGULAR_RATE = 1.4;
+
+/** How much the crawl speed itself pulses with the gait — a real gastropod
+ * surges during a pedal wave's push phase; ±35% around `CRAWL_SPEED`,
+ * exaggerated for legibility like every other snail-motion constant. */
+const GAIT_PULSE_AMPLITUDE = 0.35;
+
+/** How quickly the body's *effective* speed (what squash-and-stretch
+ * actually reacts to) catches up to its target — low enough that starting
+ * or stopping takes a visible fraction of a second to settle, which is
+ * exactly the lag squash-and-stretch is meant to dramatize. */
+const SPEED_SMOOTH_RATE = 4;
+
+/** Converts the smoothed speed's own frame-to-frame *change* (world units
+ * / sec²) into a stretch fraction — tune by eye alongside `MAX_STRETCH`. */
+const STRETCH_RESPONSE = 0.15;
+const MAX_STRETCH = 0.35;
+
+/** The spine-sampling "accordion" wave: each bone's offset is nudged
+ * along the body by a small amount, oscillating with the same gait phase,
+ * so the body visibly bunches and spreads as the pedal wave passes through
+ * — not just a speed pulse, an actual compression wave along its length.
+ * Amplitude is expressed as a multiple of the spine's own crumb spacing
+ * (never asking `sampleSpine` for finer detail than the trail actually
+ * records) rather than a fixed world-unit constant, matching
+ * `CRUMB_SAMPLES_PER_BODY`'s own "scale with the body, not a magic
+ * number" reasoning. Wavelength is a fraction of the body's own length —
+ * half a body per cycle reads as one clear compression, not a busy ripple. */
+const ACCORDION_AMPLITUDE_CRUMB_MULTIPLE = 1.5;
+const ACCORDION_WAVELENGTH_BODY_FRACTION = 0.5;
 
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
@@ -255,6 +294,21 @@ function computeBoneFrames(spine: CrawlSpine, boneOffsets: number[]): SampledFra
   return boneFrames;
 }
 
+/** Nudges a spine-sampling offset along the body by a small amount that
+ * oscillates with the shared gait phase — the "accordion" compression wave:
+ * every bone bunches toward the head and spreads back out again as the wave
+ * passes through, on top of whatever the bend itself is already doing. The
+ * shell's seat needs no term of its own; riding the bones
+ * (`rootTransformFromFoot`) carries it along with whatever compression they
+ * are under, which is both simpler and the only version that can't slide
+ * the shell along a bunching foot. Purely a query-time perturbation of which arc length gets
+ * sampled — `sampleSpine` already clamps gracefully at either end of the
+ * recorded trail, so a perturbation pushing an offset slightly negative or
+ * past the oldest crumb is harmless, not a new failure mode to guard. */
+function withAccordionWave(offset: number, phase: number, k: number, amplitude: number): number {
+  return offset + amplitude * Math.sin(offset * k - phase);
+}
+
 function isFishRigidBody(userData: unknown): boolean {
   return (
     typeof userData === 'object' &&
@@ -277,12 +331,21 @@ export function Snail({ critter }: SnailProps) {
   const crumbSpacing = bodyLength / CRUMB_SAMPLES_PER_BODY;
   const seatOffset = (FOOT_TOE_X - SHELL_SEAT_X) * scale;
   const boneOffsets = FOOT_BONE_XS.map((x) => (FOOT_TOE_X - x) * scale);
+  const accordionAmplitude = crumbSpacing * ACCORDION_AMPLITUDE_CRUMB_MULTIPLE;
+  const accordionK = (2 * Math.PI) / (bodyLength * ACCORDION_WAVELENGTH_BODY_FRACTION);
 
   // The bone chain itself lives inside `SnailModel`, which hands it up via
   // `onBonesReady` once created — a ref, not React state, since this
   // component mutates the bones' rotations imperatively every frame rather
   // than re-rendering to change them.
   const footBonesRef = useRef<THREE.Bone[] | null>(null);
+
+  // The shared gait clock + its own derived stretch, handed to `SnailModel`
+  // as a live ref rather than changing props (the same rationale as
+  // `footBonesRef` above) so the foot ripple and squash-and-stretch can
+  // read this component's own per-frame state without a re-render.
+  const gaitRef = useRef<SnailGait>({ phase: 0, stretch: 0 });
+  const smoothedSpeedRef = useRef(0);
 
   // Spawn once at mount, mutated in place every frame thereafter — this
   // spine drives an imperative kinematic body transform (and, now, a bone
@@ -298,7 +361,12 @@ export function Snail({ critter }: SnailProps) {
     createSpine(randomFloorPose(Math.random), bodyLength, crumbSpacing),
   );
   const initialRoot = rootTransformFromFoot(
-    computeBoneFrames(spineRef.current, boneOffsets),
+    computeBoneFrames(
+      spineRef.current,
+      boneOffsets.map((offset) =>
+        withAccordionWave(offset, gaitRef.current.phase, accordionK, accordionAmplitude),
+      ),
+    ),
     FOOT_BONE_XS,
     SHELL_SEAT_X,
     SOLE_Y,
@@ -405,6 +473,15 @@ export function Snail({ critter }: SnailProps) {
         detachAnchorRef.current = null;
       }
 
+      // The gait phase only advances while genuinely crawling — it's what
+      // gates the foot ripple to actual movement instead of free-running
+      // off wall-clock time, per issue #112's own "one shared clock for the
+      // ripple, the speed pulse, and the spine's own sampling wave" design.
+      if (isMoving(mode)) {
+        gaitRef.current.phase += GAIT_ANGULAR_RATE * delta;
+      }
+      const pulseMultiplier = 1 + GAIT_PULSE_AMPLITUDE * Math.sin(gaitRef.current.phase);
+
       if (isMoving(mode)) {
         headingBiasRef.current = THREE.MathUtils.clamp(
           headingBiasRef.current + (Math.random() - 0.5) * HEADING_BIAS_JITTER * delta,
@@ -417,16 +494,39 @@ export function Snail({ critter }: SnailProps) {
         );
         advanceSpine(
           spineRef.current,
-          CRAWL_SPEED * delta,
+          CRAWL_SPEED * pulseMultiplier * delta,
           headingBiasRef.current * delta + avoidance * EDGE_AVOIDANCE_TURN_RATE * delta,
         );
       }
+
+      // Squash-and-stretch: derived from the *smoothed* speed's own frame-
+      // to-frame change rather than a hand-built spring — a first-order lag
+      // chasing a step target already overshoots-then-settles on its own,
+      // which is exactly the shape a start/stop stretch/squash wants, with
+      // no separate oscillator to tune.
+      const targetSpeed = isMoving(mode) ? CRAWL_SPEED * pulseMultiplier : 0;
+      const previousSmoothedSpeed = smoothedSpeedRef.current;
+      smoothedSpeedRef.current +=
+        (targetSpeed - smoothedSpeedRef.current) * (1 - Math.exp(-SPEED_SMOOTH_RATE * delta));
+      const acceleration =
+        delta > 0 ? (smoothedSpeedRef.current - previousSmoothedSpeed) / delta : 0;
+      gaitRef.current.stretch = THREE.MathUtils.clamp(
+        acceleration * STRETCH_RESPONSE,
+        -MAX_STRETCH,
+        MAX_STRETCH,
+      );
+
       // Runs every frame regardless of `isMoving` — a paused/sealed snail's
       // spine hasn't changed, so this just re-derives the same frames it
       // already had, but skipping it would mean a special-cased "first
       // frame after a mode change" resync that isn't worth the complexity
       // at this population scale.
-      const boneFrames = computeBoneFrames(spineRef.current, boneOffsets);
+      const boneFrames = computeBoneFrames(
+        spineRef.current,
+        boneOffsets.map((offset) =>
+          withAccordionWave(offset, gaitRef.current.phase, accordionK, accordionAmplitude),
+        ),
+      );
 
       // One derivation, one source: every bone sits on its own spine sample,
       // and the root — and so the rigid shell bolted to it — is the *foot's*
@@ -470,7 +570,9 @@ export function Snail({ critter }: SnailProps) {
           id: critter.id,
           mode: behaviourRef.current.mode,
           pos: [positionRef.current.x, positionRef.current.y, positionRef.current.z],
-          speed: isMoving(mode) ? CRAWL_SPEED : 0,
+          speed: isMoving(mode)
+            ? CRAWL_SPEED * (1 + GAIT_PULSE_AMPLITUDE * Math.sin(gaitRef.current.phase))
+            : 0,
           yawDeg: (scratchYawEuler.y * 180) / Math.PI,
           // Matches `heading.ts`'s convention (euler built as
           // `(-pitch, yaw, 0, 'YXZ')`), so a snail row's map tick points
@@ -526,6 +628,7 @@ export function Snail({ critter }: SnailProps) {
           critter={critter}
           tuckProgress={tuckProgress}
           tuckMode={tuckMode}
+          gaitRef={gaitRef}
           onBonesReady={(bones) => {
             footBonesRef.current = bones;
           }}
