@@ -27,6 +27,20 @@ import { extrude, extrudeAtHinge, shapesFromSvg, svgLoader } from './svgExtrude'
 // `fishCollider.ts` imports it from `fishGeometry.ts`.
 export { SVG_SCALE } from './svgExtrude';
 
+/** A snail-specific size multiplier, layered on top of the shared
+ * `SVG_SCALE`/`lifeStageScale` chain every species otherwise uses
+ * unmodified — without it, an adult snail's measured foot span
+ * (`FOOT_TOE_X - FOOT_TAIL_TIP_X` below, ×`SVG_SCALE`) lands at ~0.88 world
+ * units, the same size class as an adult fish (`fishGeometry.ts`'s own
+ * nose/tail-tip constants put a fish at ~0.86–1.00). A snail crawling on the
+ * castle reads as a much smaller creature than a fish swimming past it, so
+ * this brings an adult snail down to roughly 55–60% of an adult fish's
+ * length. Tune by eye; every consumer (`Snail.tsx`, `SnailModel.tsx`,
+ * `snailCollider.ts`) must apply this alongside `SVG_SCALE`/`lifeStageScale`
+ * so the visible body, its physics collider, and the Critter Card's
+ * counter-scaled portrait (`CritterPreview.tsx`) all move together. */
+export const SNAIL_BODY_SCALE = 0.6;
+
 /** Foot extrusion depth — the same for every shell type (issue #98's
  * assembly table); the fish body is 16. */
 export const FOOT_DEPTH = 18;

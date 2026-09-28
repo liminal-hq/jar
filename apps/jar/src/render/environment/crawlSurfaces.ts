@@ -33,10 +33,20 @@
 // Links: floor↔each wall's bottom edge, wall↔wall at the four vertical
 // corners, floor↔each castle side's base (except the lintel — see
 // `buildCastleFacesAndLinks`'s own comment, it floats above the doorway and
-// isn't actually touching the floor), and each castle side↔its own top.
-// Adjacent castle side faces are *not* linked to each other (a crawler
-// reaching a side face's left/right edge bounces rather than wrapping
-// around the box) — out of scope for v1, per the plan.
+// isn't actually touching the floor), each castle side↔its own top, and
+// each castle side↔its two adjacent sides at the box's own four vertical
+// corners (the same wall↔wall corner pattern) — a crawler can wrap all the
+// way around a box rather than bouncing off a side's left/right edge.
+//
+// `roundedNormalAt`/`poseToWorldRounded` give a *continuous* frame near a
+// crease, on top of the instantaneous-fold model above: a face's normal
+// blends toward a linked neighbour's within `FILLET_RADIUS` of the shared
+// edge (exact everywhere else), so a caller deriving both position and
+// orientation from the same rounded frame gets a fold that visibly bends
+// rather than snapping — see those functions' own doc comments for the
+// exact blend and its continuity properties. `advance()`/`poseToWorld()`
+// above are untouched and still describe the crawler's true, sharp-cornered
+// position; only the *frame* used to orient a rendered body is rounded.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -355,6 +365,38 @@ function buildCastleFacesAndLinks(): { faces: CrawlFace[]; links: FaceLink[] } {
 
     faces.push(top, px, nx, pz, nz);
 
+    // Side -> adjacent side, at each of the box's four vertical corners —
+    // the same wall↔wall corner pattern `BASE_LINKS` already uses for the
+    // tank's own glass walls, applied here so a crawler can wrap all the
+    // way around a box instead of bouncing off its own left/right edges
+    // (the v1 limitation this module's own header used to call out).
+    links.push(
+      {
+        faceA: px.id,
+        faceB: pz.id,
+        edgeStart: { x: maxX, y: bottomY, z: maxZ },
+        edgeEnd: { x: maxX, y: topY, z: maxZ },
+      },
+      {
+        faceA: px.id,
+        faceB: nz.id,
+        edgeStart: { x: maxX, y: bottomY, z: minZ },
+        edgeEnd: { x: maxX, y: topY, z: minZ },
+      },
+      {
+        faceA: nx.id,
+        faceB: pz.id,
+        edgeStart: { x: minX, y: bottomY, z: maxZ },
+        edgeEnd: { x: minX, y: topY, z: maxZ },
+      },
+      {
+        faceA: nx.id,
+        faceB: nz.id,
+        edgeStart: { x: minX, y: bottomY, z: minZ },
+        edgeEnd: { x: minX, y: topY, z: minZ },
+      },
+    );
+
     // Side -> own top: each side's top edge (its own v1) coincides exactly
     // with one edge of the top face.
     links.push(
@@ -464,21 +506,52 @@ interface BoundaryCandidate {
   v2: number;
   axis: 'u' | 'v';
   link: FaceLink | null;
+  /** The neighbouring face's own normal, for a linked candidate — cached
+   * here (rather than re-resolved per lookup) since `roundedNormalAt` reads
+   * it on every call. `null` for an unlinked boundary (a wall's top, or a
+   * castle side's un-linked left/right edge), which is exactly what tells
+   * `roundedNormalAt` there's nothing to blend toward there. */
+  neighborNormal: Vec3 | null;
 }
 
 function buildBoundaries(face: CrawlFace): BoundaryCandidate[] {
   const candidates: BoundaryCandidate[] = [
-    { u1: 0, v1: 0, u2: face.uLength, v2: 0, axis: 'v', link: null },
-    { u1: 0, v1: face.vLength, u2: face.uLength, v2: face.vLength, axis: 'v', link: null },
-    { u1: 0, v1: 0, u2: 0, v2: face.vLength, axis: 'u', link: null },
-    { u1: face.uLength, v1: 0, u2: face.uLength, v2: face.vLength, axis: 'u', link: null },
+    { u1: 0, v1: 0, u2: face.uLength, v2: 0, axis: 'v', link: null, neighborNormal: null },
+    {
+      u1: 0,
+      v1: face.vLength,
+      u2: face.uLength,
+      v2: face.vLength,
+      axis: 'v',
+      link: null,
+      neighborNormal: null,
+    },
+    { u1: 0, v1: 0, u2: 0, v2: face.vLength, axis: 'u', link: null, neighborNormal: null },
+    {
+      u1: face.uLength,
+      v1: 0,
+      u2: face.uLength,
+      v2: face.vLength,
+      axis: 'u',
+      link: null,
+      neighborNormal: null,
+    },
   ];
   for (const link of CRAWL_LINKS) {
     if (link.faceA !== face.id && link.faceB !== face.id) continue;
     const p1 = projectPointToFace(face, link.edgeStart);
     const p2 = projectPointToFace(face, link.edgeEnd);
     const isVertical = Math.abs(p1.u - p2.u) < 1e-6;
-    candidates.push({ u1: p1.u, v1: p1.v, u2: p2.u, v2: p2.v, axis: isVertical ? 'u' : 'v', link });
+    const neighborId = link.faceA === face.id ? link.faceB : link.faceA;
+    candidates.push({
+      u1: p1.u,
+      v1: p1.v,
+      u2: p2.u,
+      v2: p2.v,
+      axis: isVertical ? 'u' : 'v',
+      link,
+      neighborNormal: FACE_MAP.get(neighborId)?.normal ?? null,
+    });
   }
   return candidates;
 }
@@ -683,6 +756,163 @@ export function poseToWorld(pose: CrawlPose): CrawlFrame {
   const up = face.normal;
   const right = normalize(cross(forward, up));
   return { position, forward, up, right };
+}
+
+// --- Continuous (rounded) frame near a crease --------------------------------
+
+/** World-space distance a crease's rounding reaches on either side — the
+ * frame blends fully to the bisector at the crease itself and is exactly
+ * the face's own normal by `FILLET_RADIUS` away from it. One module-level
+ * constant, not per-face/per-consumer: every crease in this tank is the
+ * same kind of fold (two flat faces at a fixed dihedral angle), so there's
+ * no reason yet for one to round differently from another. Tune by eye —
+ * this needs to be small enough that ordinary floor/wall crawling reads as
+ * "on a flat surface" almost everywhere, and large enough that a fold
+ * crossing takes a visually legible fraction of a second at crawl speed to
+ * complete. */
+export const FILLET_RADIUS = 0.08;
+
+/** Cubic smoothstep on `[0, 1]`, clamping first — `THREE.MathUtils
+ * .smoothstep`'s own curve, reimplemented here since this module stays
+ * three.js-free (see header). Zero slope at both ends is what makes
+ * `roundedNormalAt`'s blend weight meet `0` at `d = FILLET_RADIUS` with no
+ * kink, not just no jump. */
+function smoothstep01(t: number): number {
+  const c = clamp(t, 0, 1);
+  return c * c * (3 - 2 * c);
+}
+
+/** Shortest distance from `(u, v)` to `seg`, treating it as a genuine
+ * segment (clamped to its own span) rather than an infinite line — this is
+ * what keeps a castle side's floor-base strip from rounding a point well
+ * past where that strip actually ends. */
+function pointToSegmentDistance(u: number, v: number, seg: BoundaryCandidate): number {
+  if (seg.axis === 'u') {
+    const vClamped = clamp(v, Math.min(seg.v1, seg.v2), Math.max(seg.v1, seg.v2));
+    return Math.hypot(u - seg.u1, v - vClamped);
+  }
+  const uClamped = clamp(u, Math.min(seg.u1, seg.u2), Math.max(seg.u1, seg.u2));
+  return Math.hypot(u - uClamped, v - seg.v1);
+}
+
+/** The face's normal, blended toward each nearby linked neighbour's within
+ * `filletRadius` of the shared crease, weighted by distance-to-crease and
+ * summed (superposing correctly where two creases are close together, e.g.
+ * a corner where three faces meet). Exactly `face.normal` by `filletRadius`
+ * away from every crease; exactly the bisector `normalize(nFace + nNeighbor)`
+ * at the crease itself (both sides' weight is `0.5` at `d = 0`, so the
+ * face's own contribution cancels to a flat `0.5` mix); continuous *and*
+ * differentiable across the crease (`smoothstep01`'s zero endpoint slope),
+ * so a caller deriving position and orientation from this — not from
+ * `poseToWorld`'s flat per-face normal — gets no jump and no kink crossing
+ * a fold. An unlinked boundary (no `neighborNormal`) contributes nothing,
+ * by construction. */
+export function roundedNormalAt(faceId: string, u: number, v: number, filletRadius: number): Vec3 {
+  const face = requireFace(faceId);
+  if (filletRadius <= 0) return face.normal;
+
+  let blended = face.normal;
+  for (const candidate of BOUNDARIES.get(faceId) ?? []) {
+    if (!candidate.neighborNormal) continue;
+    const d = pointToSegmentDistance(u, v, candidate);
+    if (d >= filletRadius) continue;
+    const weight = 0.5 * (1 - smoothstep01(d / filletRadius));
+    blended = add(blended, scale(sub(candidate.neighborNormal, face.normal), weight));
+  }
+  return normalize(blended);
+}
+
+/** Re-derives (`forward`, `right`) so `forward` stays as close as possible
+ * to `primary` while lying exactly in the plane perpendicular to `up`
+ * (Gram-Schmidt) — what lets `poseToWorldRounded` keep a pose's in-plane
+ * heading direction meaningful once `up` itself has been tilted by
+ * `roundedNormalAt`. Falls back to `primary` unrotated in the (never
+ * expected in this tank's all-axis-aligned geometry) degenerate case where
+ * `primary` is nearly parallel to `up` — better than propagating a
+ * zero-length vector into `quaternionFromFrame`'s own basis construction. */
+function reorthonormalize(primary: Vec3, up: Vec3): { forward: Vec3; right: Vec3 } {
+  const rejected = sub(primary, scale(up, dot(primary, up)));
+  const rejectedLength = length(rejected);
+  const forward = rejectedLength > 1e-6 ? scale(rejected, 1 / rejectedLength) : primary;
+  return { forward, right: normalize(cross(forward, up)) };
+}
+
+/** Like `poseToWorld`, except `up` (and so `forward`/`right`) comes from
+ * `roundedNormalAt` instead of the pose's own face's flat normal —
+ * `position` is deliberately untouched, still the exact, sharp-cornered
+ * point `poseToWorld` would give: rounding *where* a body sits would let it
+ * sink into (or float clear of) a real surface right after a fold crossing,
+ * while rounding only the *frame* it's oriented against means the body
+ * always sits exactly on a real surface and simply swings its orientation
+ * smoothly as that surface's effective normal tilts near a crease. */
+export function poseToWorldRounded(pose: CrawlPose, filletRadius: number): CrawlFrame {
+  const face = requireFace(pose.faceId);
+  const position = facePoint(face, pose.u, pose.v);
+  const up = roundedNormalAt(pose.faceId, pose.u, pose.v, filletRadius);
+  const planarForward = add(
+    scale(face.uAxis, Math.cos(pose.heading)),
+    scale(face.vAxis, Math.sin(pose.heading)),
+  );
+  const { forward, right } = reorthonormalize(planarForward, up);
+  return { position, forward, up, right };
+}
+
+/** World-space distance at which a wanderer starts curving away from a
+ * genuinely unlinked edge (a wall's rim, or the lintel's own un-linked
+ * underside) rather than marching straight into it and bouncing hard —
+ * `unlinkedEdgeAvoidanceBias`'s own awareness radius. Deliberately larger
+ * than `FILLET_RADIUS`: rounding a *crease* only needs to smooth the moment
+ * of crossing, while steering away from a genuine dead end needs enough
+ * lead distance for the turn to read as a deliberate curve rather than a
+ * last-instant flinch. Tune by eye. */
+export const EDGE_AVOIDANCE_RADIUS = 0.15;
+
+/** A boundary candidate is a real bounce risk only if nothing *else* on
+ * this same face links across that same fixed coordinate — every linked
+ * edge (a wall's bottom, a box's own top) has both a `link`-bearing
+ * candidate and a coincident `link: null` "outer rectangle" one at the
+ * exact same position (`buildBoundaries` always adds all four outer edges
+ * regardless of whether a link happens to cover one), so a null-link
+ * candidate alone doesn't mean "unlinked" — it means "unlinked, unless a
+ * sibling candidate proves otherwise." */
+function isGenuinelyUnlinked(candidate: BoundaryCandidate, siblings: BoundaryCandidate[]): boolean {
+  if (candidate.link) return false;
+  const fixed = candidate.axis === 'u' ? candidate.u1 : candidate.v1;
+  return !siblings.some(
+    (other) =>
+      other.link !== null &&
+      other.axis === candidate.axis &&
+      Math.abs((other.axis === 'u' ? other.u1 : other.v1) - fixed) < 1e-6,
+  );
+}
+
+/** A heading nudge (radians, already scaled toward zero as the crawler
+ * moves away from the edge) that curves a wanderer back toward its current
+ * face's own centre as it nears a genuinely unlinked boundary — the softer
+ * alternative to `advance()`'s own clamp-and-reflect, which still applies
+ * unconditionally as the hard backstop for a crawler that manages to reach
+ * the edge anyway (a sharp turn, a large single step, or this bias's own
+ * imprecision near a corner where two different unlinked edges compete).
+ * `0` when nothing unlinked is within `EDGE_AVOIDANCE_RADIUS`. The caller
+ * (`Snail.tsx`) adds this to its own per-frame heading update, scaled by a
+ * turn-rate constant and `delta`, the same way it already layers in its
+ * own random-walk jitter. */
+export function unlinkedEdgeAvoidanceBias(pose: CrawlPose, awarenessRadius: number): number {
+  const face = requireFace(pose.faceId);
+  const candidates = BOUNDARIES.get(pose.faceId) ?? [];
+
+  let nearest = Infinity;
+  for (const candidate of candidates) {
+    if (!isGenuinelyUnlinked(candidate, candidates)) continue;
+    const d = pointToSegmentDistance(pose.u, pose.v, candidate);
+    if (d < nearest) nearest = d;
+  }
+  if (!Number.isFinite(nearest) || nearest >= awarenessRadius) return 0;
+
+  const towardCentre = Math.atan2(face.vLength / 2 - pose.v, face.uLength / 2 - pose.u);
+  const angularDelta = normalizeAngle(towardCentre - pose.heading);
+  const weight = 1 - smoothstep01(nearest / awarenessRadius);
+  return angularDelta * weight;
 }
 
 /** A plausible small-crawler footprint radius to keep a spawned/landed pose
