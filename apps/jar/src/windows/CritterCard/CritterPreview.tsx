@@ -19,6 +19,7 @@ import * as YUKA from 'yuka';
 import type { Critter } from '../../domain/protocol/generated/Critter';
 import { FishModel } from '../../render/models/FishModel';
 import { SnailModel } from '../../render/models/SnailModel';
+import { SNAIL_BODY_SCALE } from '../../render/models/snailGeometry';
 import { useRenderLoopPolicy } from '../../render/tank/useRenderLoopPolicy';
 
 interface CritterPreviewProps {
@@ -79,7 +80,15 @@ export function CritterPreview({ critter, passed = false }: CritterPreviewProps)
             remount instead of carrying over the previous critter's tail
             geometry or a frozen mid-swim pose. */}
         {critter.species === 'Snail' ? (
-          <SnailModel key={critter.id} critter={critter} still={passed} />
+          // This card is a portrait, not a tank-truthful size comparison —
+          // the fixed camera above already treats every critter's frame
+          // the same way regardless of its real in-tank size. Countering
+          // `SNAIL_BODY_SCALE` here keeps the snail filling the frame the
+          // way it did before that constant existed, rather than shrinking
+          // the portrait along with the tank body.
+          <group scale={1 / SNAIL_BODY_SCALE}>
+            <SnailModel key={critter.id} critter={critter} still={passed} />
+          </group>
         ) : (
           <FishModel key={critter.id} critter={critter} vehicle={idleVehicle} still={passed} />
         )}

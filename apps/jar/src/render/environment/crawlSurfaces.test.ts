@@ -17,10 +17,15 @@ import {
   CRAWL_FACES,
   CRAWL_LINKS,
   dropToFloor,
+  EDGE_AVOIDANCE_RADIUS,
+  FILLET_RADIUS,
   FLOOR_SPAWN_CASTLE_MARGIN,
   poseToWorld,
+  poseToWorldRounded,
   randomFloorPose,
+  roundedNormalAt,
   turn,
+  unlinkedEdgeAvoidanceBias,
   type CrawlFace,
   type CrawlPose,
   type Vec3,
@@ -35,8 +40,21 @@ function dot(a: Vec3, b: Vec3): number {
 function sub(a: Vec3, b: Vec3): Vec3 {
   return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
 }
+function add(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+function scale(a: Vec3, s: number): Vec3 {
+  return { x: a.x * s, y: a.y * s, z: a.z * s };
+}
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
 function length(a: Vec3): number {
   return Math.sqrt(dot(a, a));
+}
+function normalize(a: Vec3): Vec3 {
+  const len = length(a);
+  return len > 0 ? scale(a, 1 / len) : { x: 0, y: 0, z: 0 };
 }
 function toLocal(face: CrawlFace, point: Vec3): { u: number; v: number } {
   const rel = sub(point, face.origin);
@@ -165,12 +183,36 @@ describe('castle faces track decorLayout directly', () => {
     }
   });
 
+  it('every box gets all four side-to-adjacent-side corner links, wrapping fully around it', () => {
+    for (const slug of slugs) {
+      const cornerLinks = CRAWL_LINKS.filter(
+        (link) =>
+          link.faceA.startsWith(`${slug}-side`) &&
+          link.faceB.startsWith(`${slug}-side`) &&
+          link.faceA !== link.faceB,
+      );
+      expect(cornerLinks).toHaveLength(4);
+      // Every side face appears in exactly two of this box's corner links
+      // (its two actual neighbours) — proof the wrap is complete, not just
+      // four links landing lopsidedly on fewer than four distinct sides.
+      const sides = ['px', 'nx', 'pz', 'nz'].map((suffix) => `${slug}-side-${suffix}`);
+      for (const sideId of sides) {
+        const touching = cornerLinks.filter(
+          (link) => link.faceA === sideId || link.faceB === sideId,
+        );
+        expect(touching).toHaveLength(2);
+      }
+    }
+  });
+
   it('the link count is exactly the base tank links plus each box`s own links', () => {
     const touchingFloor = CASTLE_COLLIDER_BOXES.filter(
       (box) =>
         Math.abs(CASTLE_POSITION.y + box.position.y - box.halfExtents.y - FLOOR_TOP_Y) < 1e-9,
     ).length;
-    const expected = 8 + CASTLE_COLLIDER_BOXES.length * 4 + touchingFloor * 4;
+    // Per box: 4 side-to-own-top links + 4 side-to-adjacent-side corner
+    // links, plus 4 side-to-floor links for a box that actually touches it.
+    const expected = 8 + CASTLE_COLLIDER_BOXES.length * 8 + touchingFloor * 4;
     expect(CRAWL_LINKS.length).toBe(expected);
   });
 });
@@ -327,7 +369,9 @@ describe('advance() at an unlinked edge', () => {
     expect(Number.isFinite(result.heading)).toBe(true);
   });
 
-  it('clamps and reflects at a castle side face`s un-linked left/right edge', () => {
+  it('wraps onto the adjacent side instead of bouncing, at a castle box`s own vertical corner', () => {
+    // Every side's left/right edge is now linked to its neighbour (PR 3) —
+    // a crawler wraps all the way around the box rather than bouncing.
     const side = faceById('castle-left-tower-side-px');
     const start: CrawlPose = {
       faceId: side.id,
@@ -336,13 +380,25 @@ describe('advance() at an unlinked edge', () => {
       heading: 0,
     };
     const result = advance(start, 0.03);
+    expect(result.faceId).not.toBe(side.id);
+    expect(result.faceId).toMatch(/^castle-left-tower-side-/);
+  });
+
+  it('clamps and reflects at a castle side face`s un-linked bottom edge (the lintel, which never touches the floor)', () => {
+    const side = faceById('castle-lintel-side-px');
+    const start: CrawlPose = {
+      faceId: side.id,
+      u: side.uLength / 2,
+      v: 0.02,
+      heading: -Math.PI / 2,
+    };
+    const result = advance(start, 0.03);
 
     expect(result.faceId).toBe(side.id);
-    expect(result.u).toBeLessThanOrEqual(side.uLength + 1e-9);
-    expect(result.u).toBeCloseTo(side.uLength - 0.01, 9);
-    // Reflected: heading's u-component (cos) should now point back the
-    // other way.
-    expect(Math.cos(result.heading)).toBeLessThanOrEqual(1e-9);
+    expect(result.v).toBeGreaterThanOrEqual(-1e-9);
+    expect(result.v).toBeCloseTo(0.01, 9);
+    // Reflected: heading's v-component (sin) should now point back up.
+    expect(Math.sin(result.heading)).toBeGreaterThanOrEqual(-1e-9);
   });
 
   it('never leaves the tank, even after many bounces (a wall-top corner)', () => {
@@ -509,5 +565,219 @@ describe('dropToFloor over a lattice', () => {
       count: 0,
       sample: [],
     });
+  });
+});
+
+function clampToUnit(x: number): number {
+  return Math.min(1, Math.max(-1, x));
+}
+
+function edgeMidpoint(link: (typeof CRAWL_LINKS)[number]): Vec3 {
+  return {
+    x: (link.edgeStart.x + link.edgeEnd.x) / 2,
+    y: (link.edgeStart.y + link.edgeEnd.y) / 2,
+    z: (link.edgeStart.z + link.edgeEnd.z) / 2,
+  };
+}
+
+describe('roundedNormalAt', () => {
+  it('matches the flat face normal far from every crease', () => {
+    for (const face of CRAWL_FACES) {
+      const u = face.uLength / 2;
+      const v = face.vLength / 2;
+      const clearance = Math.min(u, face.uLength - u, v, face.vLength - v);
+      if (clearance <= FILLET_RADIUS + 1e-6) continue; // a face this small is exercised elsewhere
+      const n = roundedNormalAt(face.id, u, v, FILLET_RADIUS);
+      expect(n.x).toBeCloseTo(face.normal.x, 9);
+      expect(n.y).toBeCloseTo(face.normal.y, 9);
+      expect(n.z).toBeCloseTo(face.normal.z, 9);
+    }
+  });
+
+  it('is unaffected near an unlinked edge (a wall`s top, away from any side corner)', () => {
+    const front = faceById('glass-front');
+    const n = roundedNormalAt(
+      'glass-front',
+      front.uLength / 2,
+      front.vLength - 0.001,
+      FILLET_RADIUS,
+    );
+    expect(n.x).toBeCloseTo(front.normal.x, 6);
+    expect(n.y).toBeCloseTo(front.normal.y, 6);
+    expect(n.z).toBeCloseTo(front.normal.z, 6);
+  });
+
+  it('superposes two nearby creases exactly at a three-face corner', () => {
+    // The floor's own (u=0, v=vLength) corner is where the floor, the
+    // front wall, and the left wall all meet — the front-link crease
+    // (v = vLength) and the left-link crease (u = 0) both pass through it
+    // at distance 0, so the floor's own contribution should cancel out
+    // entirely, leaving an even blend of just the two neighbours.
+    const floor = faceById('floor');
+    const front = faceById('glass-front');
+    const left = faceById('glass-left');
+    const n = roundedNormalAt('floor', 0, floor.vLength, FILLET_RADIUS);
+    const expected = normalize(add(scale(front.normal, 0.5), scale(left.normal, 0.5)));
+    expect(n.x).toBeCloseTo(expected.x, 8);
+    expect(n.y).toBeCloseTo(expected.y, 8);
+    expect(n.z).toBeCloseTo(expected.z, 8);
+  });
+
+  it('agrees exactly on both sides of every linked seam (the bisector of the two flat normals)', () => {
+    for (const link of CRAWL_LINKS) {
+      const faceA = faceById(link.faceA);
+      const faceB = faceById(link.faceB);
+      const midpoint = edgeMidpoint(link);
+      const aLocal = toLocal(faceA, midpoint);
+      const bLocal = toLocal(faceB, midpoint);
+
+      const nA = roundedNormalAt(faceA.id, aLocal.u, aLocal.v, FILLET_RADIUS);
+      const nB = roundedNormalAt(faceB.id, bLocal.u, bLocal.v, FILLET_RADIUS);
+      const expected = normalize(add(faceA.normal, faceB.normal));
+
+      for (const n of [nA, nB]) {
+        expect(n.x).toBeCloseTo(expected.x, 7);
+        expect(n.y).toBeCloseTo(expected.y, 7);
+        expect(n.z).toBeCloseTo(expected.z, 7);
+      }
+    }
+  });
+
+  it('eases smoothly away from every crease, reaching the flat normal exactly by FILLET_RADIUS', () => {
+    for (const link of CRAWL_LINKS) {
+      const faceA = faceById(link.faceA);
+      const midpoint = edgeMidpoint(link);
+      const crease = toLocal(faceA, midpoint);
+      // A direction from the crease toward the face's own centre stands in
+      // for "into the face" generically, for any crease on any face shape
+      // this module builds (always a convex rectangle).
+      const rawDir = { u: faceA.uLength / 2 - crease.u, v: faceA.vLength / 2 - crease.v };
+      const dirLen = Math.hypot(rawDir.u, rawDir.v);
+      if (dirLen < 1e-6) continue; // crease sits exactly on the face's own centre — degenerate, skip
+      const dir = { u: rawDir.u / dirLen, v: rawDir.v / dirLen };
+
+      const fractions = [0, 0.25, 0.5, 0.75, 0.99, 1, 1.25];
+      const angles = fractions.map((f) => {
+        const d = f * FILLET_RADIUS;
+        const n = roundedNormalAt(
+          faceA.id,
+          crease.u + dir.u * d,
+          crease.v + dir.v * d,
+          FILLET_RADIUS,
+        );
+        return Math.acos(clampToUnit(dot(n, faceA.normal)));
+      });
+
+      // Relaxes toward the flat normal (angle 0) as distance from the
+      // crease grows — never a sudden jump back toward the tilted value.
+      for (let i = 1; i < angles.length; i++) {
+        expect(angles[i]!).toBeLessThanOrEqual(angles[i - 1]! + 1e-9);
+      }
+      // Exactly flat at, and beyond, FILLET_RADIUS itself.
+      expect(angles[angles.length - 2]!).toBeCloseTo(0, 6);
+      expect(angles[angles.length - 1]!).toBeCloseTo(0, 6);
+    }
+  });
+});
+
+describe('unlinkedEdgeAvoidanceBias', () => {
+  it('is zero everywhere on a face with no unlinked edges (the floor)', () => {
+    const floor = faceById('floor');
+    const pose: CrawlPose = { faceId: 'floor', u: 0.01, v: floor.vLength - 0.01, heading: 0 };
+    expect(unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS)).toBe(0);
+  });
+
+  it('is zero far from a genuinely unlinked edge', () => {
+    const front = faceById('glass-front');
+    const pose: CrawlPose = {
+      faceId: 'glass-front',
+      u: front.uLength / 2,
+      v: front.vLength / 2,
+      heading: 0,
+    };
+    expect(unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS)).toBe(0);
+  });
+
+  it('steers a wanderer heading away from a wall`s unlinked top edge back toward the centre', () => {
+    const front = faceById('glass-front');
+    const pose: CrawlPose = {
+      faceId: 'glass-front',
+      u: front.uLength / 2,
+      v: front.vLength - 0.01,
+      heading: Math.PI / 2 + 0.3, // pointing up and off-axis, away from centre
+    };
+    const bias = unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS);
+    expect(bias).not.toBe(0);
+
+    const towardCentre = Math.atan2(front.vLength / 2 - pose.v, front.uLength / 2 - pose.u);
+    const angleTo = (a: number, b: number) =>
+      Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    const before = angleTo(pose.heading, towardCentre);
+    const after = angleTo(pose.heading + bias, towardCentre);
+    expect(after).toBeLessThan(before);
+  });
+
+  it('weakens smoothly with distance, reaching zero at (and beyond) the awareness radius', () => {
+    const front = faceById('glass-front');
+    const heading = Math.PI / 2;
+    const magnitudes = [0, 0.25, 0.5, 0.75, 0.99, 1, 1.5].map((f) => {
+      const v = front.vLength - f * EDGE_AVOIDANCE_RADIUS;
+      const pose: CrawlPose = { faceId: 'glass-front', u: front.uLength / 2, v, heading };
+      return Math.abs(unlinkedEdgeAvoidanceBias(pose, EDGE_AVOIDANCE_RADIUS));
+    });
+    for (let i = 1; i < magnitudes.length; i++) {
+      expect(magnitudes[i]!).toBeLessThanOrEqual(magnitudes[i - 1]! + 1e-9);
+    }
+    expect(magnitudes[magnitudes.length - 2]!).toBeCloseTo(0, 6);
+    expect(magnitudes[magnitudes.length - 1]!).toBe(0);
+  });
+});
+
+describe('poseToWorldRounded', () => {
+  it("keeps position identical to poseToWorld's — only the frame rounds, never where the crawler sits", () => {
+    const cases: CrawlPose[] = [
+      { faceId: 'floor', u: 0.4, v: 0.9, heading: 1.2 },
+      { faceId: 'glass-front', u: 0.6, v: 0.1, heading: -0.4 },
+    ];
+    for (const pose of cases) {
+      const flat = poseToWorld(pose);
+      const rounded = poseToWorldRounded(pose, FILLET_RADIUS);
+      expect(rounded.position.x).toBeCloseTo(flat.position.x, 10);
+      expect(rounded.position.y).toBeCloseTo(flat.position.y, 10);
+      expect(rounded.position.z).toBeCloseTo(flat.position.z, 10);
+    }
+  });
+
+  it('matches poseToWorld exactly away from any crease', () => {
+    const floor = faceById('floor');
+    const pose: CrawlPose = {
+      faceId: 'floor',
+      u: floor.uLength / 2,
+      v: floor.vLength / 2,
+      heading: 0.5,
+    };
+    const flat = poseToWorld(pose);
+    const rounded = poseToWorldRounded(pose, FILLET_RADIUS);
+    for (const key of ['forward', 'up', 'right'] as const) {
+      expect(rounded[key].x).toBeCloseTo(flat[key].x, 9);
+      expect(rounded[key].y).toBeCloseTo(flat[key].y, 9);
+      expect(rounded[key].z).toBeCloseTo(flat[key].z, 9);
+    }
+  });
+
+  it('returns a genuinely orthonormal frame near and far from a crease, across a spread of headings', () => {
+    const floor = faceById('floor');
+    for (const v of [floor.vLength - FILLET_RADIUS * 0.5, floor.vLength / 2]) {
+      for (const heading of [0, 0.7, Math.PI / 2, 2.4, -1.1]) {
+        const pose: CrawlPose = { faceId: 'floor', u: floor.uLength / 2, v, heading };
+        const frame = poseToWorldRounded(pose, FILLET_RADIUS);
+        expect(length(frame.up)).toBeCloseTo(1, 8);
+        expect(length(frame.forward)).toBeCloseTo(1, 8);
+        expect(length(frame.right)).toBeCloseTo(1, 8);
+        expect(dot(frame.forward, frame.up)).toBeCloseTo(0, 8);
+        expect(dot(frame.right, frame.up)).toBeCloseTo(0, 8);
+        expect(dot(frame.right, frame.forward)).toBeCloseTo(0, 8);
+      }
+    }
   });
 });

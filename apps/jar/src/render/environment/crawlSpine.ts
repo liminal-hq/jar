@@ -1,0 +1,379 @@
+// An arc-length "spine" over `crawlSurfaces.ts`'s crawl-surface graph — a
+// breadcrumb trail of poses along a crawler's own travelled path, resampled
+// at even spacing, so a body can be sampled at several points along its
+// length rather than treated as a single rigid transform. Pure math, no
+// three.js import (the same `crawlSurfaces.ts` discipline): critter-agnostic
+// by design, built for the snail (issue #112) but reusable by any future
+// second crawler.
+//
+// Every sample this module ever produces is either an exact `CrawlPose`
+// (a real point `advance()` visited) or a straight-line interpolation
+// between two of them — never a synthesized point off the crawl-surface
+// graph. That's the whole reason a breadcrumb trail was chosen over an
+// independent-pose-per-segment approach: a rope of real, on-surface points
+// can only ever sag onto the surface it's actually resting on, not off it.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+import {
+  advance,
+  advanceTracking,
+  FILLET_RADIUS,
+  poseToWorld,
+  roundedNormalAt,
+  turn,
+  type CrawlPose,
+  type Vec3,
+} from './crawlSurfaces';
+
+/** One recorded point along the trail — always the result of a real
+ * `advance()` (or the seeding back-trace's equivalent), never synthesized.
+ * `arcLength` is measured from an arbitrary but fixed zero point chosen at
+ * `createSpine` time (the *tail's* starting position, per that function's
+ * own doc comment) and only ever increases as the head advances. */
+export interface Breadcrumb {
+  pose: CrawlPose;
+  position: Vec3;
+  /** `roundedNormalAt` evaluated here, once, when this crumb is recorded —
+   * see `SpineSample.normal` for why a sample's normal has to come from
+   * interpolating these rather than from re-evaluating the field at
+   * whichever crumb a query happened to land nearest. */
+  normal: Vec3;
+  arcLength: number;
+}
+
+export interface CrawlSpine {
+  /** Ascending by `arcLength`, oldest (most tail-ward) first. Always holds
+   * at least two entries. The most recent entry may lag the live head by
+   * up to `crumbSpacing` — see `distanceSinceLastCrumb`. */
+  crumbs: Breadcrumb[];
+  /** The crawler's actual current pose — advanced every call, independent
+   * of whether it happened to land on a spacing-aligned crumb boundary. */
+  headPose: CrawlPose;
+  headArcLength: number;
+  /** Distance travelled since the most recent entry in `crumbs` was
+   * recorded — always in `[0, crumbSpacing)`. `sampleSpine` treats
+   * `headPose` as one further, not-yet-committed sample point past
+   * `crumbs[crumbs.length - 1]` by this much, so a caller can always query
+   * all the way up to the head itself. */
+  distanceSinceLastCrumb: number;
+  bodyLength: number;
+  crumbSpacing: number;
+}
+
+export interface SpineSample {
+  position: Vec3;
+  /** The surface normal here — interpolated between the two bracketing
+   * crumbs' own, exactly as `position` is, then renormalized.
+   *
+   * `faceId`/`u`/`v` below can't be interpolated (see `sampleAt`), so a
+   * caller that derived its own normal by re-evaluating `roundedNormalAt`
+   * at those got a value that stayed pinned to one crumb and then jumped to
+   * the next — piecewise-constant along the body, with the step size set by
+   * how fast the normal field turns. Near a crease that's tens of degrees
+   * per step, and two queries a fraction of a crumb apart (the shell's seat
+   * and its neighbouring bone, say) routinely snapped to *different* crumbs
+   * and so disagreed by that much about which way is up. Interpolating here
+   * makes the normal a continuous function of arc length like every other
+   * sampled quantity, and costs less than the old re-evaluation did, since
+   * each crumb's own normal is computed once when it's recorded. */
+  normal: Vec3;
+  faceId: string;
+  u: number;
+  v: number;
+}
+
+function toSample(crumb: Breadcrumb): SpineSample {
+  return {
+    position: crumb.position,
+    normal: crumb.normal,
+    faceId: crumb.pose.faceId,
+    u: crumb.pose.u,
+    v: crumb.pose.v,
+  };
+}
+
+function lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+}
+
+/** Straight-line blend of two unit vectors, renormalized — the cheap slerp.
+ * Exact at either end, and the two normals it ever blends are at most one
+ * fold's dihedral apart, so the (mild) non-constant angular rate in between
+ * is invisible. */
+function lerpNormal(a: Vec3, b: Vec3, t: number): Vec3 {
+  const blended = lerpVec3(a, b, t);
+  const length = Math.hypot(blended.x, blended.y, blended.z);
+  if (length < 1e-9) return a;
+  return { x: blended.x / length, y: blended.y / length, z: blended.z / length };
+}
+
+function normalAt(pose: CrawlPose): Vec3 {
+  return roundedNormalAt(pose.faceId, pose.u, pose.v, FILLET_RADIUS);
+}
+
+/** Seeds a spine by tracing backward from `headPose` — `turn(pose, π)` then
+ * `advance()` then `turn(π)` again, `crawlSurfaces.ts`'s own API needing no
+ * new primitive to march in reverse. This is what gives every spine a
+ * correctly laid-out body from frame one, with no warm-up pop: a spine
+ * built by only ever advancing forward from a single point would need
+ * `bodyLength` worth of real travel before its tail caught up to a
+ * sensible position.
+ *
+ * If the back-trace hits a genuinely unlinked edge (a wall's rim, the
+ * lintel's underside) partway through seeding, tracing stops there rather
+ * than reflecting further back — a snail spawned right next to a dead end
+ * gets a tail that piles up at that edge, not one that zigzags behind it.
+ * `advanceTracking`'s own `bounced` flag is what makes this detectable at
+ * all: an ordinary fold crossing during back-tracing is expected and fine
+ * (the tail crossing back over a wall/floor seam it just came from), only
+ * a genuine reflection needs this clamp. */
+function backTrace(
+  fromPose: CrawlPose,
+  count: number,
+  spacing: number,
+  fromArcLength: number,
+): Breadcrumb[] {
+  const crumbs: Breadcrumb[] = [];
+  let tracePose = fromPose;
+  let bounced = false;
+
+  for (let i = 0; i < count; i++) {
+    const frame = poseToWorld(tracePose);
+    crumbs.unshift({
+      pose: tracePose,
+      position: frame.position,
+      normal: normalAt(tracePose),
+      arcLength: fromArcLength - i * spacing,
+    });
+    if (i === count - 1 || bounced) continue;
+
+    const reversed = turn(tracePose, Math.PI);
+    const { pose: steppedReversed, bounced: hitBounce } = advanceTracking(reversed, spacing);
+    if (hitBounce) {
+      bounced = true;
+      continue;
+    }
+    tracePose = turn(steppedReversed, Math.PI);
+  }
+
+  return crumbs;
+}
+
+function crumbCountFor(bodyLength: number, crumbSpacing: number): number {
+  return Math.max(2, Math.ceil(bodyLength / crumbSpacing) + 1);
+}
+
+export function createSpine(
+  headPose: CrawlPose,
+  bodyLength: number,
+  crumbSpacing: number,
+): CrawlSpine {
+  const crumbCount = crumbCountFor(bodyLength, crumbSpacing);
+  const headArcLength = (crumbCount - 1) * crumbSpacing;
+
+  return {
+    crumbs: backTrace(headPose, crumbCount, crumbSpacing, headArcLength),
+    headPose,
+    headArcLength,
+    distanceSinceLastCrumb: 0,
+    bodyLength,
+    crumbSpacing,
+  };
+}
+
+/** Re-dimensions `spine` in place for a body that has changed length — a
+ * crawler that has grown a life stage.
+ *
+ * `bodyLength` is not decoration: `advanceSpine` trims the trail to it, and
+ * `sampleSpine` clamps any query past the oldest surviving crumb to that
+ * crumb. A spine still carrying its hatchling dimensions while a grown body
+ * samples it therefore doesn't merely lose a little resolution — every
+ * sampling point beyond the old trail collapses onto one shared point, so a
+ * multi-point body (a snail's bone chain) folds its whole tail into a single
+ * spot and renders at the *old* stage's length, bunched up against whichever
+ * end still has trail under it. That shared point is also the oldest crumb
+ * itself, which jumps a whole `crumbSpacing` forward each time the trail is
+ * trimmed, stepping the body sideways in one frame.
+ *
+ * Growing extends the recorded trail backward from its own oldest crumb
+ * rather than re-seeding the whole thing: everything the crawler has actually
+ * travelled stays exactly where it was, and only the newly-needed tail is
+ * synthesized, so a growth spurt doesn't straighten a body that happens to be
+ * mid-turn or folded over an edge. The crumbs already on record keep their old
+ * spacing — `sampleAt` interpolates by arc length and never assumes a uniform
+ * step — and the trail returns to an even spacing on its own as the crawler
+ * moves. */
+export function resizeSpine(spine: CrawlSpine, bodyLength: number, crumbSpacing: number): void {
+  if (spine.bodyLength === bodyLength && spine.crumbSpacing === crumbSpacing) return;
+
+  spine.bodyLength = bodyLength;
+  spine.crumbSpacing = crumbSpacing;
+  // `advanceSpine` reads this as "distance still to go before the next crumb
+  // is due," which a *shrinking* spacing could leave already past.
+  if (spine.distanceSinceLastCrumb >= crumbSpacing) spine.distanceSinceLastCrumb = 0;
+
+  const oldest = spine.crumbs[0];
+  if (!oldest) return;
+  const wanted = spine.headArcLength - bodyLength;
+  const missing = Math.ceil((oldest.arcLength - wanted) / crumbSpacing);
+  if (missing <= 0) return;
+
+  // `backTrace`'s own first crumb repeats `oldest` (it starts *at* the pose
+  // it is handed), so ask for one extra and drop it.
+  spine.crumbs.unshift(
+    ...backTrace(oldest.pose, missing + 1, crumbSpacing, oldest.arcLength).slice(0, -1),
+  );
+}
+
+/** Re-seeds `spine` in place from a fresh `headPose` — the same back-trace
+ * `createSpine` does, for a snail that just landed after a detach (a wall
+ * sleeper falling at dawn, or a fish knocking it loose): the body should
+ * lay out correctly around the landing spot immediately, not carry over
+ * breadcrumbs from wherever it detached. */
+export function resetSpine(spine: CrawlSpine, headPose: CrawlPose): void {
+  const fresh = createSpine(headPose, spine.bodyLength, spine.crumbSpacing);
+  spine.crumbs = fresh.crumbs;
+  spine.headPose = fresh.headPose;
+  spine.headArcLength = fresh.headArcLength;
+  spine.distanceSinceLastCrumb = 0;
+}
+
+/** A generous safety valve, not a value normal crawling ever approaches —
+ * this caller's own render loop clamps its frame delta well below one
+ * `crumbSpacing` per call in practice, so the loop below only ever runs a
+ * handful of iterations. It exists for the same reason `crawlSurfaces.ts`'s
+ * own `MAX_FOLD_STEPS` does: this module is deliberately reusable by a
+ * future second crawling critter (this file's own header), and a future
+ * caller that hands this an extreme one-shot `distance` (a render loop with
+ * no delta clamp of its own, recovering from a long stall) shouldn't be
+ * able to force thousands of synchronous crumb-sized sub-steps in one
+ * call. */
+const MAX_ADVANCE_STEPS = 256;
+
+/** Advances the spine's head by `distance` along its current heading
+ * turned first by `turnDelta` (mirroring `Snail.tsx`'s own
+ * `advance(turn(pose, delta), distance)` pattern), recording a new
+ * breadcrumb every time `crumbSpacing` worth of travel accumulates and
+ * trimming crumbs the body no longer reaches.
+ *
+ * Steps in `crumbSpacing`-sized increments (via repeated `advance()` calls)
+ * rather than one big jump, so a crumb is recorded at its own correct
+ * intermediate pose even when `distance` spans more than one spacing in a
+ * single call (a large frame delta) — the alternative, stamping every due
+ * crumb at the final head pose, would collapse several breadcrumbs onto
+ * one point. Each individual `advance()` sub-step still folds across
+ * however many links it needs to on its own, exactly as a single big call
+ * would. */
+export function advanceSpine(spine: CrawlSpine, distance: number, turnDelta: number): void {
+  let pose = turn(spine.headPose, turnDelta);
+  let remaining = distance;
+
+  for (let step = 0; remaining > 0 && step < MAX_ADVANCE_STEPS; step++) {
+    const toNextCrumb = spine.crumbSpacing - spine.distanceSinceLastCrumb;
+    const stepDistance = Math.min(remaining, toNextCrumb);
+    pose = advance(pose, stepDistance);
+    spine.headArcLength += stepDistance;
+    spine.distanceSinceLastCrumb += stepDistance;
+    remaining -= stepDistance;
+
+    if (spine.distanceSinceLastCrumb >= spine.crumbSpacing - 1e-9) {
+      spine.distanceSinceLastCrumb = 0;
+      const frame = poseToWorld(pose);
+      spine.crumbs.push({
+        pose,
+        position: frame.position,
+        normal: normalAt(pose),
+        arcLength: spine.headArcLength,
+      });
+    }
+  }
+
+  if (remaining > 0) {
+    // The safety valve above tripped — cover whatever's left in a single
+    // jump rather than continuing to stall on crumb-sized sub-steps. This
+    // trades fine-grained crumb resolution across that one extreme jump
+    // for a call that's guaranteed to return, which is the right side of
+    // that trade for a caller that's already catching up from a stall.
+    pose = advance(pose, remaining);
+    spine.headArcLength += remaining;
+    spine.distanceSinceLastCrumb = 0;
+    const frame = poseToWorld(pose);
+    spine.crumbs.push({
+      pose,
+      position: frame.position,
+      normal: normalAt(pose),
+      arcLength: spine.headArcLength,
+    });
+  }
+
+  spine.headPose = pose;
+
+  const minArcLength = spine.headArcLength - spine.bodyLength - spine.crumbSpacing;
+  while (spine.crumbs.length > 2 && spine.crumbs[0]!.arcLength < minArcLength) {
+    spine.crumbs.shift();
+  }
+}
+
+/** The sample at a given arc length behind the head — a straight-line
+ * (chord) interpolation between the two bracketing recorded points for
+ * `position` (the chord error at typical crumb spacing/turn radii is
+ * invisible — `docs/architecture/3d-engine.md`'s own note on this), but
+ * `faceId`/`u`/`v` come from whichever bracketing point is *nearer* rather
+ * than being interpolated themselves: two adjacent points either side of a
+ * fold live in different faces' own local coordinates, so their `u`/`v`
+ * values aren't meaningfully lerpable, only their shared world-space
+ * `position` — and, now, `normal` — are. Anything a caller wants as a
+ * *continuous* function of arc length therefore has to be carried here, in
+ * world space, rather than re-derived from the snapped `faceId`/`u`/`v`;
+ * `SpineSample.normal` is exactly that, and exists because deriving it
+ * outside was the bug. */
+function sampleAt(spine: CrawlSpine, targetArcLength: number): SpineSample {
+  const lastCrumb = spine.crumbs[spine.crumbs.length - 1];
+  if (!lastCrumb) throw new Error('crawlSpine: cannot sample an empty spine');
+
+  const headIsPastLastCrumb = spine.headArcLength > lastCrumb.arcLength + 1e-9;
+  const points = headIsPastLastCrumb
+    ? [
+        ...spine.crumbs,
+        {
+          pose: spine.headPose,
+          position: poseToWorld(spine.headPose).position,
+          normal: normalAt(spine.headPose),
+          arcLength: spine.headArcLength,
+        },
+      ]
+    : spine.crumbs;
+
+  const first = points[0]!;
+  if (targetArcLength <= first.arcLength) return toSample(first);
+
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    if (targetArcLength > b.arcLength) continue;
+
+    const span = b.arcLength - a.arcLength;
+    const t = span > 1e-9 ? (targetArcLength - a.arcLength) / span : 0;
+    const nearer = targetArcLength - a.arcLength <= b.arcLength - targetArcLength ? a : b;
+    return {
+      position: lerpVec3(a.position, b.position, t),
+      normal: lerpNormal(a.normal, b.normal, t),
+      faceId: nearer.pose.faceId,
+      u: nearer.pose.u,
+      v: nearer.pose.v,
+    };
+  }
+
+  return toSample(points[points.length - 1]!);
+}
+
+/** Samples the spine at each of `offsetsBehindHead` (world units behind the
+ * live head; `0` is the head itself), clamped to the oldest point still on
+ * record rather than throwing if a caller asks further back than the
+ * spine currently holds (e.g. right after `resetSpine`, before the trail
+ * has grown to `bodyLength` again). */
+export function sampleSpine(spine: CrawlSpine, offsetsBehindHead: number[]): SpineSample[] {
+  return offsetsBehindHead.map((offset) => sampleAt(spine, spine.headArcLength - offset));
+}
