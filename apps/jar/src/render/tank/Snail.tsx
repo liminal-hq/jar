@@ -7,15 +7,15 @@
 // nothing between two kinematic bodies, so snails keep out of each other's
 // way by steering instead, via `snailRegistry.ts`/`snailSeparation.ts`). It owns
 // a `CrawlSpine` (`crawlSpine.ts`) directly, advances its head in `useFrame`,
-// samples it at the shell seat and every foot bone's own offset, and
-// converts those into a script-authored position/rotation on a
-// **kinematic** Rapier `RigidBody` (the root) plus a driven bone chain (the
-// bend) — the same "no gravity fight" discipline as `Fish.tsx`'s dynamic
-// one, just without physics ever moving it. Presents `SnailModel`, driving
-// its `tuckProgress`/`tuckMode` from `snailBehaviour.ts`'s state machine.
-// Also publishes its own telemetry into `domain/critterDebug.ts` (the Tank
-// monitor window's bridge), gated by the same dev toggle as the fish's own
-// publisher in `SteeringSystem.tsx`.
+// samples it at every foot bone's own gait-perturbed offset
+// (`snailGaitOffsets.ts`), and converts those into a script-authored
+// position/rotation on a **kinematic** Rapier `RigidBody` (the root, read off
+// the foot itself) plus a driven bone chain (the bend) — the same "no gravity
+// fight" discipline as `Fish.tsx`'s dynamic one, just without physics ever
+// moving it. Presents `SnailModel`, driving its `tuckProgress`/`tuckMode` from
+// `snailBehaviour.ts`'s state machine. Also publishes its own telemetry into
+// `domain/critterDebug.ts` (the Tank monitor window's bridge), gated by the
+// same dev toggle as the fish's own publisher in `SteeringSystem.tsx`.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -85,6 +85,12 @@ import {
   type SnailBehaviourState,
 } from './snailBehaviour';
 import { snailColliderHalfExtentsFor } from './snailCollider';
+import {
+  accordionAmplitude,
+  accordionWavenumber,
+  gaitBoneOffsets,
+  sampledBodyLength,
+} from './snailGaitOffsets';
 import { forgetSnailPosition, otherSnailPositions, publishSnailPosition } from './snailRegistry';
 import {
   snailSeparationResponse,
@@ -147,19 +153,6 @@ const SPEED_SMOOTH_RATE = 4;
  * / sec²) into a stretch fraction — tune by eye alongside `MAX_STRETCH`. */
 const STRETCH_RESPONSE = 0.15;
 const MAX_STRETCH = 0.35;
-
-/** The spine-sampling "accordion" wave: each bone's offset is nudged
- * along the body by a small amount, oscillating with the same gait phase,
- * so the body visibly bunches and spreads as the pedal wave passes through
- * — not just a speed pulse, an actual compression wave along its length.
- * Amplitude is expressed as a multiple of the spine's own crumb spacing
- * (never asking `sampleSpine` for finer detail than the trail actually
- * records) rather than a fixed world-unit constant, matching
- * `CRUMB_SAMPLES_PER_BODY`'s own "scale with the body, not a magic
- * number" reasoning. Wavelength is a fraction of the body's own length —
- * half a body per cycle reads as one clear compression, not a busy ripple. */
-const ACCORDION_AMPLITUDE_CRUMB_MULTIPLE = 1.5;
-const ACCORDION_WAVELENGTH_BODY_FRACTION = 0.5;
 
 /** The dawn-on-a-wall / fish-knock-loose float-down: gentle, not ballistic
  * (issue #98's settled spec) — a small decaying horizontal sway layered on
@@ -284,8 +277,15 @@ function sampledFrameAt(samples: SpineSample[], index: number): SampledFrame {
 /** Samples the spine at every bone offset in one combined arc-length query
  * — so each point's `sampledFrameAt` tangent comes from its own true
  * neighbours along the body. `boneOffsets` are arc-length distances behind
- * the spine's head (the toe/head bone), all non-negative by construction —
- * `FOOT_TOE_X` is itself the head bone's own offset, exactly `0`.
+ * the spine's head; the toe/head bone's own unperturbed offset is exactly `0`,
+ * and the gait's accordion wave (`snailGaitOffsets.ts`) can push it either side
+ * of that. Either direction is safe here: `sampleSpine` clamps a query past
+ * the head or past the oldest crumb rather than throwing, and
+ * `sampledBodyLength` keeps the tail-ward side inside the recorded trail so
+ * the clamp is never actually reached. The wave is also gentle enough never to
+ * reorder two bones (`accordionKeepsBonesOrdered`), which is what lets the
+ * sort below be a pure re-indexing rather than a change of who is whose
+ * neighbour.
  *
  * The shell's seat is deliberately *not* among them any more: it rides the
  * foot's own bones instead (`rootTransformFromFoot`), which is what stops
@@ -302,21 +302,6 @@ function computeBoneFrames(spine: CrawlSpine, boneOffsets: number[]): SampledFra
     boneFrames[originalIndex] = sampledFrameAt(samples, sortedIndex);
   });
   return boneFrames;
-}
-
-/** Nudges a spine-sampling offset along the body by a small amount that
- * oscillates with the shared gait phase — the "accordion" compression wave:
- * every bone bunches toward the head and spreads back out again as the wave
- * passes through, on top of whatever the bend itself is already doing. The
- * shell's seat needs no term of its own; riding the bones
- * (`rootTransformFromFoot`) carries it along with whatever compression they
- * are under, which is both simpler and the only version that can't slide
- * the shell along a bunching foot. Purely a query-time perturbation of which arc length gets
- * sampled — `sampleSpine` already clamps gracefully at either end of the
- * recorded trail, so a perturbation pushing an offset slightly negative or
- * past the oldest crumb is harmless, not a new failure mode to guard. */
-function withAccordionWave(offset: number, phase: number, k: number, amplitude: number): number {
-  return offset + amplitude * Math.sin(offset * k - phase);
 }
 
 function isFishRigidBody(userData: unknown): boolean {
@@ -341,8 +326,12 @@ export function Snail({ critter }: SnailProps) {
   const crumbSpacing = bodyLength / CRUMB_SAMPLES_PER_BODY;
   const seatOffset = (FOOT_TOE_X - SHELL_SEAT_X) * scale;
   const boneOffsets = FOOT_BONE_XS.map((x) => (FOOT_TOE_X - x) * scale);
-  const accordionAmplitude = crumbSpacing * ACCORDION_AMPLITUDE_CRUMB_MULTIPLE;
-  const accordionK = (2 * Math.PI) / (bodyLength * ACCORDION_WAVELENGTH_BODY_FRACTION);
+  const accordionA = accordionAmplitude(crumbSpacing);
+  const accordionK = accordionWavenumber(bodyLength);
+  // The spine is sized to how deep the *gait* reaches, not to the body alone
+  // — `snailGaitOffsets.ts`'s `sampledBodyLength` for why the difference is
+  // the tail-most bone freezing for part of every cycle.
+  const spineLength = sampledBodyLength(bodyLength, crumbSpacing);
 
   // The bone chain itself lives inside `SnailModel`, which hands it up via
   // `onBonesReady` once created — a ref, not React state, since this
@@ -368,14 +357,12 @@ export function Snail({ critter }: SnailProps) {
   // ahead of it; the seat then rides those bones rather than sampling for
   // itself (`rootTransformFromFoot`).
   const spineRef = useRef<CrawlSpine>(
-    createSpine(randomFloorPose(Math.random), bodyLength, crumbSpacing),
+    createSpine(randomFloorPose(Math.random), spineLength, crumbSpacing),
   );
   const initialRoot = rootTransformFromFoot(
     computeBoneFrames(
       spineRef.current,
-      boneOffsets.map((offset) =>
-        withAccordionWave(offset, gaitRef.current.phase, accordionK, accordionAmplitude),
-      ),
+      gaitBoneOffsets(boneOffsets, gaitRef.current.phase, accordionK, accordionA),
     ),
     FOOT_BONE_XS,
     SHELL_SEAT_X,
@@ -411,10 +398,11 @@ export function Snail({ critter }: SnailProps) {
 
     // A snail grows through its life stages, so the body sampling this spine
     // gets longer while the spine itself was sized at spawn — and a trail
-    // shorter than the body collapses every bone past its end onto one point
-    // (see `resizeSpine`). Checked here rather than in an effect because
-    // `scale` is a plain per-render derivation, not state anything reacts to.
-    resizeSpine(spineRef.current, bodyLength, crumbSpacing);
+    // shorter than what the body samples collapses every bone past its end
+    // onto one point (see `resizeSpine`). Checked here rather than in an effect
+    // because `scale` is a plain per-render derivation, not state anything
+    // reacts to.
+    resizeSpine(spineRef.current, spineLength, crumbSpacing);
 
     const asleep = isAsleep('Snail', dayNightOverride, simNight);
     const onFloor = spineRef.current.headPose.faceId === 'floor';
@@ -554,9 +542,7 @@ export function Snail({ critter }: SnailProps) {
       // at this population scale.
       const boneFrames = computeBoneFrames(
         spineRef.current,
-        boneOffsets.map((offset) =>
-          withAccordionWave(offset, gaitRef.current.phase, accordionK, accordionAmplitude),
-        ),
+        gaitBoneOffsets(boneOffsets, gaitRef.current.phase, accordionK, accordionA),
       );
 
       // One derivation, one source: every bone sits on its own spine sample,
