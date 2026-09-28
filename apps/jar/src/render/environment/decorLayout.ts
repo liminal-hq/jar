@@ -265,7 +265,19 @@ export function keepClearOfCastle(
       const feasible = candidates.filter((c) => Math.abs(c.target) <= c.bound);
       const pool = feasible.length > 0 ? feasible : candidates;
       const chosen = pool.reduce((best, c) => (c.penetration < best.penetration ? c : best));
-      result = { ...result, [chosen.axis]: chosen.target };
+      // Clamped to the axis bound rather than taken raw: a no-op for any
+      // feasible candidate (in bounds by construction), and the one thing
+      // standing between the infeasible fallback above and a point *outside*
+      // the tank. Since the loop's own clamp runs at the top of each pass,
+      // an unclamped push on the final pass would be returned as-is — and a
+      // point past a wall collider's outer face is not a recoverable
+      // starting position for a critter: a `RigidBody` mounted there is on
+      // the far side of the glass, where `TankContainmentBehaviour`'s inward
+      // push is blocked by the very wall it is trying to get back through.
+      // Trading castle clearance for tank containment is the right way round
+      // — an overlap with a castle box resolves inward on the first physics
+      // step, whereas being outside the glass never resolves at all.
+      result = { ...result, [chosen.axis]: clamp(chosen.target, -chosen.bound, chosen.bound) };
       pushedThisPass = true;
     }
     if (!pushedThisPass) break;

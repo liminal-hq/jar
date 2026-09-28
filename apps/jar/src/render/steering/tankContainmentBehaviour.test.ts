@@ -124,6 +124,46 @@ describe('TankContainmentBehaviour', () => {
     expect(force.z).toBe(0);
   });
 
+  it('still commands a full-strength push inward for a fish already outside the glass', () => {
+    // Not a hypothetical: a fish whose centre ends up past a wall collider
+    // gets exactly this force forever, because the wall it's being pushed
+    // against is between it and the water (`physics/tankEscape.ts`). The
+    // steering side of that state is correct and saturated — which is
+    // precisely why nothing about it ever changes.
+    const behaviour = makeBehaviour();
+    const vehicle = new YUKA.Vehicle();
+    const force = new YUKA.Vector3();
+
+    vehicle.position.set(TANK_INNER_BOUNDS.x + 0.8, 0, 0);
+    behaviour.calculate(vehicle, force);
+    expect(force.x).toBeCloseTo(-STRENGTH, 5);
+
+    vehicle.position.set(-(TANK_INNER_BOUNDS.x + 0.8), 0, 0);
+    behaviour.calculate(vehicle, force);
+    expect(force.x).toBeCloseTo(STRENGTH, 5);
+  });
+
+  it('does not vary that push with how far outside the fish has drifted', () => {
+    // The constant force is what freezes an escaped fish's heading:
+    // `SteeringSystem.tsx` derives the target heading from the commanded
+    // velocity, and at full penetration this behaviour also claims the whole
+    // of `vehicle.maxForce`, so `wander` never gets a turn in edgeways either.
+    const behaviour = makeBehaviour();
+    const vehicle = new YUKA.Vehicle();
+
+    const near = new YUKA.Vector3();
+    vehicle.position.set(TANK_INNER_BOUNDS.x + 0.5, 0, 0);
+    behaviour.calculate(vehicle, near);
+
+    const far = new YUKA.Vector3();
+    vehicle.position.set(TANK_INNER_BOUNDS.x + 5, 0, 0);
+    behaviour.calculate(vehicle, far);
+
+    expect(far.x).toBeCloseTo(near.x, 10);
+    expect(far.y).toBeCloseTo(near.y, 10);
+    expect(far.z).toBeCloseTo(near.z, 10);
+  });
+
   it('gives a square-on approach to a wall a nonzero sideways component', () => {
     // Centred on x and y (the degenerate case: a naive push here is purely
     // antiparallel to a fish heading straight at the +z wall, with nothing
