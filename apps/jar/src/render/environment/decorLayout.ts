@@ -254,10 +254,31 @@ function buildAxisGrid(
   const order = kept.map((_, index) => index);
   const cost = (index: number) => (kept[index]! - start) * (kept[index]! - start);
   order.sort((a, b) => cost(a) - cost(b) || a - b);
-  return {
-    values: Float64Array.from(order, (index) => kept[index]!),
-    costs: Float64Array.from(order, cost),
-  };
+  // The boxes share half-extents and faces, so many candidates are exact
+  // duplicates (identical arithmetic). Scanning a repeated plane again can
+  // never change the result, so keep only the first occurrence in sort order,
+  // which leaves the tie-break between distinct candidates untouched. Equal
+  // values have equal cost, so a duplicate sits in the same run of equal-cost
+  // entries as its first occurrence and only that run needs checking.
+  const values: number[] = [];
+  const costs: number[] = [];
+  let runStart = 0;
+  for (const index of order) {
+    const value = kept[index]!;
+    const valueCost = cost(index);
+    if (costs.length > 0 && valueCost !== costs[costs.length - 1]!) runStart = costs.length;
+    let duplicate = false;
+    for (let at = runStart; at < values.length; at++) {
+      if (values[at] === value) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) continue;
+    values.push(value);
+    costs.push(valueCost);
+  }
+  return { values: Float64Array.from(values), costs: Float64Array.from(costs) };
 }
 
 /** The point nearest `start` (Euclidean) that lies outside every box

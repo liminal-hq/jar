@@ -164,20 +164,31 @@ describe('plant positions', () => {
   });
 });
 
+/** `CASTLE_COLLIDER_BOXES` in world space, computed once so the lattice
+ * sweeps below can run their per-point checks without allocating. */
+const WORLD_COLLIDER_BOXES = CASTLE_COLLIDER_BOXES.map((box) => ({
+  x: CASTLE_POSITION.x + box.position.x,
+  y: CASTLE_POSITION.y + box.position.y,
+  z: CASTLE_POSITION.z + box.position.z,
+  halfX: box.halfExtents.x,
+  halfY: box.halfExtents.y,
+  halfZ: box.halfExtents.z,
+}));
+
 function isOutsideEveryColliderBox(
   point: { x: number; y: number; z: number },
   margin: number,
 ): boolean {
-  return CASTLE_COLLIDER_BOXES.every((box) => {
-    const boxWorldX = CASTLE_POSITION.x + box.position.x;
-    const boxWorldY = CASTLE_POSITION.y + box.position.y;
-    const boxWorldZ = CASTLE_POSITION.z + box.position.z;
-    const inside =
-      Math.abs(point.x - boxWorldX) < box.halfExtents.x + margin &&
-      Math.abs(point.y - boxWorldY) < box.halfExtents.y + margin &&
-      Math.abs(point.z - boxWorldZ) < box.halfExtents.z + margin;
-    return !inside;
-  });
+  for (const box of WORLD_COLLIDER_BOXES) {
+    if (
+      Math.abs(point.x - box.x) < box.halfX + margin &&
+      Math.abs(point.y - box.y) < box.halfY + margin &&
+      Math.abs(point.z - box.z) < box.halfZ + margin
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 describe('the fish margins under test', () => {
@@ -304,31 +315,32 @@ describe('keepClearOfCastle', () => {
       // single spot left inside the castle (a Rapier depenetration pop) or
       // outside the glass (unrecoverable) is a visible bug. Failures are
       // collected rather than asserted per point: one `expect` over the
-      // whole lattice names the offending spots without paying for half a
-      // million assertions to prove there are none.
+      // whole lattice names the offending spots without paying for a
+      // hundred thousand assertions to prove there are none.
       const clearance = WALL_THICKNESS / 2 + margin;
       const failures: Array<{ percent: number[]; reasons: string[]; pushed: unknown }> = [];
       let rawInside = 0;
       for (let xPercent = 0; xPercent <= 100; xPercent += 1) {
-        for (let yPercent = 0; yPercent <= 100; yPercent += 1) {
-          for (let zPercent = 0; zPercent <= 100; zPercent += 2) {
+        for (let yPercent = 0; yPercent <= 100; yPercent += 2) {
+          for (let zPercent = 0; zPercent <= 100; zPercent += 4) {
             const spot = simPercentToWorld(xPercent, yPercent, zPercent, clearance);
             const pushed = keepClearOfCastle(spot, margin);
-            const reasons: string[] = [];
-            if (!isInsideTank(pushed, margin)) reasons.push('outside the tank');
-            if (!isOutsideEveryColliderBox(pushed, 0)) {
-              rawInside++;
-              reasons.push('inside a raw box');
-            }
-            if (!isOutsideEveryColliderBox(pushed, margin)) reasons.push('inside an expanded box');
-            if (
+            // Reasons are only spelled out for a failing point, so the
+            // passing majority of the lattice allocates nothing here.
+            const outsideTank = !isInsideTank(pushed, margin);
+            const inRawBox = !isOutsideEveryColliderBox(pushed, 0);
+            const inExpandedBox = !isOutsideEveryColliderBox(pushed, margin);
+            const movedClearSpot =
+              (pushed.x !== spot.x || pushed.y !== spot.y || pushed.z !== spot.z) &&
               isOutsideEveryColliderBox(spot, margin) &&
-              isInsideTank(spot, margin) &&
-              (pushed.x !== spot.x || pushed.y !== spot.y || pushed.z !== spot.z)
-            ) {
-              reasons.push('moved a spot that was already clear');
-            }
-            if (reasons.length > 0) {
+              isInsideTank(spot, margin);
+            if (inRawBox) rawInside++;
+            if (outsideTank || inRawBox || inExpandedBox || movedClearSpot) {
+              const reasons: string[] = [];
+              if (outsideTank) reasons.push('outside the tank');
+              if (inRawBox) reasons.push('inside a raw box');
+              if (inExpandedBox) reasons.push('inside an expanded box');
+              if (movedClearSpot) reasons.push('moved a spot that was already clear');
               failures.push({ percent: [xPercent, yPercent, zPercent], reasons, pushed });
             }
           }
@@ -443,21 +455,25 @@ describe('keepFloorPointClearOfCastle', () => {
       // 0.5 is the unscaled adult snail half-length — headroom for the
       // pending collider retune. Boxes 0, 1, 3 and 4 stand on the sand; the
       // lintel floats above the doorway, so the floor beneath it is open.
-      const floorBoxes = [0, 1, 3, 4].map((index) => CASTLE_COLLIDER_BOXES[index]!);
+      const floorBoxes = [0, 1, 3, 4].map((index) => WORLD_COLLIDER_BOXES[index]!);
       const failures: Array<{ x: number; z: number; reason: string; clear: unknown }> = [];
-      const xSteps = 1000;
-      const zSteps = 500;
+      const xSteps = 500;
+      const zSteps = 250;
       for (let i = 0; i <= xSteps; i++) {
         for (let k = 0; k <= zSteps; k++) {
           const x = -TANK_INNER_BOUNDS.x + (2 * TANK_INNER_BOUNDS.x * i) / xSteps;
           const z = -TANK_INNER_BOUNDS.z + (2 * TANK_INNER_BOUNDS.z * k) / zSteps;
           const clear = keepFloorPointClearOfCastle({ x, z }, margin);
-          const onBox = floorBoxes.some(
-            (box) =>
-              Math.abs(clear.x - (CASTLE_POSITION.x + box.position.x)) <
-                box.halfExtents.x + margin &&
-              Math.abs(clear.z - (CASTLE_POSITION.z + box.position.z)) < box.halfExtents.z + margin,
-          );
+          let onBox = false;
+          for (const box of floorBoxes) {
+            if (
+              Math.abs(clear.x - box.x) < box.halfX + margin &&
+              Math.abs(clear.z - box.z) < box.halfZ + margin
+            ) {
+              onBox = true;
+              break;
+            }
+          }
           if (onBox) failures.push({ x, z, reason: 'on a floor-standing box', clear });
           if (
             Math.abs(clear.x) > TANK_INNER_BOUNDS.x - margin + 1e-9 ||

@@ -160,8 +160,10 @@ export function Snail({ critter }: SnailProps) {
   // Spawn once at mount, mutated in place every frame thereafter — this
   // pose drives an imperative kinematic body transform, not a render, so it
   // lives in a ref rather than React state (same rationale as `Fish.tsx`'s
-  // `currentHeadingRef`).
-  const poseRef = useRef<CrawlPose>(randomFloorPose(Math.random));
+  // `currentHeadingRef`). The spawn search is not free, so a lazy `useState`
+  // initialiser runs it once at mount instead of on every render.
+  const [spawnPose] = useState(() => randomFloorPose(Math.random));
+  const poseRef = useRef<CrawlPose>(spawnPose);
   const initialFrame = poseToWorld(poseRef.current);
   const positionRef = useRef<THREE.Vector3>(rootPositionFromFrame(initialFrame, scale));
   const quaternionRef = useRef<THREE.Quaternion>(quaternionFromFrame(initialFrame));
