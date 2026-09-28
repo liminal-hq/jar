@@ -356,21 +356,27 @@ export function Snail({ critter }: SnailProps) {
   // point the spine has actually recorded reaching, never an extrapolation
   // ahead of it; the seat then rides those bones rather than sampling for
   // itself (`rootTransformFromFoot`).
-  const spineRef = useRef<CrawlSpine>(
-    createSpine(randomFloorPose(Math.random), spineLength, crumbSpacing),
-  );
-  const initialRoot = rootTransformFromFoot(
-    computeBoneFrames(
-      spineRef.current,
-      gaitBoneOffsets(boneOffsets, gaitRef.current.phase, accordionK, accordionA),
-    ),
-    FOOT_BONE_XS,
-    SHELL_SEAT_X,
-    SOLE_Y,
-    scale,
-  );
-  const positionRef = useRef<THREE.Vector3>(initialRoot.position);
-  const quaternionRef = useRef<THREE.Quaternion>(initialRoot.quaternion);
+  //
+  // The spawn search (`randomFloorPose` clears the castle) and the initial
+  // bone sampling are not free, so a lazy `useState` initialiser runs them
+  // once at mount instead of on every render.
+  const [initial] = useState(() => {
+    const spine = createSpine(randomFloorPose(Math.random), spineLength, crumbSpacing);
+    const root = rootTransformFromFoot(
+      computeBoneFrames(
+        spine,
+        gaitBoneOffsets(boneOffsets, gaitRef.current.phase, accordionK, accordionA),
+      ),
+      FOOT_BONE_XS,
+      SHELL_SEAT_X,
+      SOLE_Y,
+      scale,
+    );
+    return { spine, root };
+  });
+  const spineRef = useRef<CrawlSpine>(initial.spine);
+  const positionRef = useRef<THREE.Vector3>(initial.root.position);
+  const quaternionRef = useRef<THREE.Quaternion>(initial.root.quaternion);
 
   const behaviourRef = useRef<SnailBehaviourState>(createInitialSnailBehaviour());
   const headingBiasRef = useRef(0);

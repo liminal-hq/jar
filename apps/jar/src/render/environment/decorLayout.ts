@@ -173,116 +173,231 @@ export const PLANT_FRONT_RIGHT_POSITION = {
 // of the keep, in front of it.
 export const PLANT_LEFT_OF_KEEP_POSITION = { x: -0.9, y: FLOOR_TOP_Y, z: 0.25 };
 
-/** Pushes a point clear of `CASTLE_COLLIDER_BOXES` (each box expanded by
- * `margin` on every side) if it falls inside one, along whichever axis
- * needs the smallest push (the standard AABB minimum-translation
- * approach), and keeps it within `TANK_INNER_BOUNDS` (also shrunk by
- * `margin`) throughout — otherwise returns the point unchanged. Exists
- * because a critter's `favourite_spot` (`Fish.tsx`) is rolled in
- * `jar-core`, which has no knowledge of decor (`docs/architecture/rust-core.md`'s
- * own "no I/O, no render knowledge" boundary for the sim core) — nothing
- * upstream of the frontend can already avoid the castle, so a fish
- * spawning (or returning to rest) at a percent-rolled point that happens
- * to land inside one of these boxes would otherwise mount its RigidBody
- * already interpenetrating a fixed collider, which Rapier resolves with
- * an immediate pop/launch on the very first physics step rather than a
- * normal approach and stop. The tank-bounds clamp runs every pass, not
- * just at the end — a castle box near the tank wall (a tower sits close
- * to the back wall) can push a point past that wall on its own, and a
- * clamp applied only afterward could then walk it straight back into the
- * castle box it was just pushed out of; alternating the two constraints
- * across a few passes converges on a point that satisfies both. */
-export function keepClearOfCastle(
-  point: { x: number; y: number; z: number },
+type Vec3 = { x: number; y: number; z: number };
+type Axis = 'x' | 'y' | 'z';
+const AXES: readonly Axis[] = ['x', 'y', 'z'];
+
+/** An axis-aligned box in world space, as a centre and half-extents. */
+export interface WorldBox {
+  centre: Vec3;
+  half: Vec3;
+}
+
+/** How far past a box's expanded face a pushed point lands, so a point
+ * resting on a face reads as clear under the strict `<` containment test
+ * even after floating-point rounding. */
+export const CLEARANCE_EPSILON = 1e-6;
+
+/** `CASTLE_COLLIDER_BOXES` in world space, computed once. */
+const CASTLE_WORLD_BOXES: readonly WorldBox[] = CASTLE_COLLIDER_BOXES.map((box) => ({
+  centre: {
+    x: CASTLE_POSITION.x + box.position.x,
+    y: CASTLE_POSITION.y + box.position.y,
+    z: CASTLE_POSITION.z + box.position.z,
+  },
+  half: { ...box.halfExtents },
+}));
+
+/** The legal range for a critter centre whose collider reaches `margin`
+ * from it: `TANK_INNER_BOUNDS` shrunk by `margin` on every axis. */
+function tankBoundsFor(margin: number): Vec3 {
+  return {
+    x: Math.max(0, TANK_INNER_BOUNDS.x - margin),
+    y: Math.max(0, TANK_INNER_BOUNDS.y - margin),
+    z: Math.max(0, TANK_INNER_BOUNDS.z - margin),
+  };
+}
+
+function isInsideAnyBox(
+  x: number,
+  y: number,
+  z: number,
+  boxes: readonly WorldBox[],
   margin: number,
-): { x: number; y: number; z: number } {
-  let result = point;
-  for (let pass = 0; pass < 4; pass++) {
-    result = {
-      x: clamp(result.x, -(TANK_INNER_BOUNDS.x - margin), TANK_INNER_BOUNDS.x - margin),
-      y: clamp(result.y, -(TANK_INNER_BOUNDS.y - margin), TANK_INNER_BOUNDS.y - margin),
-      z: clamp(result.z, -(TANK_INNER_BOUNDS.z - margin), TANK_INNER_BOUNDS.z - margin),
-    };
-
-    let pushedThisPass = false;
-    for (const box of CASTLE_COLLIDER_BOXES) {
-      const boxWorld = {
-        x: CASTLE_POSITION.x + box.position.x,
-        y: CASTLE_POSITION.y + box.position.y,
-        z: CASTLE_POSITION.z + box.position.z,
-      };
-      const expanded = {
-        x: box.halfExtents.x + margin,
-        y: box.halfExtents.y + margin,
-        z: box.halfExtents.z + margin,
-      };
-      const dx = result.x - boxWorld.x;
-      const dy = result.y - boxWorld.y;
-      const dz = result.z - boxWorld.z;
-      const inside =
-        Math.abs(dx) < expanded.x && Math.abs(dy) < expanded.y && Math.abs(dz) < expanded.z;
-      if (!inside) continue;
-
-      const sign = (n: number) => (n < 0 ? -1 : 1); // never 0 — a point exactly on the box's own centre plane still needs a direction to push
-      // A push landing exactly on the expanded boundary can still read as
-      // "inside" on the next pass's strict `<` check once floating-point
-      // rounding is involved, oscillating rather than converging — nudge
-      // past it by a hair so the next check is unambiguous.
-      const clearanceEpsilon = 1e-6;
-      const axisBound = {
-        x: TANK_INNER_BOUNDS.x - margin,
-        y: TANK_INNER_BOUNDS.y - margin,
-        z: TANK_INNER_BOUNDS.z - margin,
-      };
-      const candidates = [
-        {
-          axis: 'x' as const,
-          penetration: expanded.x - Math.abs(dx),
-          target: boxWorld.x + sign(dx) * (expanded.x + clearanceEpsilon),
-          bound: axisBound.x,
-        },
-        {
-          axis: 'y' as const,
-          penetration: expanded.y - Math.abs(dy),
-          target: boxWorld.y + sign(dy) * (expanded.y + clearanceEpsilon),
-          bound: axisBound.y,
-        },
-        {
-          axis: 'z' as const,
-          penetration: expanded.z - Math.abs(dz),
-          target: boxWorld.z + sign(dz) * (expanded.z + clearanceEpsilon),
-          bound: axisBound.z,
-        },
-      ];
-      // The cheapest (min-penetration) axis to push along isn't necessarily
-      // one whose destination actually fits inside the shrunken tank bounds
-      // — a box sitting close to a wall can make the "cheap" axis land past
-      // that wall, which the next pass's clamp then pulls straight back
-      // into the box, oscillating between the two constraints forever.
-      // Restrict the choice to axes whose push target is actually in-bounds
-      // first, and only fall back to the unrestricted minimum if none of
-      // the three qualify (a box too large for the tank to clear at all).
-      const feasible = candidates.filter((c) => Math.abs(c.target) <= c.bound);
-      const pool = feasible.length > 0 ? feasible : candidates;
-      const chosen = pool.reduce((best, c) => (c.penetration < best.penetration ? c : best));
-      // Clamped to the axis bound rather than taken raw: a no-op for any
-      // feasible candidate (in bounds by construction), and the one thing
-      // standing between the infeasible fallback above and a point *outside*
-      // the tank. Since the loop's own clamp runs at the top of each pass,
-      // an unclamped push on the final pass would be returned as-is — and a
-      // point past a wall collider's outer face is not a recoverable
-      // starting position for a critter: a `RigidBody` mounted there is on
-      // the far side of the glass, where `TankContainmentBehaviour`'s inward
-      // push is blocked by the very wall it is trying to get back through.
-      // Trading castle clearance for tank containment is the right way round
-      // — an overlap with a castle box resolves inward on the first physics
-      // step, whereas being outside the glass never resolves at all.
-      result = { ...result, [chosen.axis]: clamp(chosen.target, -chosen.bound, chosen.bound) };
-      pushedThisPass = true;
+) {
+  for (const box of boxes) {
+    if (
+      Math.abs(x - box.centre.x) < box.half.x + margin &&
+      Math.abs(y - box.centre.y) < box.half.y + margin &&
+      Math.abs(z - box.centre.z) < box.half.z + margin
+    ) {
+      return true;
     }
-    if (!pushedThisPass) break;
   }
-  return result;
+  return false;
+}
+
+/** The candidate coordinates on one axis, cheapest first: `values[i]` at
+ * squared distance `costs[i]` from the start coordinate. */
+interface AxisGrid {
+  values: Float64Array;
+  costs: Float64Array;
+}
+
+function buildAxisGrid(
+  axis: Axis,
+  start: number,
+  boxes: readonly WorldBox[],
+  margin: number,
+  bound: number,
+  held: boolean,
+): AxisGrid {
+  const candidates: number[] = [start];
+  if (!held) {
+    for (const box of boxes) {
+      const reach = box.half[axis] + margin + CLEARANCE_EPSILON;
+      candidates.push(box.centre[axis] + reach, box.centre[axis] - reach);
+    }
+    candidates.push(bound, -bound);
+  }
+  const kept = candidates.filter((value, index) => index === 0 || Math.abs(value) <= bound);
+  const order = kept.map((_, index) => index);
+  const cost = (index: number) => (kept[index]! - start) * (kept[index]! - start);
+  order.sort((a, b) => cost(a) - cost(b) || a - b);
+  // The boxes share half-extents and faces, so many candidates are exact
+  // duplicates (identical arithmetic). Scanning a repeated plane again can
+  // never change the result, so keep only the first occurrence in sort order,
+  // which leaves the tie-break between distinct candidates untouched. Equal
+  // values have equal cost, so a duplicate sits in the same run of equal-cost
+  // entries as its first occurrence and only that run needs checking.
+  const values: number[] = [];
+  const costs: number[] = [];
+  let runStart = 0;
+  for (const index of order) {
+    const value = kept[index]!;
+    const valueCost = cost(index);
+    if (costs.length > 0 && valueCost !== costs[costs.length - 1]!) runStart = costs.length;
+    let duplicate = false;
+    for (let at = runStart; at < values.length; at++) {
+      if (values[at] === value) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) continue;
+    values.push(value);
+    costs.push(valueCost);
+  }
+  return { values: Float64Array.from(values), costs: Float64Array.from(costs) };
+}
+
+/** The point nearest `start` (Euclidean) that lies outside every box
+ * expanded by `margin` and inside `±bounds`, or `null` if there is none.
+ * The nearest such point's coordinate on each axis is either the start
+ * coordinate or sits on a constraint plane — an expanded box face or a
+ * tank bound — because otherwise sliding it toward the start would
+ * shorten the distance without changing which boxes contain it. So
+ * searching the grid of those coordinates per axis is complete and exact,
+ * and needs no separate edge or corner candidates. */
+function searchNearestClear(
+  start: Vec3,
+  boxes: readonly WorldBox[],
+  bounds: Vec3,
+  margin: number,
+  held: readonly Axis[],
+): Vec3 | null {
+  const gx = buildAxisGrid('x', start.x, boxes, margin, bounds.x, held.includes('x'));
+  const gy = buildAxisGrid('y', start.y, boxes, margin, bounds.y, held.includes('y'));
+  const gz = buildAxisGrid('z', start.z, boxes, margin, bounds.z, held.includes('z'));
+
+  // z outermost and x innermost: the inner axis takes the first clear
+  // candidate it meets, so on an exact tie the earlier-scanned candidate
+  // wins, and this order makes that the +x face.
+  let best = Infinity;
+  let bestX = 0;
+  let bestY = 0;
+  let bestZ = 0;
+  for (let k = 0; k < gz.values.length; k++) {
+    const costZ = gz.costs[k]!;
+    if (costZ >= best) break;
+    for (let j = 0; j < gy.values.length; j++) {
+      const costZY = costZ + gy.costs[j]!;
+      if (costZY >= best) break;
+      for (let i = 0; i < gx.values.length; i++) {
+        const total = costZY + gx.costs[i]!;
+        if (total >= best) break;
+        if (!isInsideAnyBox(gx.values[i]!, gy.values[j]!, gz.values[k]!, boxes, margin)) {
+          best = total;
+          bestX = gx.values[i]!;
+          bestY = gy.values[j]!;
+          bestZ = gz.values[k]!;
+          break;
+        }
+      }
+    }
+  }
+  return best === Infinity ? null : { x: bestX, y: bestY, z: bestZ };
+}
+
+/** Moves `point` to the nearest point that is inside `±bounds` on every
+ * axis not in `heldAxes` (held axes are copied unchanged and never
+ * searched) and outside every box in `boxes` expanded by `margin`. Falls
+ * back through three tiers, each giving up the previous one's guarantee:
+ * clear of the expanded boxes; clear of the raw boxes; and finally just
+ * inside the bounds — tank containment is never given up. A point already
+ * clear of the expanded boxes is only clamped. An exact tie between
+ * candidates resolves to the +x face, so the result is deterministic.
+ * Boundary semantics match the physics: containment in a box is strict
+ * (`<`), containment in the bounds is inclusive (`<=`). */
+export function nearestClearPoint(
+  point: Vec3,
+  boxes: readonly WorldBox[],
+  bounds: Vec3,
+  margin: number,
+  heldAxes: readonly Axis[] = [],
+): Vec3 {
+  const clamped: Vec3 = { ...point };
+  for (const axis of AXES) {
+    if (!heldAxes.includes(axis)) clamped[axis] = clamp(point[axis], -bounds[axis], bounds[axis]);
+  }
+  if (!isInsideAnyBox(clamped.x, clamped.y, clamped.z, boxes, margin)) return clamped;
+
+  return (
+    searchNearestClear(clamped, boxes, bounds, margin, heldAxes) ??
+    searchNearestClear(clamped, boxes, bounds, 0, heldAxes) ??
+    clamped
+  );
+}
+
+/** Moves a critter's rolled spawn/favourite spot clear of the castle: the
+ * nearest point inside the tank bounds (shrunk by `margin`) and outside
+ * every `CASTLE_COLLIDER_BOXES` box expanded by `margin`, or `point`
+ * itself (clamped into the tank) if it is already clear.
+ *
+ * `favourite_spot` is rolled in `jar-core`, which has no knowledge of
+ * decor (`docs/architecture/rust-core.md`'s "no I/O, no render knowledge"
+ * boundary for the sim core), so nothing upstream can have avoided the
+ * castle. A spot left inside a collider box would mount the fish's
+ * `RigidBody` interpenetrating a fixed collider, which Rapier resolves
+ * with a visible pop on the first physics step.
+ *
+ * The expanded boxes overlap one another: a wall segment's box and its
+ * tower's box share space whenever `2 * margin` exceeds the keep-to-tower
+ * gap (0.325), which is true for every fish margin. Clearing one box at a
+ * time therefore ping-pongs between the two, so all the boxes are
+ * cleared jointly, by an exact nearest-point search (`nearestClearPoint`).
+ * Fallback order when no point clears the expanded boxes within the tank:
+ * clear of the raw boxes, then merely inside the tank. */
+export function keepClearOfCastle(point: Vec3, margin: number): Vec3 {
+  return nearestClearPoint(point, CASTLE_WORLD_BOXES, tankBoundsFor(margin), margin);
+}
+
+/** `keepClearOfCastle` for a crawler standing on the sand: only `x` and
+ * `z` move, so the footprint slides along the floor rather than being
+ * lifted onto the top of a wall. The probe sits one epsilon above the sand
+ * so that the boxes standing on the floor register as containing it. */
+export function keepFloorPointClearOfCastle(
+  point: { x: number; z: number },
+  margin: number,
+): { x: number; z: number } {
+  const clear = nearestClearPoint(
+    { x: point.x, y: FLOOR_TOP_Y + CLEARANCE_EPSILON, z: point.z },
+    CASTLE_WORLD_BOXES,
+    tankBoundsFor(margin),
+    margin,
+    ['y'],
+  );
+  return { x: clear.x, z: clear.z };
 }
 
 /** `THREE.MathUtils.clamp`, without a three.js import — this file is

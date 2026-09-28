@@ -19,6 +19,7 @@ import {
   dropToFloor,
   EDGE_AVOIDANCE_RADIUS,
   FILLET_RADIUS,
+  FLOOR_SPAWN_CASTLE_MARGIN,
   poseToWorld,
   poseToWorldRounded,
   randomFloorPose,
@@ -453,6 +454,19 @@ describe('turn()', () => {
   });
 });
 
+/** Whether a floor pose's footprint centre lies within `margin` (on x and
+ * z) of a box that stands on the sand — the lintel floats over the doorway,
+ * so the floor under it is open and is not counted. */
+function isOnFloorStandingBox(position: Vec3, margin: number): boolean {
+  return [0, 1, 3, 4].some((index) => {
+    const box = CASTLE_COLLIDER_BOXES[index]!;
+    return (
+      Math.abs(position.x - (CASTLE_POSITION.x + box.position.x)) < box.halfExtents.x + margin &&
+      Math.abs(position.z - (CASTLE_POSITION.z + box.position.z)) < box.halfExtents.z + margin
+    );
+  });
+}
+
 describe('randomFloorPose', () => {
   it('always lands on the floor, inside the tank, clear of every castle collider box', () => {
     let call = 0;
@@ -482,6 +496,26 @@ describe('randomFloorPose', () => {
         expect(inside).toBe(false);
       }
     }
+  });
+});
+
+describe('randomFloorPose over many seeded poses', () => {
+  it('keeps every footprint off the floor-standing castle boxes by the spawn margin', () => {
+    // A seeded LCG, so a failure is reproducible.
+    let state = 12345;
+    const random = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    const failures: unknown[] = [];
+    for (let i = 0; i < 5000; i++) {
+      const { position } = poseToWorld(randomFloorPose(random));
+      if (isOnFloorStandingBox(position, FLOOR_SPAWN_CASTLE_MARGIN)) failures.push(position);
+    }
+    expect({ count: failures.length, sample: failures.slice(0, 10) }).toEqual({
+      count: 0,
+      sample: [],
+    });
   });
 });
 
@@ -515,6 +549,22 @@ describe('dropToFloor', () => {
     const { position } = poseToWorld(pose);
     expect(Math.abs(position.x)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.x + 1e-6);
     expect(Math.abs(position.z)).toBeLessThanOrEqual(TANK_INNER_BOUNDS.z + 1e-6);
+  });
+});
+
+describe('dropToFloor over a lattice', () => {
+  it('keeps every footprint off the floor-standing castle boxes by the spawn margin', () => {
+    const failures: unknown[] = [];
+    for (let x = -TANK_INNER_BOUNDS.x; x <= TANK_INNER_BOUNDS.x; x += 0.02) {
+      for (let z = -TANK_INNER_BOUNDS.z; z <= TANK_INNER_BOUNDS.z; z += 0.02) {
+        const { position } = poseToWorld(dropToFloor({ x, y: 0, z }));
+        if (isOnFloorStandingBox(position, FLOOR_SPAWN_CASTLE_MARGIN)) failures.push(position);
+      }
+    }
+    expect({ count: failures.length, sample: failures.slice(0, 10) }).toEqual({
+      count: 0,
+      sample: [],
+    });
   });
 });
 

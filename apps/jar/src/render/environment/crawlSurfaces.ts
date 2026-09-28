@@ -56,7 +56,7 @@ import {
   CASTLE_COLLIDER_BOXES,
   CASTLE_POSITION,
   FLOOR_TOP_Y,
-  keepClearOfCastle,
+  keepFloorPointClearOfCastle,
 } from './decorLayout';
 
 export interface Vec3 {
@@ -943,19 +943,21 @@ export function unlinkedEdgeAvoidanceBias(pose: CrawlPose, awarenessRadius: numb
 
 /** A plausible small-crawler footprint radius to keep a spawned/landed pose
  * clear of the castle by — tune once `snailCollider.ts` (a later PR) gives
- * a real measured value; deliberately smaller than the ~0.3 a fish uses
- * (`decorLayout.test.ts`), since a snail is a much smaller critter. */
-const FLOOR_SPAWN_CASTLE_MARGIN = 0.15;
+ * a real measured value; deliberately smaller than any adult fish's
+ * collider half-length (0.456–0.725, `fishCollider.ts`), since a snail is
+ * a much smaller critter. */
+export const FLOOR_SPAWN_CASTLE_MARGIN = 0.15;
 
 /** A uniformly random pose on the sand floor, clear of the castle
- * (`keepClearOfCastle` — the same castle-avoidance logic `Fish.tsx` uses
- * for a fish's own favourite spot), facing a random direction. `random`
- * must return a value in `[0, 1)`, e.g. `Math.random`. */
+ * (`keepFloorPointClearOfCastle` — the sand-bound variant of the
+ * castle-avoidance logic `Fish.tsx` uses for a fish's own favourite spot),
+ * facing a random direction. `random` must return a value in `[0, 1)`,
+ * e.g. `Math.random`. */
 export function randomFloorPose(random: () => number): CrawlPose {
   const floor = requireFace(FLOOR_FACE_ID);
   const worldPoint = facePoint(floor, random() * floor.uLength, random() * floor.vLength);
-  const clear = keepClearOfCastle(worldPoint, FLOOR_SPAWN_CASTLE_MARGIN);
-  const projected = projectPointToFace(floor, clear);
+  const clear = keepFloorPointClearOfCastle(worldPoint, FLOOR_SPAWN_CASTLE_MARGIN);
+  const projected = projectPointToFace(floor, { x: clear.x, y: FLOOR_TOP_Y, z: clear.z });
   return {
     faceId: FLOOR_FACE_ID,
     u: clamp(projected.u, 0, floor.uLength),
@@ -970,11 +972,8 @@ export function randomFloorPose(random: () => number): CrawlPose {
  * a caller that cares can `turn()` it afterward. */
 export function dropToFloor(worldPoint: Vec3): CrawlPose {
   const floor = requireFace(FLOOR_FACE_ID);
-  const clear = keepClearOfCastle(
-    { x: worldPoint.x, y: FLOOR_TOP_Y, z: worldPoint.z },
-    FLOOR_SPAWN_CASTLE_MARGIN,
-  );
-  const projected = projectPointToFace(floor, clear);
+  const clear = keepFloorPointClearOfCastle(worldPoint, FLOOR_SPAWN_CASTLE_MARGIN);
+  const projected = projectPointToFace(floor, { x: clear.x, y: FLOOR_TOP_Y, z: clear.z });
   return {
     faceId: FLOOR_FACE_ID,
     u: clamp(projected.u, 0, floor.uLength),
