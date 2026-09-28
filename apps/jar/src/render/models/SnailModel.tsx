@@ -35,6 +35,7 @@ import {
   EYESTALK_EYE,
   EYESTALK_HINGE,
   FOOT_SOLE_GRADIENT_HEIGHT,
+  FOOT_TOE_X,
   OPERCULUM_EXTRUSION_DEPTH,
   paintSoleGradient,
   SHELL_ASSETS,
@@ -45,6 +46,7 @@ import {
   SVG_SCALE,
   tuckPoseForMode,
 } from './snailGeometry';
+import { headMountTransform } from './snailFootRig';
 import { wrapInPivot } from './svgExtrude';
 
 interface SnailModelProps {
@@ -65,6 +67,14 @@ interface SnailModelProps {
    * this only changes whether progress past the foot-withdrawal window can
    * seal the shell. Defaults to `'sleep'`. */
   tuckMode?: 'sleep' | 'startle';
+  /** Hands the caller the foot's own bone chain once it's created, so a
+   * real controller (`Snail.tsx`, issue #112's bend-wiring PR) can drive
+   * each bone's rotation imperatively every frame without this component
+   * re-rendering — the same "own the objects, mutate them directly"
+   * discipline `positionRef`/`quaternionRef` already use for the RigidBody
+   * transform itself. `CritterPreview.tsx`'s undriven usage simply omits
+   * this, leaving every bone at its rest (identity) transform. */
+  onBonesReady?: (bones: THREE.Bone[]) => void;
 }
 
 /** Eyestalk sway — independent per stalk (its own phase offset) so the pair
@@ -74,6 +84,12 @@ interface SnailModelProps {
 const EYE_SWAY_AMPLITUDE = 0.12;
 const EYE_SWAY_FREQUENCY = 0.6;
 const EYE_SWAY_FAR_PHASE_OFFSET = 1.1;
+
+/** The foot's head bone's own authored rest position (`snailGeometry.ts`
+ * chains the bones along the sole line, the toe-most at `FOOT_TOE_X`) —
+ * what `headMountTransform` divides out so the eyestalks below keep their
+ * own authored coordinates while riding that bone. */
+const EYESTALK_MOUNT_REST = new THREE.Vector3(FOOT_TOE_X, SOLE_Y, 0);
 
 /** Pivot z-offset for the mirrored eyestalk pair (the fish's pectoral pivot
  * is offset ±7; the eyestalks are a smaller, closer-set pair). */
@@ -141,9 +157,11 @@ export function SnailModel({
   still = false,
   tuckProgress = 0,
   tuckMode = 'sleep',
+  onBonesReady,
 }: SnailModelProps) {
   const footGroupRef = useRef<THREE.Group>(null);
   const footMeshRef = useRef<THREE.SkinnedMesh>(null);
+  const eyestalkMountRef = useRef<THREE.Group>(null);
   const eyestalkPivotRef = useRef<THREE.Group>(null);
   const eyestalkFarPivotRef = useRef<THREE.Group>(null);
   const shellGroupRef = useRef<THREE.Group>(null);
@@ -243,6 +261,16 @@ export function SnailModel({
     footMeshRef.current?.updateWorldMatrix(true, false);
     footMeshRef.current?.bind(footSkeleton);
   }, [footBones, footSkeleton]);
+
+  useEffect(() => {
+    onBonesReady?.(footBones);
+    // Deliberately excludes `onBonesReady` itself: a real controller
+    // (`Snail.tsx`) passes a fresh inline function every render, and
+    // `footBones` only ever changes once (mount) — re-invoking on every
+    // caller re-render would hand out the same array repeatedly for no
+    // reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [footBones]);
 
   const footMaterial = useMemo(
     () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65 }),
@@ -361,6 +389,20 @@ export function SnailModel({
     const t = state.clock.elapsedTime;
     const pose = tuckPoseForMode(tuckProgress, tuckMode);
 
+    // The eyestalks are head parts, so they ride the foot's head bone
+    // rather than the model group, which the RigidBody anchors at the
+    // shell's seat — see `headMountTransform`. This group carries the
+    // rest-to-current mapping alone, leaving both pivots (and the sway,
+    // fold and retract below) on their own authored coordinates.
+    if (eyestalkMountRef.current) {
+      headMountTransform(
+        footBones,
+        EYESTALK_MOUNT_REST,
+        eyestalkMountRef.current.position,
+        eyestalkMountRef.current.quaternion,
+      );
+    }
+
     const idleSway = Math.sin(t * EYE_SWAY_FREQUENCY + phaseSeed) * EYE_SWAY_AMPLITUDE;
     const idleSwayFar =
       Math.sin(t * EYE_SWAY_FREQUENCY + phaseSeed + EYE_SWAY_FAR_PHASE_OFFSET) * EYE_SWAY_AMPLITUDE;
@@ -440,18 +482,20 @@ export function SnailModel({
         />
       </group>
 
-      <primitive object={eyestalkPivot} ref={eyestalkPivotRef}>
-        <mesh position={[EYESTALK_EYE.x, EYESTALK_EYE.y, 0]}>
-          <sphereGeometry args={[EYESTALK_EYE.r, 12, 12]} />
-          <meshStandardMaterial color={EYE_COLOUR} roughness={0.4} />
-        </mesh>
-      </primitive>
-      <primitive object={eyestalkFarPivot} ref={eyestalkFarPivotRef}>
-        <mesh position={[EYESTALK_EYE.x, EYESTALK_EYE.y, 0]}>
-          <sphereGeometry args={[EYESTALK_EYE.r, 12, 12]} />
-          <meshStandardMaterial color={EYE_COLOUR} roughness={0.4} />
-        </mesh>
-      </primitive>
+      <group ref={eyestalkMountRef}>
+        <primitive object={eyestalkPivot} ref={eyestalkPivotRef}>
+          <mesh position={[EYESTALK_EYE.x, EYESTALK_EYE.y, 0]}>
+            <sphereGeometry args={[EYESTALK_EYE.r, 12, 12]} />
+            <meshStandardMaterial color={EYE_COLOUR} roughness={0.4} />
+          </mesh>
+        </primitive>
+        <primitive object={eyestalkFarPivot} ref={eyestalkFarPivotRef}>
+          <mesh position={[EYESTALK_EYE.x, EYESTALK_EYE.y, 0]}>
+            <sphereGeometry args={[EYESTALK_EYE.r, 12, 12]} />
+            <meshStandardMaterial color={EYE_COLOUR} roughness={0.4} />
+          </mesh>
+        </primitive>
+      </group>
 
       <group ref={shellGroupRef}>
         <mesh geometry={shellAssets.base} material={shellMaterial} castShadow receiveShadow />
