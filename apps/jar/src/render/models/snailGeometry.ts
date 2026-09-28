@@ -236,15 +236,15 @@ export const FOOT_BONE_XS: number[] = Array.from({ length: FOOT_BONE_COUNT }, (_
 
 /** Builds the foot's bone chain at its rest pose — `bones[0]` (the
  * tail-most bone) is the root, parented directly under `SnailModel.tsx`'s
- * `footGroupRef`; every other bone is a child of the previous one, each
+ * outer model group as a sibling of the foot mesh itself; every other bone is
+ * a child of the previous one, each
  * carrying its correct rest-pose x as a *parent-relative* local offset
  * (a `THREE.Bone`'s own `position` is local, not absolute — the loop below
  * converts each `FOOT_BONE_XS` entry, computed in footGroupRef-space, into
- * that relative form by walking the chain tail-to-head). At rest (no
- * per-frame rotation applied — issue #112's PR 6 scope, before anything
- * actually drives a bend) every bone's transform is the identity relative
- * to its own bind pose, so skinning the foot mesh to this chain renders
- * pixel-identical to the plain rigid mesh it replaces. */
+ * that relative form by walking the chain tail-to-head). With no per-frame
+ * rotation applied, every bone's transform is the identity relative to its own
+ * bind pose, so skinning the foot mesh to this chain renders pixel-identical
+ * to the plain rigid mesh it replaced. */
 export function createFootBones(): THREE.Bone[] {
   const bones = FOOT_BONE_XS.map((x) => {
     const bone = new THREE.Bone();

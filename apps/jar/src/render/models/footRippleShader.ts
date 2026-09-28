@@ -1,36 +1,56 @@
-// The snail foot's crawl ripple, GPU-displaced exactly the way the fish's
-// swim wave is (`swimWaveShader.ts`, issue #94) — an `onBeforeCompile` hook
-// on `MeshStandardMaterial` plus a matching `customDepthMaterial` twin,
-// rather than a per-frame CPU vertex rewrite. `SnailModel.tsx` keeps its
-// ordinary `<meshStandardMaterial>` look (the sole's vertex-colour gradient,
-// roughness) untouched; only the position/normal computation changes.
+// The snail foot's two GPU vertex displacements — the travelling crawl
+// ripple, and the whole-body girth/length deformation the sleep tuck and the
+// gait's squash-and-stretch drive (`footDeformation.ts`) — applied exactly the
+// way the fish's swim wave is (`swimWaveShader.ts`, issue #94): an
+// `onBeforeCompile` hook on `MeshStandardMaterial` plus a matching
+// `customDepthMaterial` twin, rather than a per-frame CPU vertex rewrite.
+// `SnailModel.tsx` keeps its ordinary `<meshStandardMaterial>` look (the
+// sole's vertex-colour gradient, roughness) untouched; only the
+// position/normal computation changes.
 //
-// The formula is deliberately simpler than the swim wave's, and different
-// in kind: a one-sided travelling bump (never a symmetric wave) that lifts
-// the foot's surface upward from its rest pose, gated to zero exactly at the
-// sole/contact line by a vertical envelope. Both properties together are
-// what satisfy issue #98's hard constraint — "displacement must never go
-// below the sole line, the one thing `crawlSurfaces.ts` gets to trust" —
-// unconditionally, not just for a well-tuned amplitude: every displaced
-// vertex only ever moves away from the sole, and a vertex sitting exactly on
-// the sole never moves at all.
+// The ripple formula is deliberately simpler than the swim wave's, and
+// different in kind: a one-sided travelling bump (never a symmetric wave)
+// that lifts the foot's surface upward from its rest pose, gated to zero
+// exactly at the sole/contact line by a vertical envelope. Both properties
+// together are what satisfy issue #98's hard constraint — "displacement must
+// never go below the sole line, the one thing `crawlSurfaces.ts` gets to
+// trust" — unconditionally, not just for a well-tuned amplitude: every
+// displaced vertex only ever moves away from the sole, and a vertex sitting
+// exactly on the sole never moves at all. The girth/length deformation, which
+// runs after the ripple, keeps the same contract by being anchored at the
+// sole line itself.
+//
+// Both displacements land ahead of `#include <skinning_vertex>`, so they
+// deform the foot's *bind pose* and the bone chain then carries the result
+// onto the crawl surface. That ordering isn't incidental — it's the only
+// place a `SkinnedMesh` deformation can go at all; see
+// `footDeformation.ts`'s own header for why an ancestor transform cancels out
+// of the skinning maths entirely.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 import * as THREE from 'three';
 
-/** The two per-frame values a ripple-waving material needs — everything
- * else is a baked-in constant (`attachFootRippleVertexShader`). */
+import type { FootDeformation } from './footDeformation';
+
+/** The per-frame values a foot material needs — everything else is a baked-in
+ * constant (`attachFootRippleVertexShader`). `uFootGirth`/`uFootLength` are
+ * `footDeformation.ts`'s own two factors; both start at `1` (the rest pose) so
+ * a material whose owner never runs a frame at all — `CritterPreview.tsx`'s
+ * `still` memorial portrait — renders undeformed rather than collapsed. */
 export interface FootRippleFrameUniforms {
   uRipplePhase: { value: number };
   uRippleAmplitude: { value: number };
+  uFootGirth: { value: number };
+  uFootLength: { value: number };
 }
 
 export interface FootRippleShaderParams {
   /** The sole/contact line, in this mesh's local space (`snailGeometry.ts`'s
-   * `SOLE_Y`) — the envelope is exactly zero here, pinning sole vertices in
-   * place regardless of amplitude. */
+   * `SOLE_Y`) — the ripple envelope is exactly zero here, pinning sole
+   * vertices in place regardless of amplitude, and it's the anchor the girth
+   * deformation scales about for the same reason. */
   soleY: number;
   /** Height above `soleY` at which the envelope reaches its full value of 1
    * — `snailGeometry.ts`'s `FOOT_SOLE_GRADIENT_HEIGHT` by default, tying the
@@ -38,6 +58,10 @@ export interface FootRippleShaderParams {
   envelopeHeight: number;
   /** Local-x distance per ripple cycle — a policy constant, tune by eye. */
   wavelength: number;
+  /** Local x the length deformation scales about (`snailGeometry.ts`'s
+   * `FOOT_TOE_X`) — see `FootDeformation.length` for why the toe, and not the
+   * body's centre or the shell's seat. */
+  stretchAnchorX: number;
 }
 
 /** GLSL requires a decimal point on a float literal — see
@@ -77,7 +101,7 @@ const WOBBLE_WAVELENGTH_RATIO = 1.6;
 const WOBBLE_PHASE_OFFSET = 1.1;
 
 function buildRippleConstantsGLSL(params: FootRippleShaderParams): string {
-  const { soleY, envelopeHeight, wavelength } = params;
+  const { soleY, envelopeHeight, wavelength, stretchAnchorX } = params;
   const k = (2 * Math.PI) / wavelength;
   const wobbleK = k / WOBBLE_WAVELENGTH_RATIO;
   return `
@@ -87,8 +111,11 @@ const float RIPPLE_K = ${glslFloat(k)};
 const float RIPPLE_WOBBLE_K = ${glslFloat(wobbleK)};
 const float RIPPLE_WOBBLE_AMPLITUDE_RATIO = ${glslFloat(WOBBLE_AMPLITUDE_RATIO)};
 const float RIPPLE_WOBBLE_PHASE_OFFSET = ${glslFloat(WOBBLE_PHASE_OFFSET)};
+const float FOOT_STRETCH_ANCHOR_X = ${glslFloat(stretchAnchorX)};
 uniform float uRipplePhase;
 uniform float uRippleAmplitude;
+uniform float uFootGirth;
+uniform float uFootLength;
 `;
 }
 
@@ -132,10 +159,32 @@ const RIPPLE_POSITION_GLSL = `
 		sin(position.x * RIPPLE_WOBBLE_K - uRipplePhase + RIPPLE_WOBBLE_PHASE_OFFSET);
 `;
 
+/** The girth/length deformation (`footDeformation.ts`'s `deformFootVertex`,
+ * statement for statement) — applied *after* the ripple, so a withdrawing
+ * foot's ripple flattens along with the surface carrying it rather than
+ * standing proud of a body that has already shrunk away beneath it.
+ *
+ * Both scales are anchored, not centred on the origin: girth about the sole
+ * line (`RIPPLE_SOLE_Y`), so a sole vertex is fixed and the crawl-surface
+ * contact line survives any amount of withdrawal, and length about the toe
+ * (`FOOT_STRETCH_ANCHOR_X`), so the body elongates backward over ground the
+ * spine has already recorded and the head — eyestalk mount and all — stays
+ * put. `z` needs no anchor term: `svgExtrude.ts`'s `extrude` centres every
+ * extrusion on `z = 0`, so the body's own centre plane is already the
+ * origin. */
+const DEFORM_POSITION_GLSL = `
+	transformed.x = FOOT_STRETCH_ANCHOR_X + (transformed.x - FOOT_STRETCH_ANCHOR_X) * uFootLength;
+	transformed.y = RIPPLE_SOLE_Y + (transformed.y - RIPPLE_SOLE_Y) * uFootGirth;
+	transformed.z *= uFootGirth;
+`;
+
+/** Shared verbatim between the visible material and its depth twin — one
+ * constant rather than two parallel copies, so the two can't drift (#100's own
+ * bug class: a shadow rendering a shape the visible mesh isn't in). */
 const POSITION_INJECTION = `
 	transformed.y += rippleDisp;
 	transformed.z += rippleWobble;
-`;
+${DEFORM_POSITION_GLSL}`;
 
 /**
  * Attaches the foot-ripple vertex displacement to a `MeshStandardMaterial`
@@ -156,7 +205,8 @@ const POSITION_INJECTION = `
  *   untouched, same reasoning `swimWaveShader.ts` gives for its own
  *   decoupled axis.
  * - after `#include <begin_vertex>`: adds `rippleDisp` (computed in the
- *   normal-correction block above) onto `transformed.y`.
+ *   normal-correction block above) onto `transformed.y`, then applies the
+ *   girth/length deformation (`DEFORM_POSITION_GLSL`).
  */
 export function attachFootRippleVertexShader(
   material: THREE.Material,
@@ -165,6 +215,8 @@ export function attachFootRippleVertexShader(
   const uniforms: FootRippleFrameUniforms = {
     uRipplePhase: { value: 0 },
     uRippleAmplitude: { value: 0 },
+    uFootGirth: { value: 1 },
+    uFootLength: { value: 1 },
   };
 
   const constants = buildRippleConstantsGLSL(params);
@@ -182,6 +234,17 @@ ${RIPPLE_POSITION_GLSL}
 		objectNormal.x - rippleDx * objectNormal.y * rippleInvOnePlusDy,
 		objectNormal.y * rippleInvOnePlusDy,
 		objectNormal.z
+	));
+	// The girth/length deformation is a plain diagonal scale, so the
+	// inverse-transpose a normal transforms by is just the reciprocal scale —
+	// composed *after* the ripple's own correction, matching the order the two
+	// displacements are applied to the position. Neither factor is ever zero
+	// (footDeformation.ts keeps a floor under both), so neither division here
+	// needs a guard of its own.
+	objectNormal = normalize(vec3(
+		objectNormal.x / uFootLength,
+		objectNormal.y / uFootGirth,
+		objectNormal.z / uFootGirth
 	));
 `;
 
@@ -204,7 +267,7 @@ ${RIPPLE_POSITION_GLSL}
   // `soleY`/`envelopeHeight`/`wavelength` combination compile its own
   // program instead of silently sharing (and misusing) another's.
   material.customProgramCacheKey = () =>
-    `footRipple:${params.soleY}:${params.envelopeHeight}:${params.wavelength}`;
+    `footRipple:${params.soleY}:${params.envelopeHeight}:${params.wavelength}:${params.stretchAnchorX}`;
 
   return uniforms;
 }
@@ -248,18 +311,23 @@ export function attachFootRippleDepthMaterial(
     );
   };
   depthMaterial.customProgramCacheKey = () =>
-    `footRippleDepth:${params.soleY}:${params.envelopeHeight}:${params.wavelength}`;
+    `footRippleDepth:${params.soleY}:${params.envelopeHeight}:${params.wavelength}:${params.stretchAnchorX}`;
 
   return depthMaterial;
 }
 
-/** Writes this frame's phase/amplitude into one ripple-waving material's
- * uniforms — `SnailModel.tsx` calls this once per frame. */
+/** Writes this frame's ripple phase/amplitude and girth/length deformation
+ * into one foot material's uniforms — `SnailModel.tsx` calls this once per
+ * frame, and because the depth twin shares the very same `{ value }` boxes,
+ * that one call keeps the shadow in step too. */
 export function setFootRippleUniforms(
   uniforms: FootRippleFrameUniforms,
   phase: number,
   amplitude: number,
+  deformation: FootDeformation,
 ): void {
   uniforms.uRipplePhase.value = phase;
   uniforms.uRippleAmplitude.value = amplitude;
+  uniforms.uFootGirth.value = deformation.girth;
+  uniforms.uFootLength.value = deformation.length;
 }
